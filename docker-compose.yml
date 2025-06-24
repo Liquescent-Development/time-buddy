@@ -1,0 +1,13 @@
+services:
+  grafana-query-ide:
+    build: .
+    container_name: grafana-query-ide
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    labels:
+      - "com.grafana-query-ide.description=Web-based IDE for Grafana queries"
+      - "com.grafana-query-ide.version=0.0.1"
