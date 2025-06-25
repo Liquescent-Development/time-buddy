@@ -14,16 +14,16 @@ A powerful web-based IDE for executing InfluxQL and PromQL queries through the G
 
 ## Screenshots
 
-<div style="display: flex; overflow-x: auto; gap: 10px; padding: 10px 0;">
-  <img src="content/connection_manager.png" style="height: 300px; flex-shrink: 0;" alt="Connection management panel">
-  <img src="content/connection_manager2.png" style="height: 300px; flex-shrink: 0;" alt="Connection management creation">
-  <img src="content/query_editor.png" style="height: 300px; flex-shrink: 0;" alt="Advanced query editor with syntax highlighting">
-  <img src="content/query_variables.png" style="height: 300px; flex-shrink: 0;" alt="Query variable management">
-  <img src="content/query_variables2.png" style="height: 300px; flex-shrink: 0;" alt="Query variable creation">
-  <img src="content/schema_explorer.png" style="height: 300px; flex-shrink: 0;" alt="Schema exploration">
-  <img src="content/results_chart_view.png" style="height: 300px; flex-shrink: 0;" alt="Interactive chart view with multi-series support">
-  <img src="content/results_table_view.png" style="height: 300px; flex-shrink: 0;" alt="Enhanced table view with pagination">
-</div>
+<p float="left">
+  <img align="top" src="content/connection_manager.png" alt="Connection management panel" width="300" >
+  <img align="top" src="content/connection_manager2.png" alt="Connection management creation" width="300">
+  <img align="top" src="content/query_editor.png" alt="Advanced query editor with syntax highlighting" width="300">
+  <img align="top" src="content/query_variables.png" alt="Query variable management" width="300">
+  <img align="top" src="content/query_variables2.png" alt="Query variable creation" width="300">
+  <img align="top" src="content/schema_explorer.png" alt="Schema exploration" width="300">
+  <img align="top" src="content/results_chart_view.png" alt="Interactive chart view with multi-series support" width="300">
+  <img align="top" src="content/results_table_view.png" alt="Enhanced table view with pagination" width="300">
+</p>
 
 ### 📝 **Code Editor**
 - **Syntax Highlighting**: 
