@@ -137,3 +137,6 @@ dist
 
 # macOS garbage
 .DS_Store 
+
+# Claude
+CLAUDE.md
