@@ -17,6 +17,7 @@ const Variables = {
             regex: regex.trim(),
             datasourceId: datasourceId,
             datasourceName: datasourceName,
+            connectionId: GrafanaConfig.currentConnectionId,
             type: type,
             values: [],
             selectedValue: null,
@@ -272,7 +273,13 @@ const Variables = {
     substituteVariables(queryText) {
         let substitutedQuery = queryText;
         
-        for (const variable of this.variables) {
+        // Only use variables for current connection
+        const currentConnectionId = GrafanaConfig.currentConnectionId;
+        const filteredVariables = currentConnectionId 
+            ? this.variables.filter(v => v.connectionId === currentConnectionId)
+            : [];
+        
+        for (const variable of filteredVariables) {
             // Handle multi-select variables
             if (variable.multiSelect && variable.selectedValues && variable.selectedValues.length > 0) {
                 const placeholder = `$${variable.name}`;
@@ -336,16 +343,32 @@ const Variables = {
     // Render variables UI
     renderVariablesUI() {
         const container = document.getElementById('variablesContainer');
+        const variablesSection = document.getElementById('variablesSection');
         if (!container) return;
+        
+        // Always show variables section (like history section)
+        if (variablesSection) {
+            variablesSection.style.display = '';
+        }
+        
+        // Show placeholder if not connected
+        if (!GrafanaConfig.currentConnectionId) {
+            container.innerHTML = '<div class="no-variables">Connect to Grafana to manage query variables</div>';
+            return;
+        }
         
         let html = '';
         
-        if (this.variables.length === 0) {
-            html = '<div class="no-variables">No query variables defined. <button class="link-button" onclick="showAddVariableForm()">Add your first variable</button></div>';
+        // Filter variables for current connection
+        const currentConnectionId = GrafanaConfig.currentConnectionId;
+        const filteredVariables = this.variables.filter(v => v.connectionId === currentConnectionId);
+        
+        if (filteredVariables.length === 0) {
+            html = '<div class="no-variables">No query variables defined for this connection. <button class="link-button" onclick="showAddVariableForm()">Add your first variable</button></div>';
         } else {
             html += '<div class="variables-list">';
             
-            for (const variable of this.variables) {
+            for (const variable of filteredVariables) {
                 html += '<div class="variable-item" data-variable-id="' + variable.id + '">';
                 
                 // Variable header
@@ -542,9 +565,10 @@ const Variables = {
             return;
         }
         
-        // Check for duplicate names
-        if (this.variables.some(v => v.name === name)) {
-            alert('A variable with this name already exists.');
+        // Check for duplicate names within the same connection
+        const currentConnectionId = GrafanaConfig.currentConnectionId;
+        if (this.variables.some(v => v.name === name && v.connectionId === currentConnectionId)) {
+            alert('A variable with this name already exists for this connection.');
             return;
         }
         
