@@ -148,11 +148,11 @@ function onDataSourceChange() {
                 toggleButton.textContent = 'Show';
             }
         }
-        
-        // Update schema explorer based on datasource selection
-        if (typeof Schema !== 'undefined' && Schema.updateForDatasource) {
-            Schema.updateForDatasource(selectedOption.value, selectedOption.dataset.type);
-        }
+    }
+    
+    // Always call the schema explorer's datasource change handler
+    if (typeof Schema !== 'undefined' && Schema.onDatasourceChange) {
+        Schema.onDatasourceChange();
     }
 }
 
