@@ -36,6 +36,7 @@ const Editor = {
         
         this.setupCodeMirrorHelpers();
         this.setupCodeMirrorEvents();
+        this.setupResizeHandle();
         
         console.log('CodeMirror initialized successfully');
     },
@@ -341,5 +342,44 @@ const Editor = {
             // Revalidate current query
             this.validateQuery();
         }
+    },
+    
+    // Setup resize handle for query editor
+    setupResizeHandle() {
+        const resizeHandle = document.getElementById('queryEditorResizeHandle');
+        const editorContainer = document.querySelector('.CodeMirror');
+        if (!resizeHandle || !editorContainer) return;
+        
+        let isResizing = false;
+        let startY = 0;
+        let startHeight = 0;
+        const minHeight = 200;
+        
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startY = e.clientY;
+            startHeight = editorContainer.offsetHeight;
+            document.body.style.cursor = 'ns-resize';
+            e.preventDefault();
+        });
+        
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+            
+            const deltaY = e.clientY - startY;
+            const newHeight = Math.max(minHeight, startHeight + deltaY);
+            
+            editorContainer.style.height = newHeight + 'px';
+            if (GrafanaConfig.queryEditor) {
+                GrafanaConfig.queryEditor.refresh();
+            }
+        });
+        
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = '';
+            }
+        });
     }
 };

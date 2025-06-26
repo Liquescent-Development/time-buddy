@@ -30,16 +30,21 @@
     </header>
 
     <div class="container">
-        <div class="auth-section">
-            <h2 class="section-title">Connection & Authentication</h2>
-            
-            <!-- Connected State -->
-            <div id="authInfo" class="auth-info hidden">
-                <span class="auth-status">Connected to: <span id="connectedUrl"></span></span>
-                <button class="secondary-button" onclick="disconnect()">Disconnect</button>
+        <div class="auth-section" id="authSection">
+            <div class="auth-header">
+                <h2 class="section-title">Connection & Authentication</h2>
+                <span class="auth-header-status" id="authHeaderStatus"></span>
+                <button class="auth-toggle" onclick="toggleAuthSection()">Hide</button>
             </div>
             
-            <!-- Connection Management -->
+            <div class="auth-content" id="authContent">
+                <!-- Connected State -->
+                <div id="authInfo" class="auth-info hidden">
+                    <span class="auth-status">Connected to: <span id="connectedUrl"></span></span>
+                    <button class="secondary-button" onclick="disconnect()">Disconnect</button>
+                </div>
+                
+                <!-- Connection Management -->
             <div id="connectionManagement" class="connection-management">
                 <div class="connection-selector">
                     <select id="savedConnections" onchange="loadSavedConnection()">
@@ -114,23 +119,43 @@
                     </ul>
                 </div>
             </details>
+            </div>
         </div>
 
         <div class="main-content">
-            <div class="variables-section" id="variablesSection">
+            <div class="variables-section collapsed" id="variablesSection">
                 <div class="variables-header">
                     <h2 class="section-title">Query Variables</h2>
-                    <button class="variables-toggle" onclick="toggleVariablesSection()">Hide</button>
+                    <span class="variables-header-status" id="variablesHeaderStatus"></span>
+                    <button class="variables-toggle" onclick="toggleVariablesSection()">Show</button>
                 </div>
                 <div id="variablesContainer"></div>
             </div>
 
-            <div class="schema-section" id="schemaSection">
+            <div class="datasource-section collapsed" id="datasourceSection">
+                <div class="datasource-header">
+                    <h2 class="section-title">Data Source</h2>
+                    <span class="datasource-header-status" id="datasourceHeaderStatus"></span>
+                    <button class="datasource-toggle" onclick="toggleDatasourceSection()">Show</button>
+                </div>
+                <div class="datasource-container" id="datasourceContainer">
+                    <div class="datasource-search">
+                        <input type="text" id="datasourceSearch" placeholder="Search data sources..." oninput="filterDataSources()">
+                    </div>
+                    <div class="form-group">
+                        <select id="datasource" disabled size="8" onchange="onDataSourceChange()">
+                            <option value="">Connect to Grafana first</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="schema-section collapsed" id="schemaSection">
                 <div class="schema-header">
                     <h2 class="section-title">Schema Explorer</h2>
                     <div>
                         <button class="secondary-button" onclick="refreshSchema()" style="margin-right: 10px;">Refresh</button>
-                        <button class="schema-toggle" onclick="toggleSchemaExplorer()">Hide</button>
+                        <button class="schema-toggle" onclick="toggleSchemaExplorer()">Show</button>
                     </div>
                 </div>
                 <div id="schemaContainer"></div>
@@ -138,12 +163,6 @@
 
             <div class="query-section">
                 <h2 class="section-title">Query Editor</h2>
-                <div class="form-group">
-                    <label for="datasource">Data Source</label>
-                    <select id="datasource" disabled>
-                        <option value="">Connect to Grafana first</option>
-                    </select>
-                </div>
                 <div class="query-type-selector">
                     <button class="query-type-button active" onclick="setQueryType('influxql')">InfluxQL</button>
                     <button class="query-type-button" onclick="setQueryType('promql')">PromQL</button>
@@ -162,9 +181,10 @@
                 
                 <div class="form-group">
                     <label for="query">Query</label>
-                    <div class="query-editor-container">
+                    <div class="query-editor-container" id="queryEditorContainer">
                         <textarea id="query" placeholder="Enter your query here..." disabled></textarea>
                         <div id="queryErrorDisplay" class="query-error hidden"></div>
+                        <div class="query-editor-resize-handle" id="queryEditorResizeHandle"></div>
                     </div>
                 </div>
                 
@@ -192,18 +212,18 @@
                     <button id="executeBtn" onclick="executeQuery()" disabled>Execute Query</button>
                     <button class="secondary-button" onclick="clearQuery()">Clear</button>
                 </div>
+                
+                <div class="query-results">
+                    <h3 class="results-title">Results</h3>
+                    <div id="results">
+                        <p style="color: #888; text-align: center;">No query executed yet</p>
+                    </div>
+                </div>
             </div>
 
             <div class="history-section">
                 <h2 class="section-title">Query History</h2>
                 <div id="historyList"></div>
-            </div>
-
-            <div class="results-section">
-                <h2 class="section-title">Results</h2>
-                <div id="results">
-                    <p style="color: #888; text-align: center;">No query executed yet</p>
-                </div>
             </div>
         </div>
     </div>

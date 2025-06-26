@@ -4,6 +4,7 @@ const GrafanaConfig = {
     username: '',
     password: '',
     authHeader: '',
+    currentConnectionId: null,
     
     // Application state
     currentQueryType: 'influxql',

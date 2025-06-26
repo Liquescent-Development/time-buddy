@@ -4,6 +4,33 @@ const Connections = {
         Utils.hideAllAuthSections();
         document.getElementById('authInfo').classList.remove('hidden');
         document.getElementById('connectedUrl').textContent = connection.url + ' (' + connection.username + ')';
+        
+        // Update header status
+        const headerStatus = document.getElementById('authHeaderStatus');
+        if (headerStatus) {
+            headerStatus.textContent = 'Connected: ' + connection.url;
+        }
+        
+        // Update variables UI for the connected state
+        if (typeof Variables !== 'undefined') {
+            Variables.renderVariablesUI();
+        }
+        
+        // Auto-collapse auth section on connection
+        const authSection = document.getElementById('authSection');
+        if (authSection && !authSection.classList.contains('collapsed')) {
+            authSection.classList.add('collapsed');
+            const toggleButton = document.querySelector('.auth-toggle');
+            if (toggleButton) {
+                toggleButton.textContent = 'Show';
+            }
+        }
+        
+        // Ensure datasource section is visible (but can be collapsed)
+        const datasourceSection = document.getElementById('datasourceSection');
+        if (datasourceSection) {
+            datasourceSection.style.display = '';
+        }
     },
 
     // Ensure disconnected state
@@ -14,6 +41,17 @@ const Connections = {
         document.getElementById('datasource').disabled = true;
         document.getElementById('executeBtn').disabled = true;
         document.getElementById('authStatus').innerHTML = '';
+        
+        // Clear header status
+        const headerStatus = document.getElementById('authHeaderStatus');
+        if (headerStatus) {
+            headerStatus.textContent = '';
+        }
+        
+        // Update variables UI for the disconnected state
+        if (typeof Variables !== 'undefined') {
+            Variables.renderVariablesUI();
+        }
     },
 
     // Connect to Grafana
@@ -21,6 +59,7 @@ const Connections = {
         GrafanaConfig.url = url.replace(/\/$/, '');
         GrafanaConfig.username = username;
         GrafanaConfig.password = password;
+        GrafanaConfig.currentConnectionId = connectionId;
         
         const credentials = btoa(username + ':' + password);
         GrafanaConfig.authHeader = 'Basic ' + credentials;
@@ -90,6 +129,7 @@ const Connections = {
         GrafanaConfig.username = '';
         GrafanaConfig.password = '';
         GrafanaConfig.authHeader = '';
+        GrafanaConfig.currentConnectionId = null;
         GrafanaConfig.datasources = [];
         GrafanaConfig.currentResults = null;
         
@@ -210,6 +250,7 @@ const Connections = {
                 GrafanaConfig.url = tempConfig.url;
                 GrafanaConfig.username = tempConfig.username;
                 GrafanaConfig.authHeader = tempConfig.authHeader;
+                GrafanaConfig.currentConnectionId = connection.id;
                 
                 const dsResponse = await API.makeApiRequestWithConfig(tempConfig, '/api/datasources');
                 if (dsResponse.ok) {
