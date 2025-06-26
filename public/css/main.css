@@ -469,6 +469,248 @@ button:disabled {
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
+/* Dashboard Section Styles */
+.dashboard-section {
+    background-color: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    max-height: 800px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    grid-column: 1 / -1;
+    transition: all 0.3s ease;
+}
+
+.dashboard-section.collapsed {
+    max-height: 60px;
+    padding-bottom: 6px;
+}
+
+.dashboard-section.collapsed .dashboard-content-wrapper {
+    display: none;
+}
+
+.dashboard-section.collapsed .dashboard-header {
+    margin-bottom: 0;
+}
+
+.dashboard-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    gap: 10px;
+}
+
+.dashboard-toggle {
+    background: none;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+    color: #b0b0b0;
+    font-size: 12px;
+    transition: all 0.3s ease;
+    margin: 0;
+}
+
+.dashboard-toggle:hover {
+    background-color: #333;
+    border-color: #555;
+    color: #e0e0e0;
+}
+
+.dashboard-content-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.dashboard-search {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.dashboard-search input {
+    flex: 1;
+    padding: 8px 12px;
+    background-color: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    color: #e0e0e0;
+    font-size: 14px;
+}
+
+.dashboard-search input:focus {
+    outline: none;
+    border-color: #f46800;
+}
+
+.dashboard-results {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 15px;
+}
+
+.dashboard-empty {
+    text-align: center;
+    color: #888;
+    padding: 20px;
+    font-style: italic;
+}
+
+.dashboard-item {
+    background-color: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: border-color 0.3s ease;
+}
+
+.dashboard-item:hover {
+    border-color: #f46800;
+}
+
+.dashboard-item.selected {
+    border-color: #f46800;
+    background-color: rgba(246, 104, 0, 0.1);
+}
+
+.dashboard-item-title {
+    font-weight: 500;
+    color: #e0e0e0;
+    margin-bottom: 4px;
+}
+
+.dashboard-item-description {
+    font-size: 12px;
+    color: #888;
+    line-height: 1.4;
+}
+
+.dashboard-queries {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.dashboard-info {
+    margin-bottom: 15px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #333;
+}
+
+.dashboard-info h4 {
+    color: #f46800;
+    margin-bottom: 5px;
+    font-size: 16px;
+}
+
+.dashboard-info p {
+    color: #b0b0b0;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+/* Dashboard Tabs Styles */
+.dashboard-tabs {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.dashboard-tabs-header {
+    display: flex;
+    overflow-x: auto;
+    border-bottom: 1px solid #333;
+    margin-bottom: 12px;
+}
+
+.dashboard-tab {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    color: #b0b0b0;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s ease;
+    font-size: 13px;
+}
+
+.dashboard-tab:hover {
+    color: #e0e0e0;
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.dashboard-tab.active {
+    color: #f46800;
+    border-bottom-color: #f46800;
+}
+
+.dashboard-tabs-content {
+    flex: 1;
+    overflow-y: auto;
+}
+
+.dashboard-tab-content {
+    display: none;
+}
+
+.dashboard-tab-content.active {
+    display: block;
+}
+
+.dashboard-query-info {
+    background-color: #0a0a0a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 12px;
+}
+
+.dashboard-query-title {
+    color: #f46800;
+    font-size: 14px;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.dashboard-query-datasource {
+    color: #4ade80;
+    font-size: 12px;
+    margin-bottom: 8px;
+}
+
+.dashboard-query-expression {
+    font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    background-color: #2a2a2a;
+    border: 1px solid #333;
+    border-radius: 4px;
+    padding: 8px;
+    color: #e0e0e0;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.dashboard-query-actions {
+    margin-top: 8px;
+    display: flex;
+    gap: 8px;
+}
+
 .query-results {
     margin-top: 20px;
     padding-top: 20px;

@@ -154,6 +154,37 @@
                 </div>
             </div>
 
+            <div class="dashboard-section collapsed" id="dashboardSection">
+                <div class="dashboard-header">
+                    <h2 class="section-title">Dashboard Explorer</h2>
+                    <div>
+                        <button class="dashboard-toggle" onclick="toggleDashboardExplorer()">Show</button>
+                    </div>
+                </div>
+                <div class="dashboard-content-wrapper">
+                    <div class="dashboard-search">
+                        <input type="text" id="dashboardSearch" placeholder="Search dashboards..." oninput="searchDashboards()">
+                        <button class="secondary-button" onclick="clearDashboardSearch()" style="margin-left: 10px;">Clear</button>
+                    </div>
+                    
+                    <div id="dashboardResults" class="dashboard-results">
+                        <div class="dashboard-empty">Search for dashboards to explore their queries</div>
+                    </div>
+                    
+                    <div id="dashboardQueries" class="dashboard-queries hidden">
+                        <div class="dashboard-info">
+                            <h4 id="selectedDashboardTitle"></h4>
+                            <p id="selectedDashboardDescription"></p>
+                        </div>
+                        
+                        <div class="dashboard-tabs">
+                            <div id="dashboardTabsHeader" class="dashboard-tabs-header"></div>
+                            <div id="dashboardTabsContent" class="dashboard-tabs-content"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="query-section">
                 <h2 class="section-title">Query Editor</h2>
                 <div class="query-type-selector">
@@ -237,6 +268,7 @@
     <script src="js/connections.js"></script>
     <script src="js/variables.js"></script>
     <script src="js/schema.js"></script>
+    <script src="js/dashboard.js"></script>
     <script src="js/queries.js"></script>
     <script src="js/charts.js"></script>
     <script src="js/history.js"></script>
