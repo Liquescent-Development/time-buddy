@@ -344,20 +344,17 @@ const Variables = {
     renderVariablesUI() {
         const container = document.getElementById('variablesContainer');
         const variablesSection = document.getElementById('variablesSection');
-        const headerStatus = document.getElementById('variablesHeaderStatus');
         if (!container) return;
         
-        // Hide variables section if not connected
-        if (!GrafanaConfig.currentConnectionId) {
-            if (variablesSection) {
-                variablesSection.style.display = 'none';
-            }
-            return;
-        }
-        
-        // Show variables section when connected
+        // Always show variables section (like history section)
         if (variablesSection) {
             variablesSection.style.display = '';
+        }
+        
+        // Show placeholder if not connected
+        if (!GrafanaConfig.currentConnectionId) {
+            container.innerHTML = '<div class="no-variables">Connect to Grafana to manage query variables</div>';
+            return;
         }
         
         let html = '';
@@ -365,13 +362,6 @@ const Variables = {
         // Filter variables for current connection
         const currentConnectionId = GrafanaConfig.currentConnectionId;
         const filteredVariables = this.variables.filter(v => v.connectionId === currentConnectionId);
-        
-        // Update header status with variable count
-        if (headerStatus) {
-            headerStatus.textContent = filteredVariables.length > 0 
-                ? filteredVariables.length + ' variable' + (filteredVariables.length > 1 ? 's' : '') + ' defined'
-                : 'No variables';
-        }
         
         if (filteredVariables.length === 0) {
             html = '<div class="no-variables">No query variables defined for this connection. <button class="link-button" onclick="showAddVariableForm()">Add your first variable</button></div>';

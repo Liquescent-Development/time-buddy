@@ -26,10 +26,17 @@ const Connections = {
             }
         }
         
-        // Ensure datasource section is visible (but can be collapsed)
+        // Auto-expand datasource section when connected
         const datasourceSection = document.getElementById('datasourceSection');
         if (datasourceSection) {
             datasourceSection.style.display = '';
+            if (datasourceSection.classList.contains('collapsed')) {
+                datasourceSection.classList.remove('collapsed');
+                const toggleButton = document.querySelector('.datasource-toggle');
+                if (toggleButton) {
+                    toggleButton.textContent = 'Hide';
+                }
+            }
         }
     },
 

@@ -123,15 +123,6 @@
         </div>
 
         <div class="main-content">
-            <div class="variables-section collapsed" id="variablesSection">
-                <div class="variables-header">
-                    <h2 class="section-title">Query Variables</h2>
-                    <span class="variables-header-status" id="variablesHeaderStatus"></span>
-                    <button class="variables-toggle" onclick="toggleVariablesSection()">Show</button>
-                </div>
-                <div id="variablesContainer"></div>
-            </div>
-
             <div class="datasource-section collapsed" id="datasourceSection">
                 <div class="datasource-header">
                     <h2 class="section-title">Data Source</h2>
@@ -154,11 +145,13 @@
                 <div class="schema-header">
                     <h2 class="section-title">Schema Explorer</h2>
                     <div>
-                        <button class="secondary-button" onclick="refreshSchema()" style="margin-right: 10px;">Refresh</button>
                         <button class="schema-toggle" onclick="toggleSchemaExplorer()">Show</button>
                     </div>
                 </div>
-                <div id="schemaContainer"></div>
+                <div class="schema-content-wrapper">
+                    <div id="schemaContainer"></div>
+                    <button class="schema-refresh-button secondary-button" onclick="refreshSchema()">Refresh</button>
+                </div>
             </div>
 
             <div class="query-section">
@@ -221,9 +214,16 @@
                 </div>
             </div>
 
-            <div class="history-section">
-                <h2 class="section-title">Query History</h2>
-                <div id="historyList"></div>
+            <div class="sidebar">
+                <div class="history-section">
+                    <h2 class="section-title">Query History</h2>
+                    <div id="historyList"></div>
+                </div>
+                
+                <div class="variables-section" id="variablesSection">
+                    <h2 class="section-title">Query Variables</h2>
+                    <div id="variablesContainer"></div>
+                </div>
             </div>
         </div>
     </div>

@@ -18,7 +18,43 @@ const App = {
         
         Connections.updateConnectionButtons();
         
+        // Set default section states on page load
+        this.setDefaultSectionStates();
+        
         console.log('Initialization complete');
+    },
+    
+    // Set default section states for page load
+    setDefaultSectionStates() {
+        // Auth section: expanded by default
+        const authSection = document.getElementById('authSection');
+        if (authSection) {
+            authSection.classList.remove('collapsed');
+            const toggleButton = document.querySelector('.auth-toggle');
+            if (toggleButton) {
+                toggleButton.textContent = 'Hide';
+            }
+        }
+        
+        // Datasource section: collapsed by default
+        const datasourceSection = document.getElementById('datasourceSection');
+        if (datasourceSection) {
+            datasourceSection.classList.add('collapsed');
+            const toggleButton = document.querySelector('.datasource-toggle');
+            if (toggleButton) {
+                toggleButton.textContent = 'Show';
+            }
+        }
+        
+        // Schema section: collapsed by default
+        const schemaSection = document.getElementById('schemaSection');
+        if (schemaSection) {
+            schemaSection.classList.add('collapsed');
+            const toggleButton = document.querySelector('.schema-toggle');
+            if (toggleButton) {
+                toggleButton.textContent = 'Show';
+            }
+        }
     }
 };
 
@@ -130,8 +166,10 @@ function toggleAuthSection() {
 function onDataSourceChange() {
     const datasourceSelect = document.getElementById('datasource');
     const datasourceSection = document.getElementById('datasourceSection');
+    const schemaSection = document.getElementById('schemaSection');
     const headerStatus = document.getElementById('datasourceHeaderStatus');
     const toggleButton = document.querySelector('.datasource-toggle');
+    const schemaToggleButton = document.querySelector('.schema-toggle');
     
     // Get selected datasource
     const selectedOption = datasourceSelect.selectedOptions[0];
@@ -141,11 +179,19 @@ function onDataSourceChange() {
             headerStatus.textContent = 'Selected: ' + selectedOption.textContent;
         }
         
-        // Auto-collapse the section
+        // Auto-collapse the datasource section
         if (datasourceSection && !datasourceSection.classList.contains('collapsed')) {
             datasourceSection.classList.add('collapsed');
             if (toggleButton) {
                 toggleButton.textContent = 'Show';
+            }
+        }
+        
+        // Auto-expand the schema section
+        if (schemaSection && schemaSection.classList.contains('collapsed')) {
+            schemaSection.classList.remove('collapsed');
+            if (schemaToggleButton) {
+                schemaToggleButton.textContent = 'Hide';
             }
         }
     }
