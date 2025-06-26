@@ -7,6 +7,7 @@ const App = {
         Connections.loadSavedConnections();
         Variables.initialize();
         Schema.initialize();
+        Dashboard.initialize();
         
         Connections.ensureDisconnectedState();
         API.checkIfRunningInContainer();
@@ -51,6 +52,16 @@ const App = {
         if (schemaSection) {
             schemaSection.classList.add('collapsed');
             const toggleButton = document.querySelector('.schema-toggle');
+            if (toggleButton) {
+                toggleButton.textContent = 'Show';
+            }
+        }
+        
+        // Dashboard section: collapsed by default
+        const dashboardSection = document.getElementById('dashboardSection');
+        if (dashboardSection) {
+            dashboardSection.classList.add('collapsed');
+            const toggleButton = document.querySelector('.dashboard-toggle');
             if (toggleButton) {
                 toggleButton.textContent = 'Show';
             }
