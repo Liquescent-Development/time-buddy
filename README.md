@@ -1,6 +1,6 @@
 # Grafana Query IDE
 
-A powerful web-based IDE for executing InfluxQL and PromQL queries through the Grafana API. Features an advanced code editor with syntax highlighting, intelligent auto-completion, real-time validation, persistent connection management, and a built-in proxy to handle CORS issues.
+A powerful web-based IDE for executing InfluxQL and PromQL queries through the Grafana API. Features an advanced code editor with syntax highlighting, intelligent auto-completion, real-time validation, persistent connection management, dashboard exploration, guided workflow, and a built-in proxy to handle CORS issues.
 
 ## ✨ Key Features
 
@@ -9,6 +9,8 @@ A powerful web-based IDE for executing InfluxQL and PromQL queries through the G
 - **Smart Connection Storage**: Store server details (name, URL, username) without passwords for security
 - **Quick Connection Switching**: Dropdown selection between saved connections
 - **Connection CRUD**: Create, edit, and delete saved connections with ease
+- **Guided Workflow**: Auto-expanding sections guide users through connection → datasource → schema flow
+- **Smart Section Management**: Collapsible sections with status indicators and automatic state transitions
 - **Basic authentication support** for Grafana instances
 
 
@@ -49,10 +51,19 @@ A powerful web-based IDE for executing InfluxQL and PromQL queries through the G
   - Create variables that populate with query results
   - Use `$variableName` or `${variableName}` in queries for dynamic substitution
   - Support for both PromQL and InfluxQL variable queries
+  - **Connection-Scoped**: Variables are associated with specific connections for better organization
   - **Regex Filtering**: Apply regex patterns to extract parts of values
   - **Named Capture Groups**: Use `(?P<text>...)` and `(?P<value>...)` for display/value separation
   - **Multi-Value Variables**: Select multiple values for use in regex patterns or IN clauses
-  - Collapsible interface to save screen space
+  - **Sidebar Integration**: Always-visible variables panel in organized sidebar layout
+- **Dashboard Explorer**: Discover and analyze existing Grafana dashboards
+  - **Search Dashboards**: Find dashboards by name across your Grafana instance
+  - **Query Extraction**: Automatically extract all queries from dashboard panels
+  - **Tabbed Interface**: Organize and view multiple queries per dashboard with dedicated tabs
+  - **Query Analysis**: View query details including datasource, expression, and panel context
+  - **Copy to Editor**: One-click copying of dashboard queries to the query editor
+  - **Execute Dashboard Queries**: Direct execution of extracted queries for analysis
+  - **Recursive Panel Support**: Handles nested panels and row panels automatically
 - **Schema Explorer**: Interactive database schema discovery
   - **Prometheus**: Browse all available metrics and labels with search
   - **InfluxDB**: 
@@ -60,13 +71,16 @@ A powerful web-based IDE for executing InfluxQL and PromQL queries through the G
     - Searchable fields and tags lists
     - Loading indicators for async schema discovery
   - Click-to-insert functionality for faster query building
-  - Positioned between variables and query editor for optimal workflow
+  - **Bottom-Right Refresh**: Unobtrusive refresh button positioned for optimal workflow
+  - **Auto-Expand**: Automatically expands when datasource is selected
 - **Enhanced Query History**:
+  - **Sidebar Layout**: Dedicated sidebar section for easy access alongside variables
   - **Search**: Full-text search across queries, labels, and tags
   - **Favorites**: Star important queries for quick access
   - **Labels & Tags**: Organize queries with custom labels and tags
   - **Advanced Filtering**: Filter by favorites, tags, or search terms
   - **Edit & Delete**: Manage individual history items
+  - **Equal Height Distribution**: 50/50 height split with variables in sidebar
   - Persistent storage with increased capacity (100 items)
 - **Smart data source discovery** for InfluxDB and Prometheus
 - **Visual notifications** for auto-selections and important actions
@@ -83,6 +97,8 @@ A powerful web-based IDE for executing InfluxQL and PromQL queries through the G
 - **Docker support** for easy deployment and containerization
 - **Optimized API handling** with proper error reporting and timeout management
 - **Responsive design** that works on desktop, tablet, and mobile
+- **Guided User Experience**: Smart section management with auto-expand/collapse workflow
+- **Resizable Query Editor**: Adjustable editor height for complex queries
 
 ## Quick Start with Docker
 
@@ -105,18 +121,41 @@ Open http://localhost:3000 in your browser.
 
 ## Usage Guide
 
-### 1. **Connection Management**
+### 1. **Guided Workflow Experience**
+   The application features a guided workflow that automatically expands relevant sections as you progress:
+   - **On Page Load**: Authentication section is expanded and ready for connection
+   - **After Connection**: Authentication collapses, Data Source section expands for selection
+   - **After Data Source Selection**: Data Source collapses, Schema Explorer expands for browsing
+   - **Dashboard Explorer**: Available as a separate collapsible section for dashboard analysis
+
+### 2. **Connection Management**
    - **First Time**: Click "New Connection" to add your first Grafana server
    - **Save Details**: Enter connection name, URL, and default username (password never saved)
    - **Quick Access**: Use the dropdown to switch between saved connections
    - **Management**: Edit or delete connections as needed
 
-### 2. **Connect to Grafana**
+### 3. **Connect to Grafana**
    - Select a saved connection or enter details manually
    - Enter your password (required each time for security)
    - Click "Connect" - the system will verify credentials and load data sources
+   - **Auto-Flow**: Authentication section auto-collapses and shows connection status
 
-### 3. **Query Variables (Optional)**
+### 4. **Dashboard Explorer (Optional)**
+   - **Expand Section**: Click "Show" to expand the Dashboard Explorer section
+   - **Search Dashboards**: Type dashboard names to search across your Grafana instance
+   - **Select Dashboard**: Click on a dashboard from search results to load its queries
+   - **Tabbed Query View**: Each dashboard query appears in its own tab with:
+     - Panel title and query reference ID
+     - Data source information
+     - Complete query expression
+     - Copy to editor and execute actions
+   - **Query Analysis**: Understand how existing dashboards structure their queries
+   - **Learning Tool**: Study complex queries from production dashboards
+
+### 5. **Query Variables (Optional)**
+   - **Sidebar Location**: Variables are now located in the right sidebar alongside query history
+   - **Connection-Scoped**: Variables are automatically filtered by the current connection
+   - **Always Visible**: Variables section is always expanded for easy access
    - **Create Variables**: Define reusable query variables for dynamic queries
      - Click "Add Variable" to create a new variable
      - Name your variable and write a query that returns values
@@ -132,8 +171,8 @@ Open http://localhost:3000 in your browser.
      - Use in queries: `cpu_usage{region="$region"}`
      - Multi-value usage: `host =~ /${hosts}/` expands to `host =~ /(host1|host2|host3)/`
 
-### 4. **Schema Explorer**
-   - **Optimized Position**: Located between variables and query editor for easy reference
+### 6. **Schema Explorer**
+   - **Auto-Expand**: Automatically expands when you select a data source (guided workflow)
    - **Automatic Discovery**: Schema loads automatically when you select a data source
    - **Prometheus Mode**:
      - Browse all available metrics with search functionality
@@ -144,9 +183,10 @@ Open http://localhost:3000 in your browser.
      - Select measurement from dropdown to load fields and tags
      - Search through fields and tags with real-time filtering
      - Loading indicators show when schema is being fetched
+   - **Refresh Button**: Unobtrusive refresh button positioned at bottom-right of container
    - **Workspace Management**: Collapse schema explorer to save screen space
 
-### 5. **Smart Query Writing**
+### 7. **Smart Query Writing**
    - **Auto-Selection**: Query type automatically switches based on selected data source
      - Prometheus data sources → PromQL mode
      - InfluxDB data sources → InfluxQL mode
@@ -163,15 +203,17 @@ Open http://localhost:3000 in your browser.
      - Smart indentation and line numbers
      - Professional dark theme for extended coding sessions
 
-### 6. **Execute and Analyze**
+### 8. **Execute and Analyze**
    - Click "Execute Query" to run your query
+   - **Resizable Editor**: Drag the bottom edge of the query editor to adjust height for complex queries
    - **View Options**:
      - **Table View**: Paginated results with configurable page sizes
      - **Chart View**: Interactive visualizations with multiple chart types
    - **Multi-Series**: Handle GROUP BY results with easy series switching
    - **Export Options**: View raw JSON response for debugging
 
-### 7. **Enhanced Query History**
+### 9. **Enhanced Query History**
+   - **Sidebar Layout**: Located in the right sidebar with 50/50 height split with variables
    - **Search & Filter**:
      - Full-text search across queries, labels, and tags
      - Filter to show only favorite queries
@@ -349,6 +391,7 @@ grafana-query-ide/
         ├── connections.js      # Connection management
         ├── variables.js        # Query variables management
         ├── schema.js           # Schema explorer functionality
+        ├── dashboard.js        # Dashboard explorer and query extraction
         ├── queries.js          # Query execution and results
         ├── charts.js           # Chart visualization
         ├── history.js          # Query history management
@@ -421,9 +464,15 @@ MIT License - feel free to use this in your own projects!
 ---
 
 **Latest Updates:**
-- 🏷️ **Enhanced Query History**: Search, tag, label, and favorite your queries
-- 🔍 **Improved Schema Explorer**: Better UI with dropdowns and search for InfluxDB
-- 🎯 **Multi-Value Variables**: Support for regex patterns and IN clauses
-- 🎨 **UI Improvements**: Optimized layout with schema explorer above query editor
+- 🎯 **Dashboard Explorer**: Search dashboards and extract all queries with tabbed interface
+- 🧭 **Guided Workflow**: Auto-expanding sections guide users through connection → datasource → schema flow
+- 📱 **Sidebar Reorganization**: History and variables moved to dedicated sidebar with 50/50 height split
+- 🔗 **Connection-Scoped Variables**: Variables automatically filtered by current connection
+- 📏 **Resizable Query Editor**: Drag to adjust editor height for complex queries
+- 🔄 **Smart Section Management**: Auto-collapse/expand with status indicators
+- 🎨 **UI Polish**: Refresh button repositioned, improved spacing and section flow
+- 🏷️ **Enhanced Query History**: Search, tag, label, and favorite your queries in sidebar
+- 🔍 **Improved Schema Explorer**: Better UI with dropdowns and bottom-right refresh button
+- 🎯 **Multi-Value Variables**: Support for regex patterns and IN clauses with sidebar integration
 - 🔧 **Regex Variable Filtering**: Extract and transform variable values with regex
-- 📊 **Better Organization**: Increased history capacity and advanced filtering
+- 📊 **Better Organization**: Always-visible variables and history with increased capacity
