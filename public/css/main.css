@@ -1853,9 +1853,6 @@ pre {
     max-height: 60px;
 }
 
-.schema-section.collapsed #schemaContainer {
-    display: none;
-}
 
 .schema-dropdown {
     width: 100%;
