@@ -23,46 +23,261 @@
     <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
-    <header>
-        <div class="container">
-            <h1>Grafana Query IDE</h1>
+    <!-- VS Code-like Layout -->
+    <div class="vscode-container">
+        <!-- Title Bar -->
+        <div class="title-bar">
+            <div class="title-bar-content">
+                <span class="app-name">Grafana Query IDE</span>
+                <div class="title-bar-controls">
+                    <span class="connection-status" id="titleBarConnectionStatus">Not Connected</span>
+                </div>
+            </div>
         </div>
-    </header>
 
-    <div class="container">
-        <div class="auth-section" id="authSection">
-            <div class="auth-header">
-                <h2 class="section-title">Connection & Authentication</h2>
-                <span class="auth-header-status" id="authHeaderStatus"></span>
-                <button class="auth-toggle" onclick="toggleAuthSection()">Hide</button>
-            </div>
-            
-            <div class="auth-content" id="authContent">
-                <!-- Connected State -->
-                <div id="authInfo" class="auth-info hidden">
-                    <span class="auth-status">Connected to: <span id="connectedUrl"></span></span>
-                    <button class="secondary-button" onclick="disconnect()">Disconnect</button>
+        <!-- Main Layout -->
+        <div class="main-layout">
+            <!-- Activity Bar (Left Icons) -->
+            <div class="activity-bar">
+                <div class="activity-item active" data-view="connections" title="Connections & Data Sources">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
                 </div>
-                
-                <!-- Connection Management -->
-            <div id="connectionManagement" class="connection-management">
-                <div class="connection-selector">
-                    <select id="savedConnections" onchange="loadSavedConnection()">
-                        <option value="">Select a saved connection...</option>
-                    </select>
-                    <button class="secondary-button" onclick="toggleConnectionForm()">New Connection</button>
-                    <button class="secondary-button" onclick="editConnection()" id="editConnectionBtn" disabled>Edit</button>
-                    <button class="secondary-button" onclick="clearConnectionToken(document.getElementById('savedConnections').value)" id="clearTokenBtn" disabled style="display: none;">Clear Token</button>
-                    <button class="danger-button" onclick="deleteConnection()" id="deleteConnectionBtn" disabled>Delete</button>
+                <div class="activity-item" data-view="explorer" title="Schema Explorer">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M10 4H4c-1.11 0-2 .89-2 2v3h2V6h4V4zm6 0v2h4v3h2V6c0-1.11-.89-2-2-2h-4zm-6 15v2h4c1.11 0 2-.89 2-2v-3h-2v3H4v-2H2v3c0 1.11.89 2 2 2h4zm8 0h4c1.11 0 2-.89 2-2v-3h-2v3h-4v2z"/>
+                    </svg>
+                </div>
+                <div class="activity-item" data-view="dashboards" title="Dashboard Explorer">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
+                    </svg>
+                </div>
+                <div class="activity-item" data-view="history" title="Query History">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+                    </svg>
                 </div>
             </div>
 
-            <!-- Token Status -->
-            <div id="tokenStatus" class="hidden"></div>
+            <!-- Main Content Area (everything except activity bar) -->
+            <div class="main-content-area">
+                <!-- Horizontal Layout (sidebar + editor) -->
+                <div class="horizontal-layout">
+                    <!-- Side Bar (Changes based on activity selection) -->
+                    <div class="sidebar">
+                        <!-- Connections Panel -->
+                        <div class="sidebar-panel active" id="connectionsPanel">
+                            <div class="sidebar-header">
+                                <h3>Connections & Data Sources</h3>
+                            </div>
+                            <div class="sidebar-content">
+                                <!-- Connection Management -->
+                                <div class="panel-section">
+                                    <div class="section-header" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px;">
+                                        <h4>Connections</h4>
+                                        <button class="icon-button" onclick="showNewConnectionDialog()" title="New Connection" style="background: #007acc; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="connection-list" id="connectionList">
+                                        <div class="empty-state">
+                                            <div style="margin-bottom: 12px; color: #858585;">No connections configured</div>
+                                            <button class="primary-button" onclick="showNewConnectionDialog()" style="font-size: 12px; padding: 6px 12px;">
+                                                Add Your First Connection
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
 
-            <!-- Connection Form (for new/edit) -->
-            <div id="connectionForm" class="connection-form hidden">
-                <h4 id="connectionFormTitle">Add New Connection</h4>
+                                <!-- Data Sources -->
+                                <div class="panel-section">
+                                    <div class="section-header">
+                                        <h4>Data Sources</h4>
+                                        <button class="icon-button" onclick="refreshDataSources()" title="Refresh Data Sources">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                    <div class="datasource-list" id="datasourceList">
+                                        <div class="empty-state">Connect to Grafana first</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Schema Explorer Panel -->
+                        <div class="sidebar-panel" id="explorerPanel">
+                            <div class="sidebar-header">
+                                <h3>Schema Explorer</h3>
+                                <button class="icon-button" onclick="refreshSchema()" title="Refresh Schema">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="sidebar-content">
+                                <div id="schemaContainer">
+                                    <div class="empty-state">Select a data source to explore schema</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dashboard Explorer Panel -->
+                        <div class="sidebar-panel" id="dashboardsPanel">
+                            <div class="sidebar-header">
+                                <h3>Dashboard Explorer</h3>
+                            </div>
+                            <div class="sidebar-content">
+                                <div class="search-container">
+                                    <input type="text" id="dashboardSearch" placeholder="Search dashboards..." class="search-input">
+                                </div>
+                                <div id="dashboardResults" class="dashboard-results">
+                                    <div class="empty-state">Search for dashboards to explore</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- History Panel -->
+                        <div class="sidebar-panel" id="historyPanel">
+                            <div class="sidebar-header">
+                                <h3>Query History</h3>
+                                <button class="icon-button" onclick="clearQueryHistory()" title="Clear History">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="sidebar-content">
+                                <div class="search-container">
+                                    <input type="text" id="historySearch" placeholder="Search history..." class="search-input">
+                                </div>
+                                <div id="historyList" class="history-list">
+                                    <div class="empty-state">No query history yet</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Editor Area -->
+                    <div class="editor-area">
+                        <!-- Tab Bar -->
+                        <div class="tab-bar" id="tabBar">
+                            <div class="tab active" data-tab-id="untitled-1">
+                                <span class="tab-label">Untitled-1</span>
+                                <button class="tab-close" onclick="closeTab('untitled-1')">×</button>
+                            </div>
+                            <button class="new-tab-button" onclick="createNewTab()" title="New Query">+</button>
+                        </div>
+
+                        <!-- Tab Content -->
+                        <div class="tab-content">
+                            <div class="editor-container active" data-tab-id="untitled-1">
+                                <!-- Query Type and Options Bar -->
+                                <div class="editor-toolbar">
+                                    <div class="query-type-selector">
+                                        <button class="query-type-button active" data-type="influxql">InfluxQL</button>
+                                        <button class="query-type-button" data-type="promql">PromQL</button>
+                                    </div>
+                                    <div class="editor-options">
+                                        <div class="option-group">
+                                            <label>From (hours ago):</label>
+                                            <input type="number" id="timeFrom" value="1" min="0" step="0.1" class="small-input">
+                                        </div>
+                                        <div class="option-group">
+                                            <label>To (hours ago):</label>
+                                            <input type="number" id="timeTo" value="0" min="0" step="0.1" class="small-input">
+                                        </div>
+                                        <div class="option-group">
+                                            <button class="execute-button" onclick="executeQuery()" disabled id="executeBtn">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M8 5v14l11-7z"/>
+                                                </svg>
+                                                Execute
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- CodeMirror Editor -->
+                                <div class="code-editor-container">
+                                    <textarea id="query" placeholder="Enter your query here..."></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bottom Panel (Results, Variables, etc.) -->
+                <div class="panel-area">
+                    <div class="panel-tabs">
+                        <div class="panel-tab active" data-panel="results">Results</div>
+                        <div class="panel-tab" data-panel="variables">Variables</div>
+                        <div class="panel-tab" data-panel="settings">Settings</div>
+                        <button class="panel-close" onclick="togglePanel()" title="Close Panel">×</button>
+                    </div>
+
+                    <div class="panel-content">
+                        <!-- Results Panel -->
+                        <div class="panel-section active" id="resultsPanel">
+                            <div id="results">
+                                <div class="empty-state">No query executed yet</div>
+                            </div>
+                        </div>
+
+                        <!-- Variables Panel -->
+                        <div class="panel-section" id="variablesPanel">
+                            <div class="panel-toolbar">
+                                <button class="icon-button" onclick="addNewVariable()" title="Add Variable">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                    </svg>
+                                    Add Variable
+                                </button>
+                            </div>
+                            <div id="variablesContainer">
+                                <div class="empty-state">No variables defined</div>
+                            </div>
+                        </div>
+
+                        <!-- Settings Panel -->
+                        <div class="panel-section" id="settingsPanel">
+                            <div class="settings-grid">
+                                <div class="setting-group">
+                                    <label for="maxDataPoints">Max Data Points</label>
+                                    <input type="number" id="maxDataPoints" value="1000" min="1">
+                                </div>
+                                <div class="setting-group">
+                                    <label for="intervalMs">Interval (ms)</label>
+                                    <input type="number" id="intervalMs" value="15000" min="1000" step="1000">
+                                </div>
+                                <div class="setting-group">
+                                    <label>
+                                        <input type="checkbox" id="instantQuery">
+                                        Instant Query (PromQL only)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dialogs -->
+    <!-- Connection Dialog -->
+    <div class="modal-overlay" id="connectionDialog">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="connectionDialogTitle">New Connection</h3>
+                <button class="modal-close" onclick="hideConnectionDialog()">×</button>
+            </div>
+            <div class="modal-content">
                 <div class="form-group">
                     <label for="connectionName">Connection Name</label>
                     <input type="text" id="connectionName" placeholder="My Grafana Server">
@@ -77,187 +292,18 @@
                 </div>
                 <div class="form-group">
                     <label for="connectionPassword">Password</label>
-                    <input type="password" id="connectionPassword" placeholder="Enter password to test connection">
-                </div>
-                <div class="connection-buttons">
-                    <button onclick="saveAndConnectConnection()">Save & Connect</button>
-                    <button class="secondary-button" onclick="saveConnection()">Save Only</button>
-                    <button class="secondary-button" onclick="cancelConnectionForm()">Cancel</button>
+                    <input type="password" id="connectionPassword" placeholder="Enter password">
                 </div>
             </div>
-
-            <!-- Connect with Password (for existing connections that need auth) -->
-            <div id="connectWithPassword" class="connect-with-password hidden">
-                <h4>Enter Password to Connect</h4>
-                <div class="form-group">
-                    <label for="password">Password for <span id="selectedConnectionName"></span></label>
-                    <input type="password" id="password" placeholder="Enter your password">
-                </div>
-                <button onclick="connectWithStoredConnection()">Connect</button>
-            </div>
-
-            <!-- Status Display -->
-            <div id="authStatus"></div>
-            
-            <details style="margin-top: 15px;">
-                <summary style="cursor: pointer; color: #888; font-size: 14px;">Connection Help</summary>
-                <div style="margin-top: 10px; padding: 15px; background-color: #0a0a0a; border-radius: 4px; font-size: 13px; line-height: 1.6;">
-                    <p style="margin-bottom: 10px;"><strong style="color: #f46800;">How to connect:</strong></p>
-                    <ul style="margin-left: 20px; color: #b0b0b0;">
-                        <li style="margin-bottom: 8px;">🔐 Select a saved connection to auto-authenticate (if token is valid)</li>
-                        <li style="margin-bottom: 8px;">🔓 Enter password only if authentication is required or expired</li>
-                        <li style="margin-bottom: 8px;">Create new connections with all details including password for immediate testing</li>
-                        <li style="margin-bottom: 8px;">The integrated proxy handles CORS automatically</li>
-                        <li style="margin-bottom: 8px;">Authentication tokens are stored securely and expire after 24 hours</li>
-                    </ul>
-                    <p style="margin-top: 10px;"><strong style="color: #f46800;">Troubleshooting:</strong></p>
-                    <ul style="margin-left: 20px; color: #b0b0b0;">
-                        <li style="margin-bottom: 8px;">401 Error: Check your username/password or clear stored token</li>
-                        <li style="margin-bottom: 8px;">404 Error: Verify the Grafana URL is correct</li>
-                        <li style="margin-bottom: 8px;">SSL Error: The proxy accepts self-signed certificates</li>
-                        <li style="margin-bottom: 8px;">Token Expired: Re-enter password to refresh authentication</li>
-                    </ul>
-                </div>
-            </details>
-            </div>
-        </div>
-
-        <div class="main-content">
-            <div class="datasource-section collapsed" id="datasourceSection">
-                <div class="datasource-header">
-                    <h2 class="section-title">Data Source</h2>
-                    <span class="datasource-header-status" id="datasourceHeaderStatus"></span>
-                    <button class="datasource-toggle" onclick="toggleDatasourceSection()">Show</button>
-                </div>
-                <div class="datasource-container" id="datasourceContainer">
-                    <div class="datasource-search">
-                        <input type="text" id="datasourceSearch" placeholder="Search data sources..." oninput="filterDataSources()">
-                    </div>
-                    <div class="form-group">
-                        <select id="datasource" disabled size="8" onchange="onDataSourceChange()">
-                            <option value="">Connect to Grafana first</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-
-            <div class="schema-section collapsed" id="schemaSection">
-                <div class="schema-header">
-                    <h2 class="section-title">Schema Explorer</h2>
-                    <div>
-                        <button class="schema-toggle" onclick="toggleSchemaExplorer()">Show</button>
-                    </div>
-                </div>
-                <div class="schema-content-wrapper">
-                    <div id="schemaContainer"></div>
-                    <button class="schema-refresh-button secondary-button" onclick="refreshSchema()">Refresh</button>
-                </div>
-            </div>
-
-            <div class="dashboard-section collapsed" id="dashboardSection">
-                <div class="dashboard-header">
-                    <h2 class="section-title">Dashboard Explorer</h2>
-                    <div>
-                        <button class="dashboard-toggle" onclick="toggleDashboardExplorer()">Show</button>
-                    </div>
-                </div>
-                <div class="dashboard-content-wrapper">
-                    <div class="dashboard-search">
-                        <input type="text" id="dashboardSearch" placeholder="Search dashboards..." oninput="searchDashboards()">
-                        <button class="secondary-button" onclick="clearDashboardSearch()" style="margin-left: 10px;">Clear</button>
-                    </div>
-                    
-                    <div id="dashboardResults" class="dashboard-results">
-                        <div class="dashboard-empty">Search for dashboards to explore their queries</div>
-                    </div>
-                    
-                    <div id="dashboardQueries" class="dashboard-queries hidden">
-                        <div class="dashboard-info">
-                            <h4 id="selectedDashboardTitle"></h4>
-                            <p id="selectedDashboardDescription"></p>
-                        </div>
-                        
-                        <div class="dashboard-tabs">
-                            <div id="dashboardTabsHeader" class="dashboard-tabs-header"></div>
-                            <div id="dashboardTabsContent" class="dashboard-tabs-content"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="query-section">
-                <h2 class="section-title">Query Editor</h2>
-                <div class="query-type-selector">
-                    <button class="query-type-button active" onclick="setQueryType('influxql')">InfluxQL</button>
-                    <button class="query-type-button" onclick="setQueryType('promql')">PromQL</button>
-                </div>
-                
-                <div class="time-range-section">
-                    <div class="form-group">
-                        <label for="timeFrom">From (hours ago)</label>
-                        <input type="number" id="timeFrom" value="1" min="0" step="0.1">
-                    </div>
-                    <div class="form-group">
-                        <label for="timeTo">To (hours ago)</label>
-                        <input type="number" id="timeTo" value="0" min="0" step="0.1">
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label for="query">Query</label>
-                    <div class="query-editor-container" id="queryEditorContainer">
-                        <textarea id="query" placeholder="Enter your query here..." disabled></textarea>
-                        <div id="queryErrorDisplay" class="query-error hidden"></div>
-                        <div class="query-editor-resize-handle" id="queryEditorResizeHandle"></div>
-                    </div>
-                </div>
-                
-                <div class="advanced-options">
-                    <h3 style="color: #f46800; margin-bottom: 10px; font-size: 16px;">Advanced Options</h3>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="maxDataPoints">Max Data Points</label>
-                            <input type="number" id="maxDataPoints" value="1000" min="1">
-                        </div>
-                        <div class="form-group">
-                            <label for="intervalMs">Interval (ms)</label>
-                            <input type="number" id="intervalMs" value="15000" min="1000" step="1000">
-                        </div>
-                    </div>
-                    <div class="form-group" id="promqlOptions" style="display: none;">
-                        <label>
-                            <input type="checkbox" id="instantQuery" style="width: auto; margin-right: 8px;">
-                            Instant Query (single point in time)
-                        </label>
-                    </div>
-                </div>
-                
-                <div class="button-group">
-                    <button id="executeBtn" onclick="executeQuery()" disabled>Execute Query</button>
-                    <button class="secondary-button" onclick="clearQuery()">Clear</button>
-                </div>
-                
-                <div class="query-results">
-                    <h3 class="results-title">Results</h3>
-                    <div id="results">
-                        <p style="color: #888; text-align: center;">No query executed yet</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="sidebar">
-                <div class="history-section">
-                    <h2 class="section-title">Query History</h2>
-                    <div id="historyList"></div>
-                </div>
-                
-                <div class="variables-section" id="variablesSection">
-                    <h2 class="section-title">Query Variables</h2>
-                    <div id="variablesContainer"></div>
-                </div>
+            <div class="modal-footer">
+                <button onclick="saveConnection()" class="primary-button">Save & Connect</button>
+                <button onclick="hideConnectionDialog()" class="secondary-button">Cancel</button>
             </div>
         </div>
     </div>
+
+    <!-- Auth Status -->
+    <div id="authStatus" class="auth-status-toast"></div>
 
     <!-- Application Scripts -->
     <script src="js/config.js"></script>
@@ -272,6 +318,7 @@
     <script src="js/queries.js"></script>
     <script src="js/charts.js"></script>
     <script src="js/history.js"></script>
+    <script src="js/interface.js"></script>
     <script src="js/app.js"></script>
 </body>
 </html>

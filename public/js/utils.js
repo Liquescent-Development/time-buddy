@@ -65,8 +65,16 @@ const Utils = {
 
     // Hide all auth sections
     hideAllAuthSections() {
-        document.getElementById('connectionForm').classList.add('hidden');
-        document.getElementById('connectWithPassword').classList.add('hidden');
+        const connectionForm = document.getElementById('connectionForm');
+        if (connectionForm) {
+            connectionForm.classList.add('hidden');
+        }
+        
+        const connectWithPassword = document.getElementById('connectWithPassword');
+        if (connectWithPassword) {
+            connectWithPassword.classList.add('hidden');
+        }
+        
         this.clearTokenStatus();
     },
 

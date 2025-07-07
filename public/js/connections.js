@@ -42,12 +42,31 @@ const Connections = {
 
     // Ensure disconnected state
     ensureDisconnectedState() {
-        document.getElementById('authInfo').classList.add('hidden');
-        Utils.hideAllAuthSections();
-        document.getElementById('datasource').innerHTML = '<option value="">Connect to Grafana first</option>';
-        document.getElementById('datasource').disabled = true;
-        document.getElementById('executeBtn').disabled = true;
-        document.getElementById('authStatus').innerHTML = '';
+        // Check if elements exist before accessing them (VS Code interface compatibility)
+        const authInfo = document.getElementById('authInfo');
+        if (authInfo) {
+            authInfo.classList.add('hidden');
+        }
+        
+        if (typeof Utils !== 'undefined' && Utils.hideAllAuthSections) {
+            Utils.hideAllAuthSections();
+        }
+        
+        const datasource = document.getElementById('datasource');
+        if (datasource) {
+            datasource.innerHTML = '<option value="">Connect to Grafana first</option>';
+            datasource.disabled = true;
+        }
+        
+        const executeBtn = document.getElementById('executeBtn');
+        if (executeBtn) {
+            executeBtn.disabled = true;
+        }
+        
+        const authStatus = document.getElementById('authStatus');
+        if (authStatus) {
+            authStatus.innerHTML = '';
+        }
         
         // Clear header status
         const headerStatus = document.getElementById('authHeaderStatus');

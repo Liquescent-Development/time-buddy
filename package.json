@@ -2,17 +2,31 @@
     "name": "grafana-query-ide",
     "version": "0.0.1",
     "description": "Web-based IDE for executing InfluxQL and PromQL queries via Grafana API",
-    "main": "server.js",
+    "main": "main.js",
+    "homepage": "./",
     "scripts": {
         "start": "node server.js",
-        "dev": "node server.js"
+        "dev": "node server.js",
+        "electron": "electron .",
+        "electron-dev": "node electron-start.js",
+        "electron-dev-alt": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
+        "build": "electron-builder",
+        "build-mac": "electron-builder --mac",
+        "build-win": "electron-builder --win",
+        "build-linux": "electron-builder --linux",
+        "build-all": "node build.js all",
+        "dist": "npm run build",
+        "pack": "electron-builder --dir",
+        "postinstall": "electron-builder install-app-deps"
     },
     "keywords": [
         "grafana",
         "influxdb",
         "prometheus",
         "query",
-        "ide"
+        "ide",
+        "electron",
+        "desktop"
     ],
     "author": "",
     "license": "MIT",
@@ -24,7 +38,68 @@
         "helmet": "^7.1.0",
         "morgan": "^1.10.0"
     },
+    "devDependencies": {
+        "electron": "^28.0.0",
+        "electron-builder": "^24.9.1",
+        "concurrently": "^8.2.2",
+        "wait-on": "^7.2.0"
+    },
     "engines": {
         "node": ">=14.0.0"
+    },
+    "build": {
+        "appId": "com.grafana.query-ide",
+        "productName": "Grafana Query IDE",
+        "directories": {
+            "output": "dist"
+        },
+        "files": [
+            "main.js",
+            "preload.js",
+            "server.js",
+            "public/**/*",
+            "package.json",
+            "node_modules/**/*"
+        ],
+        "mac": {
+            "category": "public.app-category.developer-tools",
+            "target": [
+                {
+                    "target": "dmg",
+                    "arch": [
+                        "x64",
+                        "arm64"
+                    ]
+                }
+            ],
+            "icon": "assets/icon.icns"
+        },
+        "win": {
+            "target": [
+                {
+                    "target": "nsis",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "icon": "assets/icon.ico"
+        },
+        "linux": {
+            "target": [
+                {
+                    "target": "AppImage",
+                    "arch": [
+                        "x64"
+                    ]
+                }
+            ],
+            "icon": "assets/icon.png",
+            "category": "Development"
+        },
+        "nsis": {
+            "oneClick": false,
+            "allowToChangeInstallationDirectory": true
+        }
     }
 }

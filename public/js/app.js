@@ -1,219 +1,322 @@
 const App = {
     // Initialize the application
     initialize() {
-        console.log('Page loaded, initializing...');
+        console.log('Initializing VS Code-like interface...');
         
-        History.initialize();
-        Connections.loadSavedConnections();
+        // Initialize the new VS Code-like interface
+        Interface.initialize();
+        
+        // Initialize existing modules that are still used
         Variables.initialize();
-        Schema.initialize();
         Dashboard.initialize();
         
+        // Initialize connection and API systems
         Connections.ensureDisconnectedState();
         API.checkIfRunningInContainer();
         
-        // Initialize CodeMirror after a short delay to ensure DOM is ready
-        setTimeout(function() {
-            Editor.initializeCodeMirror();
-        }, 100);
+        // Set default application state
+        this.setDefaultApplicationState();
         
-        Connections.updateConnectionButtons();
-        
-        // Set default section states on page load
-        this.setDefaultSectionStates();
-        
-        console.log('Initialization complete');
+        console.log('VS Code-like interface initialization complete');
     },
     
-    // Set default section states for page load
-    setDefaultSectionStates() {
-        // Auth section: expanded by default
-        const authSection = document.getElementById('authSection');
-        if (authSection) {
-            authSection.classList.remove('collapsed');
-            const toggleButton = document.querySelector('.auth-toggle');
-            if (toggleButton) {
-                toggleButton.textContent = 'Hide';
-            }
-        }
+    // Set default application state
+    setDefaultApplicationState() {
+        // Set default query type
+        GrafanaConfig.currentQueryType = 'influxql';
+        GrafanaConfig.currentViewMode = 'table';
+        GrafanaConfig.pageSize = 25;
+        GrafanaConfig.currentPage = 1;
         
-        // Datasource section: collapsed by default
-        const datasourceSection = document.getElementById('datasourceSection');
-        if (datasourceSection) {
-            datasourceSection.classList.add('collapsed');
-            const toggleButton = document.querySelector('.datasource-toggle');
-            if (toggleButton) {
-                toggleButton.textContent = 'Show';
-            }
-        }
+        // Update title bar connection status
+        this.updateTitleBarStatus();
         
-        // Schema section: collapsed by default
-        const schemaSection = document.getElementById('schemaSection');
-        if (schemaSection) {
-            schemaSection.classList.add('collapsed');
-            const toggleButton = document.querySelector('.schema-toggle');
-            if (toggleButton) {
-                toggleButton.textContent = 'Show';
-            }
+        // Check for saved connections and load them
+        this.loadSavedConnections();
+    },
+    
+    updateTitleBarStatus() {
+        const statusElement = document.getElementById('titleBarConnectionStatus');
+        if (GrafanaConfig.connected && GrafanaConfig.url) {
+            statusElement.textContent = `Connected to ${GrafanaConfig.url}`;
+            statusElement.style.color = '#51cf66';
+        } else {
+            statusElement.textContent = 'Not Connected';
+            statusElement.style.color = '#858585';
         }
-        
-        // Dashboard section: collapsed by default
-        const dashboardSection = document.getElementById('dashboardSection');
-        if (dashboardSection) {
-            dashboardSection.classList.add('collapsed');
-            const toggleButton = document.querySelector('.dashboard-toggle');
-            if (toggleButton) {
-                toggleButton.textContent = 'Show';
-            }
-        }
+    },
+    
+    loadSavedConnections() {
+        // Load and display saved connections in the new interface
+        Interface.loadConnections();
     }
 };
 
-// Global functions for HTML onclick handlers
+// Connection Management - Updated for new interface
 function showConnectedState(connection) {
-    Connections.showConnectedState(connection);
+    GrafanaConfig.connected = true;
+    GrafanaConfig.url = connection.url;
+    GrafanaConfig.username = connection.username;
+    GrafanaConfig.connectionId = connection.id;
+    
+    App.updateTitleBarStatus();
+    Interface.loadConnections();
+    Interface.loadDataSources();
+    
+    // Update execute buttons in all tabs
+    Interface.tabs.forEach((_, tabId) => {
+        Interface.updateExecuteButton(tabId);
+    });
+    
+    Interface.showToast(`Connected to ${connection.name}`, 'success');
 }
 
 function disconnect() {
-    Connections.disconnect();
+    GrafanaConfig.connected = false;
+    GrafanaConfig.url = '';
+    GrafanaConfig.username = '';
+    GrafanaConfig.connectionId = null;
+    GrafanaConfig.currentDatasourceId = null;
+    
+    App.updateTitleBarStatus();
+    Interface.loadConnections();
+    Interface.loadDataSources();
+    
+    // Disable execute buttons in all tabs
+    Interface.tabs.forEach((_, tabId) => {
+        Interface.updateExecuteButton(tabId);
+    });
+    
+    Interface.showToast('Disconnected from Grafana', 'info');
 }
 
+// Global functions for HTML onclick handlers and compatibility
 function clearConnectionToken(connectionId) {
-    Connections.clearConnectionToken(connectionId);
+    if (typeof Connections !== 'undefined') {
+        Connections.clearConnectionToken(connectionId);
+    }
 }
 
 function updateConnectionButtons() {
-    Connections.updateConnectionButtons();
-}
-
-function toggleConnectionForm() {
-    Connections.toggleConnectionForm();
+    Interface.loadConnections();
 }
 
 function loadSavedConnection() {
-    Connections.loadSavedConnection();
+    // This is handled by the new connection click handlers in Interface
 }
 
 function editConnection() {
-    Connections.editConnection();
+    // TODO: Implement edit functionality in new interface
+    Interface.showToast('Edit connection functionality coming soon', 'info');
 }
 
 function deleteConnection() {
-    Connections.deleteConnection();
+    // TODO: Implement delete functionality in new interface
+    Interface.showToast('Delete connection functionality coming soon', 'info');
 }
 
-function saveAndConnectConnection() {
-    Connections.saveAndConnectConnection();
+function connectWithStoredConnection(connectionId) {
+    if (typeof Connections !== 'undefined') {
+        Connections.connectWithStoredConnection(connectionId);
+    }
 }
 
-function saveConnection() {
-    Connections.saveConnection();
-}
-
-function cancelConnectionForm() {
-    Connections.cancelConnectionForm();
-}
-
-function connectWithStoredConnection() {
-    Connections.connectWithStoredConnection();
-}
-
+// Query and Editor functions - Updated for tab system
 function setQueryType(type) {
-    Editor.setQueryType(type);
+    Interface.setQueryType(Interface.activeTab, type);
 }
 
 function clearQuery() {
-    Editor.clearQuery();
-}
-
-function executeQuery() {
-    Queries.executeQuery();
-}
-
-function toggleDatasourceSection() {
-    const datasourceSection = document.getElementById('datasourceSection');
-    const toggleButton = document.querySelector('.datasource-toggle');
-    
-    if (datasourceSection.classList.contains('collapsed')) {
-        datasourceSection.classList.remove('collapsed');
-        toggleButton.textContent = 'Hide';
-    } else {
-        datasourceSection.classList.add('collapsed');
-        toggleButton.textContent = 'Show';
+    const tabData = Interface.tabs.get(Interface.activeTab);
+    if (tabData && tabData.editor) {
+        tabData.editor.setValue('');
     }
 }
 
-function filterDataSources() {
-    const searchInput = document.getElementById('datasourceSearch');
-    const datasourceSelect = document.getElementById('datasource');
-    const searchTerm = searchInput.value.toLowerCase();
-    const options = datasourceSelect.options;
-    
-    for (let i = 0; i < options.length; i++) {
-        const option = options[i];
-        const text = option.textContent.toLowerCase();
-        
-        if (text.includes(searchTerm) || searchTerm === '') {
-            option.style.display = '';
-        } else {
-            option.style.display = 'none';
-        }
-    }
+function executeQuery(tabId) {
+    Interface.executeQuery(tabId || Interface.activeTab);
 }
 
-function toggleAuthSection() {
-    const authSection = document.getElementById('authSection');
-    const toggleButton = document.querySelector('.auth-toggle');
-    
-    if (authSection.classList.contains('collapsed')) {
-        authSection.classList.remove('collapsed');
-        toggleButton.textContent = 'Hide';
-    } else {
-        authSection.classList.add('collapsed');
-        toggleButton.textContent = 'Show';
-    }
-}
-
+// Datasource management - Updated for new interface
 function onDataSourceChange() {
     const datasourceSelect = document.getElementById('datasource');
-    const datasourceSection = document.getElementById('datasourceSection');
-    const schemaSection = document.getElementById('schemaSection');
-    const headerStatus = document.getElementById('datasourceHeaderStatus');
-    const toggleButton = document.querySelector('.datasource-toggle');
-    const schemaToggleButton = document.querySelector('.schema-toggle');
+    if (!datasourceSelect) return;
     
-    // Get selected datasource
     const selectedOption = datasourceSelect.selectedOptions[0];
     if (selectedOption && selectedOption.value) {
-        // Update header status
-        if (headerStatus) {
-            headerStatus.textContent = 'Selected: ' + selectedOption.textContent;
+        GrafanaConfig.currentDatasourceId = selectedOption.value;
+        
+        // Update execute buttons
+        Interface.tabs.forEach((_, tabId) => {
+            Interface.updateExecuteButton(tabId);
+        });
+        
+        // Auto-detect query type based on datasource
+        const datasourceType = selectedOption.dataset.type;
+        if (datasourceType) {
+            const queryType = datasourceType === 'prometheus' ? 'promql' : 'influxql';
+            Interface.setQueryType(Interface.activeTab, queryType);
         }
         
-        // Auto-collapse the datasource section
-        if (datasourceSection && !datasourceSection.classList.contains('collapsed')) {
-            datasourceSection.classList.add('collapsed');
-            if (toggleButton) {
-                toggleButton.textContent = 'Show';
-            }
+        // Trigger schema loading
+        if (typeof Schema !== 'undefined' && Schema.onDatasourceChange) {
+            Schema.onDatasourceChange();
         }
         
-        // Auto-expand the schema section
-        if (schemaSection && schemaSection.classList.contains('collapsed')) {
-            schemaSection.classList.remove('collapsed');
-            if (schemaToggleButton) {
-                schemaToggleButton.textContent = 'Hide';
-            }
+        // Switch to schema explorer view
+        Interface.switchSidebarView('explorer');
+        
+        Interface.showToast(`Selected datasource: ${selectedOption.textContent}`, 'success');
+    }
+}
+
+// Data source loading function (called by Interface)
+async function loadDataSources() {
+    if (!GrafanaConfig.connected) return;
+    
+    try {
+        const response = await API.makeApiRequest('/api/datasources', {
+            method: 'GET'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
+        
+        const datasources = await response.json();
+        populateDataSourceList(datasources);
+        
+    } catch (error) {
+        console.error('Error loading data sources:', error);
+        Interface.showToast('Failed to load data sources: ' + error.message, 'error');
+    }
+}
+
+function populateDataSourceList(datasources) {
+    const datasourceList = document.getElementById('datasourceList');
+    
+    if (!datasources || datasources.length === 0) {
+        datasourceList.innerHTML = '<div class="empty-state">No data sources found</div>';
+        return;
     }
     
-    // Always call the schema explorer's datasource change handler
-    if (typeof Schema !== 'undefined' && Schema.onDatasourceChange) {
-        Schema.onDatasourceChange();
+    let html = '';
+    datasources.forEach(ds => {
+        const isSelected = GrafanaConfig.currentDatasourceId === ds.uid;
+        html += `
+            <div class="datasource-item ${isSelected ? 'selected' : ''}" data-uid="${ds.uid}" data-type="${ds.type}">
+                <div>
+                    <div style="font-weight: 500;">${Utils.escapeHtml(ds.name)}</div>
+                    <div style="font-size: 11px; color: #858585;">${Utils.escapeHtml(ds.type)}</div>
+                </div>
+            </div>
+        `;
+    });
+    
+    datasourceList.innerHTML = html;
+    
+    // Add click handlers
+    datasourceList.querySelectorAll('.datasource-item').forEach(item => {
+        item.addEventListener('click', () => {
+            // Update selection
+            datasourceList.querySelectorAll('.datasource-item').forEach(i => {
+                i.classList.remove('selected');
+            });
+            item.classList.add('selected');
+            
+            // Update global state
+            GrafanaConfig.currentDatasourceId = item.dataset.uid;
+            
+            // Trigger change event
+            onDataSourceChange();
+        });
+    });
+}
+
+// Dashboard search functions
+function searchDashboards() {
+    if (typeof Dashboard !== 'undefined' && Dashboard.searchDashboards) {
+        Dashboard.searchDashboards();
+    }
+}
+
+function clearDashboardSearch() {
+    const searchInput = document.getElementById('dashboardSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        searchDashboards();
+    }
+}
+
+// Panel management functions
+function selectSeries(seriesIndex) {
+    const index = parseInt(seriesIndex);
+    if (GrafanaConfig.currentResults && index >= 0) {
+        GrafanaConfig.currentPage = 1;
+        GrafanaConfig.selectedSeries = index;
+        Queries.displayResults(GrafanaConfig.currentResults, GrafanaConfig.currentPage, index);
+    }
+}
+
+function setViewMode(mode) {
+    GrafanaConfig.currentViewMode = mode;
+    if (GrafanaConfig.currentResults) {
+        Queries.displayResults(GrafanaConfig.currentResults, GrafanaConfig.currentPage, GrafanaConfig.selectedSeries);
+    }
+}
+
+function goToPage(page) {
+    if (GrafanaConfig.currentResults && page >= 1 && page <= Math.ceil(GrafanaConfig.totalRows / GrafanaConfig.pageSize)) {
+        Queries.displayResults(GrafanaConfig.currentResults, page, GrafanaConfig.selectedSeries);
+    }
+}
+
+function changePageSize(newSize) {
+    GrafanaConfig.pageSize = parseInt(newSize);
+    GrafanaConfig.currentPage = 1;
+    if (GrafanaConfig.currentResults) {
+        Queries.displayResults(GrafanaConfig.currentResults, GrafanaConfig.currentPage, GrafanaConfig.selectedSeries);
+    }
+}
+
+function updateChart() {
+    if (typeof Charts !== 'undefined' && Charts.updateChart) {
+        Charts.updateChart();
+    }
+}
+
+// Legacy function compatibility
+function toggleSchemaExplorer() {
+    Interface.switchSidebarView('explorer');
+}
+
+function toggleDashboardExplorer() {
+    Interface.switchSidebarView('dashboards');
+}
+
+function refreshSchema() {
+    if (typeof Schema !== 'undefined' && Schema.loadSchema) {
+        Schema.loadSchema();
+    }
+}
+
+// Variables management
+function addVariable() {
+    Interface.switchPanel('variables');
+    if (typeof Variables !== 'undefined' && Variables.addVariable) {
+        Variables.addVariable();
     }
 }
 
 // Initialize when page loads
 window.onload = function() {
     App.initialize();
+    
+    // Load data sources when Interface is ready
+    Interface.loadDataSources = loadDataSources;
+    
+    // Mark app as loaded for Electron
+    if (document.body) {
+        document.body.classList.add('electron-app');
+    }
 };
