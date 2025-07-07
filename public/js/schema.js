@@ -8,10 +8,16 @@ const Schema = {
     influxRetentionPolicies: [],
     influxFields: {},
     influxTags: {},
+    influxTagValues: {}, // Store tag values keyed by "measurement:tag"
     selectedMeasurement: null,
     selectedRetentionPolicy: null,
+    selectedField: null, // Track which field is selected
+    selectedTag: null, // Track which tag is selected
+    fieldAssociatedTags: {}, // Store tags associated with fields keyed by "measurement:field"
     isLoading: false,
     isLoadingMeasurement: false,
+    isLoadingFieldTags: false,
+    isLoadingTagValues: false,
     
     // Initialize schema explorer
     initialize() {
@@ -228,6 +234,8 @@ const Schema = {
     async loadMeasurementSchema(measurement, retentionPolicy = 'autogen') {
         this.selectedMeasurement = measurement;
         this.selectedRetentionPolicy = retentionPolicy;
+        this.selectedField = null; // Clear selected field when changing measurement
+        this.selectedTag = null; // Clear selected tag when changing measurement
         this.isLoadingMeasurement = true;
         
         // Render UI to show loading state
@@ -236,18 +244,38 @@ const Schema = {
         try {
             console.log(`Loading schema for measurement: ${measurement}, retention policy: ${retentionPolicy}`);
             
-            // Get field keys
-            const fieldsQuery = `SHOW FIELD KEYS FROM "${measurement}"`;
+            // Get field keys - try without retention policy first
+            let fieldsQuery = `SHOW FIELD KEYS FROM "${measurement}"`;
             console.log('Executing fields query:', fieldsQuery);
-            const fieldsResult = await this.executeSchemaQuery(fieldsQuery, 'influxdb');
+            let fieldsResult = await this.executeSchemaQuery(fieldsQuery, 'influxdb');
             console.log('Fields result:', fieldsResult);
             
+            // Check if we got fields
+            let hasFields = false;
             if (fieldsResult && fieldsResult.results && fieldsResult.results.A) {
-                this.influxFields[measurement] = this.extractInfluxResults(fieldsResult.results.A);
-                console.log('Extracted fields:', this.influxFields[measurement]);
-            } else {
-                console.warn('No fields data found for measurement:', measurement);
-                this.influxFields[measurement] = [];
+                const extractedFields = this.extractInfluxResults(fieldsResult.results.A);
+                if (extractedFields.length > 0) {
+                    this.influxFields[measurement] = extractedFields;
+                    console.log('Extracted fields:', this.influxFields[measurement]);
+                    hasFields = true;
+                }
+            }
+            
+            // If no fields found, try with retention policy
+            if (!hasFields) {
+                console.warn('No fields found with basic query, trying with retention policy:', retentionPolicy);
+                fieldsQuery = `SHOW FIELD KEYS FROM "${retentionPolicy}"."${measurement}"`;
+                console.log('Executing fields query with retention policy:', fieldsQuery);
+                fieldsResult = await this.executeSchemaQuery(fieldsQuery, 'influxdb');
+                console.log('Fields result with retention policy:', fieldsResult);
+                
+                if (fieldsResult && fieldsResult.results && fieldsResult.results.A) {
+                    this.influxFields[measurement] = this.extractInfluxResults(fieldsResult.results.A);
+                    console.log('Extracted fields with retention policy:', this.influxFields[measurement]);
+                } else {
+                    console.warn('No fields data found for measurement:', measurement);
+                    this.influxFields[measurement] = [];
+                }
             }
             
             // Get tag keys
@@ -359,6 +387,223 @@ const Schema = {
         }
         
         return await response.json();
+    },
+    
+    // Load tags associated with a specific field
+    async loadFieldAssociatedTags(field) {
+        if (!this.selectedMeasurement || !field) return;
+        
+        const key = `${this.selectedMeasurement}:${field}`;
+        this.selectedField = field;
+        this.selectedTag = null; // Clear selected tag when field changes
+        this.isLoadingFieldTags = true;
+        
+        // Update only the tags list to show loading state
+        this.renderTagsList();
+        
+        // Clear tag values panel since selected tag is cleared
+        this.renderTagValuesPanel();
+        
+        try {
+            console.log(`Loading tags associated with field: ${field} in measurement: ${this.selectedMeasurement}`);
+            
+            // Query to get tag groupings for this field
+            const now = Date.now();
+            const fromTime = now - (60 * 60 * 1000); // 1 hour ago
+            const toTime = now;
+            
+            // Build time filter
+            const timeFilter = `time >= ${fromTime}ms AND time <= ${toTime}ms`;
+            
+            // Query with GROUP BY * to get all tag combinations
+            const tagsQuery = `SELECT last("${field}") FROM "${this.selectedRetentionPolicy}"."${this.selectedMeasurement}" WHERE ${timeFilter} GROUP BY time(1h), *`;
+            console.log('Executing field tags query:', tagsQuery);
+            
+            const tagsResult = await this.executeSchemaQuery(tagsQuery, 'influxdb');
+            console.log('Field tags result:', tagsResult);
+            
+            const associatedTags = new Set();
+            
+            if (tagsResult && tagsResult.results && tagsResult.results.A && tagsResult.results.A.frames) {
+                // Extract tag names from the frames
+                for (const frame of tagsResult.results.A.frames) {
+                    if (frame.schema && frame.schema.fields) {
+                        frame.schema.fields.forEach(field => {
+                            if (field.labels) {
+                                Object.keys(field.labels).forEach(tagName => {
+                                    // Exclude time-related labels
+                                    if (tagName !== 'Time' && tagName !== '__name__') {
+                                        associatedTags.add(tagName);
+                                    }
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+            
+            this.fieldAssociatedTags[key] = Array.from(associatedTags).sort();
+            console.log(`Found ${this.fieldAssociatedTags[key].length} tags associated with field ${field}:`, this.fieldAssociatedTags[key]);
+            
+        } catch (error) {
+            console.error('Error loading field associated tags:', error);
+            // If the query fails, don't filter tags
+            this.fieldAssociatedTags[key] = null;
+        } finally {
+            this.isLoadingFieldTags = false;
+            this.renderTagsList();
+        }
+    },
+    
+    // Render just the tag values panel
+    renderTagValuesPanel() {
+        const valuesPanel = document.querySelector('.schema-values-panel');
+        if (!valuesPanel) return;
+        
+        let html = '';
+        html += '<div class="schema-panel-header">';
+        html += '<h5>Tag Values' + (this.selectedTag ? ' (' + Utils.escapeHtml(this.selectedTag) + ')' : '') + '</h5>';
+        html += '</div>';
+        
+        if (this.selectedTag) {
+            const key = `${this.selectedMeasurement}:${this.selectedTag}`;
+            const tagValues = this.influxTagValues[key] || [];
+            
+            // Search box for tag values
+            html += '<div class="schema-search">';
+            html += '<input type="text" id="tagValuesSearch" placeholder="Search values..." onkeyup="filterTagValues(this.value)">';
+            html += '</div>';
+            
+            html += '<div class="schema-list" id="tagValuesList">';
+            
+            if (this.isLoadingTagValues) {
+                html += '<div class="schema-loading">Loading tag values...</div>';
+            } else if (tagValues.length === 0) {
+                html += '<div class="schema-empty">No values found</div>';
+            } else {
+                for (const value of tagValues) {
+                    html += '<div class="schema-value-item" onclick="insertTagValue(\'' + Utils.escapeHtml(this.selectedTag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
+                    html += '<span class="schema-value-name">' + Utils.escapeHtml(value) + '</span>';
+                    html += '</div>';
+                }
+            }
+            
+            html += '</div>';
+        } else {
+            html += '<div class="schema-list">';
+            html += '<div class="schema-empty">Select a tag to view values</div>';
+            html += '</div>';
+        }
+        
+        // Save current scroll position of tag values list if it exists
+        const currentTagValuesList = document.getElementById('tagValuesList');
+        const scrollTop = currentTagValuesList ? currentTagValuesList.scrollTop : 0;
+        
+        valuesPanel.innerHTML = html;
+        
+        // Restore scroll position after render
+        if (this.selectedTag) {
+            requestAnimationFrame(() => {
+                const newTagValuesList = document.getElementById('tagValuesList');
+                if (newTagValuesList && scrollTop > 0) {
+                    newTagValuesList.scrollTop = scrollTop;
+                }
+            });
+        }
+    },
+    
+    // Load tag values for a specific tag
+    async loadTagValues(tag) {
+        if (!this.selectedMeasurement || !tag) return;
+        
+        const key = `${this.selectedMeasurement}:${tag}`;
+        this.selectedTag = tag;
+        this.isLoadingTagValues = true;
+        
+        // Save scroll positions
+        const scrollPositions = this.saveScrollPositions();
+        
+        // Update tags list to show selection
+        const tagsList = document.getElementById('tagsList');
+        if (tagsList) {
+            // Remove previous selection
+            const selectedItems = tagsList.querySelectorAll('.schema-item.selected');
+            selectedItems.forEach(item => item.classList.remove('selected'));
+            
+            // Add selection to clicked tag
+            const clickedTag = Array.from(tagsList.querySelectorAll('.schema-item')).find(
+                item => item.querySelector('.schema-item-name').textContent === tag
+            );
+            if (clickedTag) {
+                clickedTag.classList.add('selected');
+            }
+        }
+        
+        // Update only tag values panel to show loading state
+        this.renderTagValuesPanel();
+        
+        // Restore scroll positions
+        this.restoreScrollPositions(scrollPositions);
+        
+        try {
+            console.log(`Loading values for tag: ${tag} in measurement: ${this.selectedMeasurement}`);
+            
+            // Query for tag values
+            const tagValuesQuery = `SHOW TAG VALUES WITH KEY = "${tag}"`;
+            console.log('Executing tag values query:', tagValuesQuery);
+            const tagValuesResult = await this.executeSchemaQuery(tagValuesQuery, 'influxdb');
+            console.log('Tag values result:', tagValuesResult);
+            
+            if (tagValuesResult && tagValuesResult.results && tagValuesResult.results.A) {
+                // Extract values from the result
+                const values = [];
+                const frames = tagValuesResult.results.A.frames || [];
+                
+                for (const frame of frames) {
+                    if (!frame.data || !frame.data.values) continue;
+                    
+                    // SHOW TAG VALUES returns results with the tag key in first column and value in second
+                    // But we should check all columns to be safe
+                    for (let i = 0; i < frame.data.values.length; i++) {
+                        const column = frame.data.values[i];
+                        if (Array.isArray(column)) {
+                            // Skip the first column if it contains the tag name
+                            if (i === 0 && column.length > 0 && column[0] === tag) {
+                                continue;
+                            }
+                            
+                            // Extract values from this column
+                            for (const value of column) {
+                                if (value !== null && value !== undefined && value !== tag) {
+                                    const stringValue = String(value);
+                                    if (!values.includes(stringValue)) {
+                                        values.push(stringValue);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                this.influxTagValues[key] = values.sort();
+                console.log(`Extracted ${values.length} values for tag ${tag}:`, this.influxTagValues[key]);
+            } else {
+                console.warn('No tag values found for:', tag);
+                this.influxTagValues[key] = [];
+            }
+            
+        } catch (error) {
+            console.error('Error loading tag values:', error);
+            this.showError('Failed to load tag values: ' + error.message);
+            this.influxTagValues[key] = [];
+        } finally {
+            this.isLoadingTagValues = false;
+            this.renderTagValuesPanel();
+            
+            // Ensure selected items are visible
+            this.ensureItemVisible('fieldsList', '.schema-item.selected');
+            this.ensureItemVisible('tagsList', '.schema-item.selected');
+        }
     },
     
     // Extract results from InfluxDB response
@@ -557,7 +802,9 @@ const Schema = {
                     html += '<div class="schema-list" id="fieldsList">';
                     
                     for (const field of fields) {
-                        html += '<div class="schema-item" onclick="insertField(\'' + Utils.escapeHtml(field) + '\')">';
+                        const isSelected = this.selectedField === field;
+                        
+                        html += '<div class="schema-item' + (isSelected ? ' selected' : '') + '" onclick="selectField(\'' + Utils.escapeHtml(field) + '\')">';
                         html += '<span class="schema-item-name">' + Utils.escapeHtml(field) + '</span>';
                         html += '<span class="schema-item-type field">field</span>';
                         html += '</div>';
@@ -569,7 +816,16 @@ const Schema = {
                 
                 if (tags.length > 0) {
                     html += '<div class="schema-subsection">';
-                    html += '<h4>Tags (' + Utils.escapeHtml(this.selectedMeasurement) + ')</h4>';
+                    html += '<h4>Tags & Values (' + Utils.escapeHtml(this.selectedMeasurement) + ')</h4>';
+                    
+                    // Container for side-by-side layout
+                    html += '<div class="schema-tags-container">';
+                    
+                    // Left panel - Tags
+                    html += '<div class="schema-tags-panel">';
+                    html += '<div class="schema-panel-header">';
+                    html += '<h5>Tag Keys' + (this.selectedField ? ' (for ' + Utils.escapeHtml(this.selectedField) + ')' : '') + '</h5>';
+                    html += '</div>';
                     
                     // Search box for tags
                     html += '<div class="schema-search">';
@@ -578,14 +834,67 @@ const Schema = {
                     
                     html += '<div class="schema-list" id="tagsList">';
                     
-                    for (const tag of tags) {
-                        html += '<div class="schema-item" onclick="insertTag(\'' + Utils.escapeHtml(tag) + '\')">';
+                    // Filter tags based on selected field if available
+                    let displayTags = tags;
+                    if (this.selectedField) {
+                        const key = `${this.selectedMeasurement}:${this.selectedField}`;
+                        const associatedTags = this.fieldAssociatedTags[key];
+                        if (associatedTags !== null && associatedTags !== undefined) {
+                            displayTags = tags.filter(tag => associatedTags.includes(tag));
+                        }
+                    }
+                    
+                    for (const tag of displayTags) {
+                        const isSelected = this.selectedTag === tag;
+                        
+                        html += '<div class="schema-item' + (isSelected ? ' selected' : '') + '" onclick="selectTag(\'' + Utils.escapeHtml(tag) + '\')">';
                         html += '<span class="schema-item-name">' + Utils.escapeHtml(tag) + '</span>';
                         html += '<span class="schema-item-type tag">tag</span>';
                         html += '</div>';
                     }
                     
                     html += '</div>';
+                    html += '</div>'; // End tags panel
+                    
+                    // Right panel - Tag Values
+                    html += '<div class="schema-values-panel">';
+                    html += '<div class="schema-panel-header">';
+                    html += '<h5>Tag Values' + (this.selectedTag ? ' (' + Utils.escapeHtml(this.selectedTag) + ')' : '') + '</h5>';
+                    html += '</div>';
+                    
+                    if (this.selectedTag) {
+                        const key = `${this.selectedMeasurement}:${this.selectedTag}`;
+                        const tagValues = this.influxTagValues[key] || [];
+                        
+                        // Search box for tag values
+                        html += '<div class="schema-search">';
+                        html += '<input type="text" id="tagValuesSearch" placeholder="Search values..." onkeyup="filterTagValues(this.value)">';
+                        html += '</div>';
+                        
+                        html += '<div class="schema-list" id="tagValuesList">';
+                        
+                        if (this.isLoadingTagValues) {
+                            html += '<div class="schema-loading">Loading tag values...</div>';
+                        } else if (tagValues.length === 0) {
+                            html += '<div class="schema-empty">No values found</div>';
+                        } else {
+                            for (const value of tagValues) {
+                                html += '<div class="schema-value-item" onclick="insertTagValue(\'' + Utils.escapeHtml(this.selectedTag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
+                                html += '<span class="schema-value-name">' + Utils.escapeHtml(value) + '</span>';
+                                html += '</div>';
+                            }
+                        }
+                        
+                        html += '</div>';
+                    } else {
+                        html += '<div class="schema-list">';
+                        html += '<div class="schema-empty">Select a tag to view values</div>';
+                        html += '</div>';
+                    }
+                    
+                    html += '</div>'; // End values panel
+                    
+                    html += '</div>'; // End container
                     html += '</div>';
                 }
             }
@@ -593,6 +902,115 @@ const Schema = {
         
         html += '</div>';
         return html;
+    },
+    
+    // Save scroll positions
+    saveScrollPositions() {
+        const positions = {};
+        const fieldsList = document.getElementById('fieldsList');
+        const tagsList = document.getElementById('tagsList');
+        const tagValuesList = document.getElementById('tagValuesList');
+        
+        if (fieldsList) positions.fields = fieldsList.scrollTop;
+        if (tagsList) positions.tags = tagsList.scrollTop;
+        if (tagValuesList) positions.tagValues = tagValuesList.scrollTop;
+        
+        return positions;
+    },
+    
+    // Restore scroll positions
+    restoreScrollPositions(positions) {
+        if (!positions) return;
+        
+        requestAnimationFrame(() => {
+            const fieldsList = document.getElementById('fieldsList');
+            const tagsList = document.getElementById('tagsList');
+            const tagValuesList = document.getElementById('tagValuesList');
+            
+            if (fieldsList && positions.fields !== undefined) {
+                fieldsList.scrollTop = positions.fields;
+            }
+            if (tagsList && positions.tags !== undefined) {
+                tagsList.scrollTop = positions.tags;
+            }
+            if (tagValuesList && positions.tagValues !== undefined) {
+                tagValuesList.scrollTop = positions.tagValues;
+            }
+        });
+    },
+    
+    // Ensure selected item is visible
+    ensureItemVisible(containerId, itemSelector) {
+        requestAnimationFrame(() => {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            
+            const selectedItem = container.querySelector(itemSelector);
+            if (!selectedItem) return;
+            
+            const containerRect = container.getBoundingClientRect();
+            const itemRect = selectedItem.getBoundingClientRect();
+            
+            // Check if item is outside visible area
+            if (itemRect.top < containerRect.top) {
+                // Item is above visible area
+                container.scrollTop -= containerRect.top - itemRect.top;
+            } else if (itemRect.bottom > containerRect.bottom) {
+                // Item is below visible area
+                container.scrollTop += itemRect.bottom - containerRect.bottom;
+            }
+        });
+    },
+    
+    // Render just the tags list
+    renderTagsList() {
+        const tagsList = document.getElementById('tagsList');
+        if (!tagsList || !this.selectedMeasurement) return;
+        
+        // Save current scroll position
+        const scrollTop = tagsList.scrollTop;
+        
+        const tags = this.influxTags[this.selectedMeasurement] || [];
+        
+        // Filter tags based on selected field if available
+        let displayTags = tags;
+        if (this.selectedField) {
+            const key = `${this.selectedMeasurement}:${this.selectedField}`;
+            const associatedTags = this.fieldAssociatedTags[key];
+            if (associatedTags !== null && associatedTags !== undefined) {
+                displayTags = tags.filter(tag => associatedTags.includes(tag));
+            }
+        }
+        
+        let html = '';
+        
+        if (this.isLoadingFieldTags) {
+            html = '<div class="schema-loading">Loading associated tags...</div>';
+        } else if (displayTags.length === 0) {
+            html = '<div class="schema-empty">No tags found</div>';
+        } else {
+            for (const tag of displayTags) {
+                const isSelected = this.selectedTag === tag;
+                
+                html += '<div class="schema-item' + (isSelected ? ' selected' : '') + '" onclick="selectTag(\'' + Utils.escapeHtml(tag) + '\')">';
+                html += '<span class="schema-item-name">' + Utils.escapeHtml(tag) + '</span>';
+                html += '<span class="schema-item-type tag">tag</span>';
+                html += '</div>';
+            }
+        }
+        
+        tagsList.innerHTML = html;
+        
+        // Restore scroll position
+        requestAnimationFrame(() => {
+            tagsList.scrollTop = scrollTop;
+        });
+        
+        // Update the header to show field context
+        const headerElement = document.querySelector('.schema-tags-panel .schema-panel-header h5');
+        if (headerElement) {
+            headerElement.textContent = 'Tag Keys' + (this.selectedField ? ' (for ' + this.selectedField + ')' : '');
+        }
     },
     
     // Refresh schema
@@ -637,8 +1055,89 @@ function insertField(field) {
     Schema.insertIntoQuery(field);
 }
 
+function selectField(field) {
+    // Save all scroll positions before any updates
+    const scrollPositions = Schema.saveScrollPositions();
+    
+    if (Schema.selectedField === field) {
+        // If already selected, deselect
+        Schema.selectedField = null;
+        Schema.selectedTag = null;
+        
+        // Update fields list to remove selection
+        const fieldsList = document.getElementById('fieldsList');
+        if (fieldsList) {
+            const selectedItems = fieldsList.querySelectorAll('.schema-item.selected');
+            selectedItems.forEach(item => item.classList.remove('selected'));
+        }
+        
+        // Refresh tags list to show all tags
+        Schema.renderTagsList();
+        
+        // Clear tag values panel
+        Schema.renderTagValuesPanel();
+        
+        // Restore scroll positions
+        Schema.restoreScrollPositions(scrollPositions);
+    } else {
+        // Select the field and load associated tags
+        Schema.loadFieldAssociatedTags(field);
+        
+        // Update fields list to show selection
+        const fieldsList = document.getElementById('fieldsList');
+        if (fieldsList) {
+            // Remove previous selection
+            const selectedItems = fieldsList.querySelectorAll('.schema-item.selected');
+            selectedItems.forEach(item => item.classList.remove('selected'));
+            
+            // Add selection to clicked field
+            const clickedField = Array.from(fieldsList.querySelectorAll('.schema-item')).find(
+                item => item.querySelector('.schema-item-name').textContent === field
+            );
+            if (clickedField) {
+                clickedField.classList.add('selected');
+            }
+        }
+        
+        // Restore fields scroll position
+        Schema.restoreScrollPositions(scrollPositions);
+    }
+}
+
 function insertTag(tag) {
     Schema.insertIntoQuery(tag);
+}
+
+function selectTag(tag) {
+    if (Schema.selectedTag === tag) {
+        // If already selected, deselect
+        Schema.selectedTag = null;
+        
+        // Save scroll positions
+        const scrollPositions = Schema.saveScrollPositions();
+        
+        // Update tags list to remove selection
+        const tagsList = document.getElementById('tagsList');
+        if (tagsList) {
+            const selectedItems = tagsList.querySelectorAll('.schema-item.selected');
+            selectedItems.forEach(item => item.classList.remove('selected'));
+        }
+        
+        // Clear tag values
+        Schema.renderTagValuesPanel();
+        
+        // Restore scroll positions
+        Schema.restoreScrollPositions(scrollPositions);
+    } else {
+        // Select the tag and load its values
+        Schema.loadTagValues(tag);
+    }
+}
+
+function insertTagValue(tag, value) {
+    // Insert in WHERE clause format: tag="value"
+    const whereClause = `"${tag}"='${value}'`;
+    Schema.insertIntoQuery(whereClause);
 }
 
 function selectMeasurement(measurement) {
@@ -664,6 +1163,9 @@ function filterInfluxFields(searchTerm) {
     const fieldsList = document.getElementById('fieldsList');
     if (!fieldsList || !Schema.selectedMeasurement) return;
     
+    // Save scroll position
+    const scrollTop = fieldsList.scrollTop;
+    
     const fields = Schema.influxFields[Schema.selectedMeasurement] || [];
     const filteredFields = searchTerm ? 
         fields.filter(field => field.toLowerCase().includes(searchTerm.toLowerCase())) : 
@@ -674,7 +1176,9 @@ function filterInfluxFields(searchTerm) {
         html = '<div class="schema-empty">No fields found</div>';
     } else {
         for (const field of filteredFields) {
-            html += '<div class="schema-item" onclick="insertField(\'' + Utils.escapeHtml(field) + '\')">';
+            const isSelected = Schema.selectedField === field;
+            
+            html += '<div class="schema-item' + (isSelected ? ' selected' : '') + '" onclick="selectField(\'' + Utils.escapeHtml(field) + '\')">';
             html += '<span class="schema-item-name">' + Utils.escapeHtml(field) + '</span>';
             html += '<span class="schema-item-type field">field</span>';
             html += '</div>';
@@ -682,13 +1186,31 @@ function filterInfluxFields(searchTerm) {
     }
     
     fieldsList.innerHTML = html;
+    
+    // Restore scroll position
+    requestAnimationFrame(() => {
+        fieldsList.scrollTop = scrollTop;
+    });
 }
 
 function filterInfluxTags(searchTerm) {
     const tagsList = document.getElementById('tagsList');
     if (!tagsList || !Schema.selectedMeasurement) return;
     
-    const tags = Schema.influxTags[Schema.selectedMeasurement] || [];
+    // Save scroll position
+    const scrollTop = tagsList.scrollTop;
+    
+    let tags = Schema.influxTags[Schema.selectedMeasurement] || [];
+    
+    // Filter tags based on selected field if available
+    if (Schema.selectedField) {
+        const key = `${Schema.selectedMeasurement}:${Schema.selectedField}`;
+        const associatedTags = Schema.fieldAssociatedTags[key];
+        if (associatedTags !== null && associatedTags !== undefined) {
+            tags = tags.filter(tag => associatedTags.includes(tag));
+        }
+    }
+    
     const filteredTags = searchTerm ? 
         tags.filter(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())) : 
         tags;
@@ -698,7 +1220,9 @@ function filterInfluxTags(searchTerm) {
         html = '<div class="schema-empty">No tags found</div>';
     } else {
         for (const tag of filteredTags) {
-            html += '<div class="schema-item" onclick="insertTag(\'' + Utils.escapeHtml(tag) + '\')">';
+            const isSelected = Schema.selectedTag === tag;
+            
+            html += '<div class="schema-item' + (isSelected ? ' selected' : '') + '" onclick="selectTag(\'' + Utils.escapeHtml(tag) + '\')">';
             html += '<span class="schema-item-name">' + Utils.escapeHtml(tag) + '</span>';
             html += '<span class="schema-item-type tag">tag</span>';
             html += '</div>';
@@ -706,6 +1230,43 @@ function filterInfluxTags(searchTerm) {
     }
     
     tagsList.innerHTML = html;
+    
+    // Restore scroll position
+    requestAnimationFrame(() => {
+        tagsList.scrollTop = scrollTop;
+    });
+}
+
+function filterTagValues(searchTerm) {
+    const tagValuesList = document.getElementById('tagValuesList');
+    if (!tagValuesList || !Schema.selectedMeasurement || !Schema.selectedTag) return;
+    
+    // Save scroll position
+    const scrollTop = tagValuesList.scrollTop;
+    
+    const key = `${Schema.selectedMeasurement}:${Schema.selectedTag}`;
+    const tagValues = Schema.influxTagValues[key] || [];
+    const filteredValues = searchTerm ? 
+        tagValues.filter(value => value.toLowerCase().includes(searchTerm.toLowerCase())) : 
+        tagValues;
+    
+    let html = '';
+    if (filteredValues.length === 0) {
+        html = '<div class="schema-empty">No values found</div>';
+    } else {
+        for (const value of filteredValues) {
+            html += '<div class="schema-value-item" onclick="insertTagValue(\'' + Utils.escapeHtml(Schema.selectedTag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
+            html += '<span class="schema-value-name">' + Utils.escapeHtml(value) + '</span>';
+            html += '</div>';
+        }
+    }
+    
+    tagValuesList.innerHTML = html;
+    
+    // Restore scroll position
+    requestAnimationFrame(() => {
+        tagValuesList.scrollTop = scrollTop;
+    });
 }
 
 function refreshSchema() {

@@ -59,13 +59,19 @@ A powerful web-based IDE for executing InfluxQL and PromQL queries through the G
   - **Prometheus**: Browse all available metrics and labels with search
   - **InfluxDB**: 
     - Dropdown selectors for retention policies and measurements
-    - Searchable fields and tags lists
+    - **Field-Based Tag Filtering**: Select a field to see only associated tags
+    - **Smart Tag Discovery**: Intelligent queries to find tag-field relationships
+    - Searchable fields and tags lists with preserved scroll positions
+    - **Optimized Loading**: Partial UI updates preserve user context
     - Loading indicators for async schema discovery
   - Click-to-insert functionality for faster query building
   - **Bottom-Right Refresh**: Unobtrusive refresh button positioned for optimal workflow
   - **Auto-Expand**: Automatically expands when datasource is selected
 - **Enhanced Query History**:
   - **Sidebar Layout**: Dedicated sidebar section for easy access alongside variables
+  - **Smart Duplicate Prevention**: Identical queries move to top without duplication
+  - **Auto-Generated Titles**: Intelligent titles based on query content (e.g., "Rate of http_requests", "Sum from cpu_usage")
+  - **Editable Titles**: Customize auto-generated titles manually
   - **Search**: Full-text search across queries, labels, and tags
   - **Favorites**: Star important queries for quick access
   - **Labels & Tags**: Organize queries with custom labels and tags
@@ -172,6 +178,9 @@ Open http://localhost:3000 in your browser.
    - **InfluxDB Mode**:
      - Select retention policy from dropdown
      - Select measurement from dropdown to load fields and tags
+     - **Field-Based Filtering**: Click a field to filter tags to only those associated with that field
+     - **Smart Tag Discovery**: Uses `GROUP BY *` queries to find field-tag relationships
+     - **Preserved Context**: Scroll positions maintained during updates
      - Search through fields and tags with real-time filtering
      - Loading indicators show when schema is being fetched
    - **Refresh Button**: Unobtrusive refresh button positioned at bottom-right of container
@@ -205,13 +214,18 @@ Open http://localhost:3000 in your browser.
 
 ### 9. **Enhanced Query History**
    - **Sidebar Layout**: Located in the right sidebar with 50/50 height split with variables
+   - **Smart Duplicate Handling**: Identical queries automatically move to top without creating duplicates
+   - **Auto-Generated Titles**: Intelligent titles based on query content:
+     - PromQL: "Rate of http_requests_total", "Sum of cpu_usage", "Average memory_usage"
+     - InfluxQL: "Query temperature_data", "Count from cpu", "Mean from disk_usage"
+     - Fallback to first few words for complex queries
    - **Search & Filter**:
-     - Full-text search across queries, labels, and tags
+     - Full-text search across queries, auto-generated titles, and tags
      - Filter to show only favorite queries
      - Click tags to filter by specific tags
    - **Organization**:
      - Star queries to mark as favorites
-     - Add descriptive labels to queries
+     - Edit auto-generated titles with custom labels
      - Tag queries with multiple tags for categorization
    - **Management**:
      - Edit labels and tags on existing queries
@@ -413,7 +427,9 @@ grafana-query-ide/
 
 ### Schema Explorer Issues
 - **InfluxDB Schema**: Select retention policy and measurement to load fields/tags
+- **Field-Tag Filtering**: Click a field to see only tags associated with that field
 - **Loading Delays**: Schema discovery may take time for large databases
+- **Scroll Position Lost**: Fixed - scroll positions are now preserved during updates
 - **Search Not Working**: Ensure JavaScript is enabled and no console errors
 
 ## Browser Compatibility
@@ -455,6 +471,9 @@ MIT License - feel free to use this in your own projects!
 ---
 
 **Latest Updates:**
+- 🎯 **Smart Query History**: Auto-generated titles and duplicate prevention
+- 🔍 **Field-Based Tag Filtering**: InfluxDB schema explorer now filters tags by selected field
+- 📍 **Preserved Scroll Positions**: UI updates maintain user context and scroll positions
 - 🎯 **Dashboard Explorer**: Search dashboards and extract all queries with tabbed interface
 - 🧭 **Guided Workflow**: Auto-expanding sections guide users through connection → datasource → schema flow
 - 📱 **Sidebar Reorganization**: History and variables moved to dedicated sidebar with 50/50 height split
