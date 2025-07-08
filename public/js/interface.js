@@ -18,6 +18,7 @@ const Interface = {
         this.initializeTabs();
         this.initializePanels();
         this.initializeKeyboardShortcuts();
+        this.initializeResizers();
         this.createInitialTab();
         
         // Set initial state
@@ -800,6 +801,112 @@ const Interface = {
 
     loadHistory() {
         // History loading logic
+    },
+
+    // Initialize resizers for sidebar and panel
+    initializeResizers() {
+        this.initializeSidebarResizer();
+        this.initializePanelResizer();
+    },
+
+    initializeSidebarResizer() {
+        const resizer = document.querySelector('.sidebar-resizer');
+        const sidebar = document.querySelector('.sidebar');
+        
+        if (!resizer || !sidebar) return;
+
+        let isDragging = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startX = e.clientX;
+            startWidth = parseInt(document.defaultView.getComputedStyle(sidebar).width, 10);
+            
+            document.body.classList.add('resizing');
+            resizer.classList.add('dragging');
+            
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const width = startWidth + e.clientX - startX;
+            const minWidth = 200;
+            const maxWidth = 600;
+            
+            if (width >= minWidth && width <= maxWidth) {
+                sidebar.style.width = width + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                document.body.classList.remove('resizing');
+                resizer.classList.remove('dragging');
+                
+                // Refresh CodeMirror editors after resize
+                setTimeout(() => {
+                    const activeTab = this.tabs.get(this.activeTab);
+                    if (activeTab && activeTab.editor) {
+                        activeTab.editor.refresh();
+                    }
+                }, 100);
+            }
+        });
+    },
+
+    initializePanelResizer() {
+        const resizer = document.querySelector('.panel-resizer');
+        const panel = document.querySelector('.panel-area');
+        
+        if (!resizer || !panel) return;
+
+        let isDragging = false;
+        let startY = 0;
+        let startHeight = 0;
+
+        resizer.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            startY = e.clientY;
+            startHeight = parseInt(document.defaultView.getComputedStyle(panel).height, 10);
+            
+            document.body.classList.add('resizing');
+            resizer.classList.add('dragging');
+            
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            
+            const height = startHeight - (e.clientY - startY);
+            const minHeight = 150;
+            const maxHeight = window.innerHeight * 0.6; // 60% of viewport height
+            
+            if (height >= minHeight && height <= maxHeight) {
+                panel.style.height = height + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                document.body.classList.remove('resizing');
+                resizer.classList.remove('dragging');
+                
+                // Refresh CodeMirror editors after resize
+                setTimeout(() => {
+                    const activeTab = this.tabs.get(this.activeTab);
+                    if (activeTab && activeTab.editor) {
+                        activeTab.editor.refresh();
+                    }
+                }, 100);
+            }
+        });
     },
 
     connectToConnection(connectionId) {
