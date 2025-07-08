@@ -39,6 +39,9 @@ const Connections = {
             titleBarStatus.textContent = 'Connected: ' + (connectionName || connection.username);
             titleBarStatus.className = 'connection-status connected';
             
+            // Update title bar with selected data source if available
+            updateTitleBarDataSource();
+            
             // Add disconnect button to title bar controls if not already present
             const titleBarControls = document.querySelector('.title-bar-controls');
             if (titleBarControls && !titleBarControls.querySelector('.title-bar-disconnect')) {
@@ -143,6 +146,12 @@ const Connections = {
         const titleBarDisconnectBtn = document.querySelector('.title-bar-disconnect');
         if (titleBarDisconnectBtn) {
             titleBarDisconnectBtn.remove();
+        }
+        
+        // Remove data source indicator from title bar
+        const titleBarDataSource = document.querySelector('.title-bar-datasource');
+        if (titleBarDataSource) {
+            titleBarDataSource.remove();
         }
         
         // Update variables UI for the disconnected state
@@ -264,6 +273,10 @@ const Connections = {
         GrafanaConfig.currentResults = null;
         GrafanaConfig.proxyConfig = null;
         GrafanaConfig.connected = false;
+        GrafanaConfig.selectedDatasourceUid = null;
+        GrafanaConfig.selectedDatasourceType = null;
+        GrafanaConfig.selectedDatasourceId = null;
+        GrafanaConfig.currentDatasourceId = null;
         
         localStorage.removeItem('grafanaConfig');
         
@@ -302,6 +315,11 @@ const Connections = {
             
             // Add click handlers for data source selection
             datasourceList.querySelectorAll('.datasource-item').forEach(item => {
+                // Check if this item should be selected (restore selection)
+                if (GrafanaConfig.selectedDatasourceUid === item.dataset.uid) {
+                    item.classList.add('selected');
+                }
+                
                 item.addEventListener('click', () => {
                     // Remove previous selection
                     datasourceList.querySelectorAll('.datasource-item').forEach(ds => ds.classList.remove('selected'));
@@ -337,6 +355,9 @@ const Connections = {
                         console.log('Calling refreshSchemaExplorer after data source selection');
                         Interface.refreshSchemaExplorer();
                     }
+                    
+                    // Update title bar with selected data source
+                    updateTitleBarDataSource();
                     
                     // Update execute button
                     if (typeof Interface !== 'undefined' && Interface.updateExecuteButton) {
@@ -780,3 +801,45 @@ const Connections = {
         }
     }
 };
+
+// Update title bar with selected data source information
+function updateTitleBarDataSource() {
+    const titleBarControls = document.querySelector('.title-bar-controls');
+    if (!titleBarControls) return;
+    
+    // Remove existing data source indicator
+    const existingDataSourceIndicator = titleBarControls.querySelector('.title-bar-datasource');
+    if (existingDataSourceIndicator) {
+        existingDataSourceIndicator.remove();
+    }
+    
+    // Add data source indicator if one is selected
+    if (GrafanaConfig.selectedDatasourceUid && GrafanaConfig.connected) {
+        // Find the data source name
+        const selectedDataSource = GrafanaConfig.datasources.find(ds => ds.uid === GrafanaConfig.selectedDatasourceUid);
+        if (selectedDataSource) {
+            const dataSourceIndicator = document.createElement('span');
+            dataSourceIndicator.className = 'title-bar-datasource';
+            dataSourceIndicator.textContent = `Data Source: ${selectedDataSource.name}`;
+            dataSourceIndicator.title = `Selected data source: ${selectedDataSource.name} (${selectedDataSource.type})`;
+            dataSourceIndicator.style.cssText = `
+                font-size: 11px;
+                color: #ffffff;
+                background-color: #007acc;
+                padding: 3px 10px;
+                border-radius: 3px;
+                margin-left: 8px;
+                font-weight: 500;
+                border: 1px solid #0066cc;
+            `;
+            
+            // Insert before disconnect button
+            const disconnectBtn = titleBarControls.querySelector('.title-bar-disconnect');
+            if (disconnectBtn) {
+                titleBarControls.insertBefore(dataSourceIndicator, disconnectBtn);
+            } else {
+                titleBarControls.appendChild(dataSourceIndicator);
+            }
+        }
+    }
+}

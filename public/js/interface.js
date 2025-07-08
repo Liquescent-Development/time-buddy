@@ -858,7 +858,18 @@ const Interface = {
     },
 
     loadHistory() {
-        // History loading logic
+        console.log('Interface.loadHistory called');
+        // Initialize and load history
+        if (typeof History !== 'undefined') {
+            if (!History.initialized) {
+                console.log('Initializing History module');
+                History.initialize();
+                History.initialized = true;
+            }
+            History.loadHistory();
+        } else {
+            console.error('History module not available');
+        }
     },
 
     // Initialize resizers for sidebar and panel

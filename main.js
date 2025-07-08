@@ -16,6 +16,13 @@ const path = require('path');
 const { spawn } = require('child_process');
 const net = require('net');
 
+// Set app name early for macOS menu bar
+app.setName('Grafana Query IDE');
+
+// Debug: Log user data paths
+console.log('User data path:', app.getPath('userData'));
+console.log('App name:', app.getName());
+
 // Keep a global reference of the window object
 let mainWindow;
 let serverProcess;

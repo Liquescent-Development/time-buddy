@@ -1,14 +1,88 @@
 const Storage = {
     // Connection storage
     getSavedConnections() {
-        const connections = JSON.parse(localStorage.getItem('grafanaConnections') || '{}');
-        return connections;
+        const rawData = localStorage.getItem('grafanaConnections');
+        console.log('DEBUG: Raw localStorage data for grafanaConnections:', rawData);
+        console.log('DEBUG: localStorage length:', localStorage.length);
+        console.log('DEBUG: All localStorage keys:', Object.keys(localStorage));
+        
+        if (rawData === null) {
+            console.log('DEBUG: No grafanaConnections found in localStorage');
+            return {};
+        }
+        
+        try {
+            const connections = JSON.parse(rawData || '{}');
+            console.log('DEBUG: Parsed connections:', connections);
+            console.log('DEBUG: Connection count:', Object.keys(connections).length);
+            return connections;
+        } catch (error) {
+            console.error('DEBUG: Error parsing connections from localStorage:', error);
+            console.error('DEBUG: Raw data that caused error:', rawData);
+            return {};
+        }
     },
 
     saveConnectionToStorage(connection) {
         const connections = this.getSavedConnections();
         connections[connection.id] = connection;
         localStorage.setItem('grafanaConnections', JSON.stringify(connections));
+        console.log('DEBUG: Saved connection:', connection);
+        console.log('DEBUG: All connections after save:', connections);
+    },
+
+    // Debug function to inspect and recover localStorage data
+    debugLocalStorage() {
+        console.log('=== DEBUG: localStorage INSPECTION ===');
+        console.log('localStorage length:', localStorage.length);
+        
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            const value = localStorage.getItem(key);
+            console.log(`Key: ${key}`, `Value:`, value);
+            
+            if (key.includes('grafana') || key.includes('connection')) {
+                try {
+                    const parsed = JSON.parse(value);
+                    console.log(`Parsed ${key}:`, parsed);
+                } catch (e) {
+                    console.log(`Could not parse ${key} as JSON`);
+                }
+            }
+        }
+        console.log('=== END DEBUG ===');
+    },
+
+    // Recovery function to attempt to restore connections from various sources
+    recoverConnections() {
+        console.log('=== ATTEMPTING CONNECTION RECOVERY ===');
+        
+        // Check for connections under different keys
+        const possibleKeys = ['grafanaConnections', 'connections', 'savedConnections', 'grafana_connections'];
+        
+        for (const key of possibleKeys) {
+            const data = localStorage.getItem(key);
+            if (data) {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+                        console.log(`Found potential connections under key '${key}':`, parsed);
+                        
+                        // If this isn't the standard key, migrate the data
+                        if (key !== 'grafanaConnections') {
+                            localStorage.setItem('grafanaConnections', data);
+                            console.log(`Migrated connections from '${key}' to 'grafanaConnections'`);
+                        }
+                        return parsed;
+                    }
+                } catch (e) {
+                    console.log(`Data under '${key}' is not valid JSON`);
+                }
+            }
+        }
+        
+        console.log('No recoverable connections found');
+        return {};
     },
 
     deleteConnectionFromStorage(id) {
@@ -54,6 +128,79 @@ const Storage = {
         localStorage.setItem('grafanaTokens', JSON.stringify(tokens));
     },
 
+    // Backup and restore functionality
+    exportConnections() {
+        const connections = this.getSavedConnections();
+        const tokens = JSON.parse(localStorage.getItem('grafanaTokens') || '{}');
+        const history = this.getHistory();
+        const variables = JSON.parse(localStorage.getItem('queryVariables') || '[]');
+        
+        const backup = {
+            version: '1.0',
+            timestamp: new Date().toISOString(),
+            connections: connections,
+            tokens: tokens,
+            history: history,
+            variables: variables
+        };
+        
+        return JSON.stringify(backup, null, 2);
+    },
+
+    importConnections(backupData) {
+        try {
+            const backup = JSON.parse(backupData);
+            
+            if (!backup.connections) {
+                throw new Error('Invalid backup format: missing connections');
+            }
+            
+            // Validate the structure
+            if (typeof backup.connections !== 'object') {
+                throw new Error('Invalid backup format: connections must be an object');
+            }
+            
+            // Import connections
+            localStorage.setItem('grafanaConnections', JSON.stringify(backup.connections));
+            
+            // Import tokens if they exist
+            if (backup.tokens) {
+                localStorage.setItem('grafanaTokens', JSON.stringify(backup.tokens));
+            }
+            
+            // Import history if it exists
+            if (backup.history) {
+                localStorage.setItem('queryHistory', JSON.stringify(backup.history));
+            }
+            
+            // Import variables if they exist
+            if (backup.variables) {
+                localStorage.setItem('queryVariables', JSON.stringify(backup.variables));
+            }
+            
+            console.log('Import successful:', {
+                connectionsImported: Object.keys(backup.connections).length,
+                tokensImported: backup.tokens ? Object.keys(backup.tokens).length : 0,
+                historyImported: backup.history ? backup.history.length : 0,
+                variablesImported: backup.variables ? backup.variables.length : 0
+            });
+            
+            return {
+                success: true,
+                connectionsImported: Object.keys(backup.connections).length,
+                tokensImported: backup.tokens ? Object.keys(backup.tokens).length : 0,
+                historyImported: backup.history ? backup.history.length : 0,
+                variablesImported: backup.variables ? backup.variables.length : 0
+            };
+        } catch (error) {
+            console.error('Import failed:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    },
+
     // Grafana config storage
     saveGrafanaConfig() {
         localStorage.setItem('grafanaConfig', JSON.stringify({
@@ -65,7 +212,11 @@ const Storage = {
     // Query history storage
     getHistory() {
         const history = localStorage.getItem('queryHistory');
-        return history ? JSON.parse(history) : [];
+        console.log('DEBUG: Raw queryHistory from localStorage:', history);
+        console.log('DEBUG: localStorage queryHistory length:', history ? history.length : 0);
+        const parsed = history ? JSON.parse(history) : [];
+        console.log('DEBUG: Parsed history items count:', parsed.length);
+        return parsed;
     },
 
     generateQueryTitle(query, queryType) {
@@ -150,7 +301,14 @@ const Storage = {
             history.pop();
         }
         
-        localStorage.setItem('queryHistory', JSON.stringify(history));
+        const historyJson = JSON.stringify(history);
+        console.log('DEBUG: Saving history to localStorage, items count:', history.length);
+        console.log('DEBUG: History JSON length:', historyJson.length);
+        localStorage.setItem('queryHistory', historyJson);
+        
+        // Verify it was saved
+        const saved = localStorage.getItem('queryHistory');
+        console.log('DEBUG: Verified save - retrieved length:', saved ? saved.length : 0);
     },
     
     updateHistoryItem(id, updates) {

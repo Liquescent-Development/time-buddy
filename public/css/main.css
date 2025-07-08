@@ -48,6 +48,20 @@ body {
     color: #cccccc;
 }
 
+/* Hide app name on macOS to avoid overlap with window controls */
+.platform-darwin .app-name {
+    display: none;
+}
+
+/* macOS-specific title bar adjustments to avoid window controls */
+.platform-darwin .title-bar {
+    padding-left: 80px; /* Space for traffic lights */
+}
+
+.platform-darwin .title-bar-content {
+    margin-left: 0;
+}
+
 .connection-status {
     font-size: 11px;
     padding: 2px 8px;
@@ -189,7 +203,40 @@ body {
     flex-direction: column;
 }
 
-/* Panel Sections */
+/* Special handling for connections panel to ensure proper scrolling */
+#connectionsPanel .sidebar-content {
+    padding: 0;
+    gap: 0;
+    overflow: hidden;
+}
+
+/* Section Wrapper - contains header and scrollable content */
+.section-wrapper {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Make each section take 50% height */
+.section-wrapper:first-child {
+    max-height: 50%;
+}
+
+.section-wrapper:last-child {
+    max-height: 50%;
+}
+
+/* Section Scrollable Area */
+.section-scrollable {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+}
+
+/* Legacy Panel Sections (for other panels that still use this structure) */
 .panel-section {
     margin-bottom: 16px;
     min-height: 50px;
@@ -201,8 +248,12 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 4px 16px;
-    margin-bottom: 4px;
+    padding: 8px 16px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+    background-color: #252526;
+    border-bottom: 1px solid #2d2d30;
+    z-index: 10;
 }
 
 .section-header h4 {
@@ -244,9 +295,6 @@ body {
 .connection-list, .datasource-list {
     padding: 8px;
     min-height: 100px;
-    height: auto;
-    overflow: visible;
-    flex: 1;
     display: block;
 }
 
@@ -269,6 +317,14 @@ body {
 .connection-item.active, .datasource-item.selected {
     background-color: #094771;
     color: #ffffff;
+    border-left: 3px solid #007acc;
+}
+
+.datasource-item.selected::before {
+    content: '✓';
+    margin-right: 8px;
+    color: #007acc;
+    font-weight: bold;
 }
 
 .connection-item .connection-status {
@@ -1201,18 +1257,83 @@ body {
     }
 }
 
-/* History List */
+/* History List and Components */
+/* History Panel Layout */
+#historyPanel .sidebar-content {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+#historyPanel .search-container {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    border-bottom: 1px solid #2d2d30;
+}
+
+.history-controls {
+    padding: 8px 16px;
+    border-bottom: 1px solid #2d2d30;
+    background-color: #252526;
+    flex-shrink: 0;
+}
+
+.history-search-container {
+    margin-bottom: 8px;
+}
+
+.history-search {
+    width: 100%;
+    padding: 6px 12px;
+    background-color: #3c3c3c;
+    border: 1px solid #454545;
+    border-radius: 3px;
+    color: #cccccc;
+    font-size: 13px;
+    outline: none;
+}
+
+.history-search:focus {
+    border-color: #007acc;
+}
+
+.history-search::placeholder {
+    color: #858585;
+}
+
+.history-filters {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.history-filter-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #cccccc;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.history-filter-toggle input[type="checkbox"] {
+    accent-color: #007acc;
+}
+
 .history-list {
-    padding: 0 8px;
+    padding: 8px;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
 }
 
 .history-item {
-    padding: 8px;
-    margin-bottom: 4px;
-    background-color: #1e1e1e;
-    border-radius: 3px;
+    padding: 12px;
+    margin-bottom: 8px;
+    background-color: #2d2d30;
+    border-radius: 4px;
     border-left: 3px solid #007acc;
-    cursor: pointer;
     transition: all 0.1s ease;
 }
 
@@ -1224,27 +1345,207 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 4px;
+    margin-bottom: 8px;
 }
 
-.history-item-title {
-    font-size: 12px;
-    font-weight: 600;
-    color: #cccccc;
-}
-
-.history-item-time {
-    font-size: 10px;
-    color: #858585;
-}
-
-.history-item-query {
+.history-timestamp {
     font-size: 11px;
     color: #858585;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+}
+
+.history-item-actions {
+    display: flex;
+    gap: 4px;
+}
+
+.history-action-btn {
+    background: none;
+    border: none;
+    color: #858585;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 12px;
+    transition: all 0.1s ease;
+}
+
+.history-action-btn:hover {
+    background-color: #454545;
+    color: #cccccc;
+}
+
+.history-action-btn.favorite.active {
+    color: #ffd700;
+}
+
+.history-action-btn.danger:hover {
+    color: #ff4757;
+}
+
+.history-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #cccccc;
+    margin-bottom: 6px;
+    padding: 2px 6px;
+    background-color: #454545;
+    border-radius: 3px;
+    display: inline-block;
+}
+
+.history-query {
+    font-size: 12px;
+    color: #cccccc;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    background-color: #1e1e1e;
+    padding: 8px;
+    border-radius: 3px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    line-height: 1.4;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.history-query:hover {
+    background-color: #252526;
+}
+
+.history-metadata {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.history-datasource {
+    font-size: 11px;
+    color: #858585;
+    background-color: #3c3c3c;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.history-tags {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.history-tag {
+    font-size: 10px;
+    color: #007acc;
+    background-color: rgba(0, 122, 204, 0.15);
+    border: 1px solid rgba(0, 122, 204, 0.3);
+    padding: 2px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.1s ease;
+}
+
+.history-tag:hover {
+    background-color: rgba(0, 122, 204, 0.25);
+    border-color: rgba(0, 122, 204, 0.5);
+}
+
+/* History Edit Form Modal */
+.history-edit-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.history-edit-form {
+    background-color: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    padding: 20px;
+    min-width: 400px;
+    max-width: 500px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.history-edit-form h3 {
+    margin: 0 0 16px 0;
+    color: #cccccc;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.history-edit-form .form-group {
+    margin-bottom: 16px;
+}
+
+.history-edit-form label {
+    display: block;
+    margin-bottom: 4px;
+    color: #cccccc;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.history-edit-form input[type="text"] {
+    width: 100%;
+    padding: 8px 12px;
+    background-color: #3c3c3c;
+    border: 1px solid #454545;
+    border-radius: 3px;
+    color: #cccccc;
+    font-size: 13px;
+    outline: none;
+    box-sizing: border-box;
+}
+
+.history-edit-form input[type="text"]:focus {
+    border-color: #007acc;
+}
+
+.history-edit-form input[type="text"]::placeholder {
+    color: #858585;
+}
+
+.history-edit-form .form-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.history-edit-form button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 3px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.1s ease;
+}
+
+.history-edit-form button[type="submit"] {
+    background-color: #007acc;
+    color: white;
+}
+
+.history-edit-form button[type="submit"]:hover {
+    background-color: #0066aa;
+}
+
+.history-edit-form .secondary-button {
+    background-color: transparent;
+    color: #cccccc;
+    border: 1px solid #454545;
+}
+
+.history-edit-form .secondary-button:hover {
+    background-color: #37373d;
+    border-color: #858585;
 }
 
 /* Scrollbars */
@@ -1336,11 +1637,37 @@ body {
 }
 
 /* Tree View Styles (VS Code-like) */
+/* Schema Explorer Scrolling */
+#schemaContainer {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 0;
+}
+
 .schema-tree {
     color: #cccccc;
-    font-size: 13px;
+    font-size: 11px;
+    font-weight: 500;
     line-height: 1.4;
     padding: 8px 0;
+}
+
+/* Override all schema tree text elements to use consistent small font */
+#schemaContainer *,
+.schema-tree *,
+.tree-node *,
+.tree-subnode *,
+.tree-item *,
+.tree-node-header *,
+.tree-subnode-header *,
+.tree-node-label *,
+.metric-item *,
+.measurement-item *,
+.field-item *,
+.tag-item * {
+    font-size: 11px !important;
+    font-weight: 500 !important;
 }
 
 .tree-node, .tree-subnode {
@@ -1374,6 +1701,7 @@ body {
 }
 
 .tree-node-label {
+    font-size: 11px;
     font-weight: 500;
     color: #cccccc;
     flex: 1;
@@ -1406,10 +1734,14 @@ body {
 
 .tree-subnode {
     margin-left: 8px;
+    font-size: 11px;
+    font-weight: 500;
 }
 
 .tree-subnode-header {
     padding-left: 4px;
+    font-size: 11px;
+    font-weight: 500;
 }
 
 .tree-item {
@@ -1420,6 +1752,8 @@ body {
     border-radius: 3px;
     margin: 1px 0;
     transition: background-color 0.15s ease;
+    font-size: 11px;
+    font-weight: 500;
 }
 
 .tree-item:hover {

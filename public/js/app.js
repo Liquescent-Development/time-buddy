@@ -3,6 +3,17 @@ const App = {
     initialize() {
         console.log('Initializing VS Code-like interface...');
         
+        // Add platform class to body for platform-specific styling
+        if (typeof process !== 'undefined' && process.platform) {
+            document.body.classList.add(`platform-${process.platform}`);
+        } else if (navigator.userAgent.includes('Mac')) {
+            document.body.classList.add('platform-darwin');
+        } else if (navigator.userAgent.includes('Win')) {
+            document.body.classList.add('platform-win32');
+        } else {
+            document.body.classList.add('platform-linux');
+        }
+        
         // Initialize the new VS Code-like interface
         Interface.initialize();
         
@@ -269,6 +280,58 @@ function populateDataSourceList(datasources) {
     });
 }
 
+// Connection backup functions
+function exportConnections() {
+    const backupData = Storage.exportConnections();
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19);
+    const filename = `grafana-connections-${timestamp}.json`;
+    
+    // Create a download link
+    const blob = new Blob([backupData], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    Interface.showToast(`Connections exported to ${filename}`, 'success');
+}
+
+function importConnections() {
+    // Create file input element
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    
+    input.onchange = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const result = Storage.importConnections(e.target.result);
+            
+            if (result.success) {
+                Interface.showToast(`Imported ${result.connectionsImported} connections and ${result.tokensImported} auth tokens`, 'success');
+                Interface.loadConnections();
+            } else {
+                Interface.showToast(`Import failed: ${result.error}`, 'error');
+            }
+        };
+        
+        reader.onerror = () => {
+            Interface.showToast('Failed to read file', 'error');
+        };
+        
+        reader.readAsText(file);
+    };
+    
+    input.click();
+}
+
 // Dashboard search functions
 function searchDashboards() {
     if (typeof Dashboard !== 'undefined' && Dashboard.searchDashboards) {
@@ -344,6 +407,15 @@ function addVariable() {
     }
 }
 
+// Global function for clearing query history
+function clearQueryHistory() {
+    if (typeof History !== 'undefined') {
+        History.clearHistory();
+    } else {
+        console.error('History module not available');
+    }
+}
+
 // Initialize when page loads
 window.onload = function() {
     App.initialize();
@@ -355,4 +427,11 @@ window.onload = function() {
     if (document.body) {
         document.body.classList.add('electron-app');
     }
+    
+    // Expose debug functions to global scope for console access
+    window.debugStorage = Storage.debugLocalStorage.bind(Storage);
+    window.recoverConnections = Storage.recoverConnections.bind(Storage);
+    
+    // Log debug info on startup
+    console.log('App initialized - you can use debugStorage() and recoverConnections() in console');
 };

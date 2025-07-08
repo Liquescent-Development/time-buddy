@@ -74,28 +74,42 @@
                                 <h3>Connections & Data Sources</h3>
                             </div>
                             <div class="sidebar-content">
-                                <!-- Connection Management -->
-                                <div class="panel-section">
-                                    <div class="section-header" style="display: flex; align-items: center; justify-content: space-between; padding: 8px 16px;">
+                                <!-- Connections Section -->
+                                <div class="section-wrapper">
+                                    <div class="section-header">
                                         <h4>Connections</h4>
-                                        <button class="icon-button" onclick="showNewConnectionDialog()" title="New Connection" style="background: #007acc; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                                            </svg>
-                                        </button>
-                                    </div>
-                                    <div class="connection-list" id="connectionList">
-                                        <div class="empty-state">
-                                            <div style="margin-bottom: 12px; color: #858585;">No connections configured</div>
-                                            <button class="primary-button" onclick="showNewConnectionDialog()" style="font-size: 12px; padding: 6px 12px;">
-                                                Add Your First Connection
+                                        <div style="display: flex; gap: 8px; align-items: center;">
+                                            <button class="icon-button" onclick="exportConnections()" title="Export Connections" style="background: transparent; color: #cccccc; border: 1px solid #454545; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                                                </svg>
                                             </button>
+                                            <button class="icon-button" onclick="importConnections()" title="Import Connections" style="background: transparent; color: #cccccc; border: 1px solid #454545; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/>
+                                                </svg>
+                                            </button>
+                                            <button class="icon-button" onclick="showNewConnectionDialog()" title="New Connection" style="background: #007acc; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="section-scrollable">
+                                        <div class="connection-list" id="connectionList">
+                                            <div class="empty-state">
+                                                <div style="margin-bottom: 12px; color: #858585;">No connections configured</div>
+                                                <button class="primary-button" onclick="showNewConnectionDialog()" style="font-size: 12px; padding: 6px 12px;">
+                                                    Add Your First Connection
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Data Sources -->
-                                <div class="panel-section">
+                                <!-- Data Sources Section -->
+                                <div class="section-wrapper">
                                     <div class="section-header">
                                         <h4>Data Sources</h4>
                                         <button class="icon-button" onclick="refreshDataSources()" title="Refresh Data Sources">
@@ -104,8 +118,10 @@
                                             </svg>
                                         </button>
                                     </div>
-                                    <div class="datasource-list" id="datasourceList">
-                                        <div class="empty-state">Connect to Grafana first</div>
+                                    <div class="section-scrollable">
+                                        <div class="datasource-list" id="datasourceList">
+                                            <div class="empty-state">Connect to Grafana first</div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -155,7 +171,7 @@
                             </div>
                             <div class="sidebar-content">
                                 <div class="search-container">
-                                    <input type="text" id="historySearch" placeholder="Search history..." class="search-input">
+                                    <input type="text" id="historySearch" placeholder="Search history..." class="search-input" onkeyup="History.handleSearch(this.value)">
                                 </div>
                                 <div id="historyList" class="history-list">
                                     <div class="empty-state">No query history yet</div>

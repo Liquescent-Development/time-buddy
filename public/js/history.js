@@ -12,8 +12,32 @@ const History = {
     
     // Render history controls (search, filters)
     renderHistoryControls() {
+        // Check if we're in the new VS Code-like interface
+        const historyPanel = document.getElementById('historyPanel');
+        if (historyPanel) {
+            // The search input already exists in the HTML, just add the filters
+            const searchContainer = historyPanel.querySelector('.search-container');
+            if (searchContainer && !searchContainer.querySelector('.history-filters')) {
+                const filtersHtml = `
+                    <div class="history-filters" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #2d2d30;">
+                        <label class="history-filter-toggle">
+                            <input type="checkbox" onchange="History.toggleFavoritesOnly(this.checked)">
+                            <span>Favorites only</span>
+                        </label>
+                        <button class="secondary-button" onclick="clearHistory()" style="padding: 4px 8px; font-size: 11px;">Clear All</button>
+                    </div>
+                `;
+                searchContainer.insertAdjacentHTML('beforeend', filtersHtml);
+            }
+            return;
+        }
+        
+        // Fallback for old interface
         const historySection = document.querySelector('.history-section');
+        if (!historySection) return;
+        
         const titleElement = historySection.querySelector('.section-title');
+        if (!titleElement) return;
         
         // Create controls container
         const controlsHtml = `
@@ -142,8 +166,27 @@ const History = {
     
     // Edit history item (label/tags)
     editItem(id) {
+        console.log('Edit item clicked for ID:', id);
         const item = Storage.getHistory().find(h => h.id === id);
-        if (!item) return;
+        if (!item) {
+            console.error('History item not found for ID:', id);
+            return;
+        }
+        
+        console.log('Found history item:', item);
+        
+        // Helper function for escaping HTML
+        const escapeHtml = (text) => {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, (m) => map[m]);
+        };
         
         const formHtml = `
             <div class="history-edit-overlay" id="historyEditOverlay">
@@ -152,12 +195,12 @@ const History = {
                     <form onsubmit="History.saveItemEdits(event, ${id})">
                         <div class="form-group">
                             <label for="historyLabel">Label</label>
-                            <input type="text" id="historyLabel" value="${Utils.escapeHtml(item.label || '')}" 
+                            <input type="text" id="historyLabel" value="${escapeHtml(item.label || '')}" 
                                    placeholder="Enter a descriptive label">
                         </div>
                         <div class="form-group">
                             <label for="historyTags">Tags (comma-separated)</label>
-                            <input type="text" id="historyTags" value="${Utils.escapeHtml((item.tags || []).join(', '))}" 
+                            <input type="text" id="historyTags" value="${escapeHtml((item.tags || []).join(', '))}" 
                                    placeholder="tag1, tag2, tag3">
                         </div>
                         <div class="form-buttons">
@@ -169,7 +212,18 @@ const History = {
             </div>
         `;
         
+        console.log('Adding form HTML to body');
         document.body.insertAdjacentHTML('beforeend', formHtml);
+        
+        // Add escape key handler
+        const overlay = document.getElementById('historyEditOverlay');
+        if (overlay) {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    this.closeEditForm();
+                }
+            });
+        }
     },
     
     // Save item edits
