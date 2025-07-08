@@ -238,8 +238,7 @@ const Schema = {
         this.selectedTag = null; // Clear selected tag when changing measurement
         this.isLoadingMeasurement = true;
         
-        // Render UI to show loading state
-        this.renderSchemaUI();
+        // Don't render entire UI, let the caller handle the loading state
         
         try {
             console.log(`Loading schema for measurement: ${measurement}, retention policy: ${retentionPolicy}`);
@@ -302,7 +301,81 @@ const Schema = {
             this.showError('Failed to load measurement schema: ' + error.message);
         } finally {
             this.isLoadingMeasurement = false;
-            this.renderSchemaUI();
+            // Don't render entire UI, let the caller handle the final state
+        }
+    },
+    
+    // Load just fields and tags for a measurement (for tree expansion)
+    async loadMeasurementFieldsAndTags(measurement, retentionPolicy = 'autogen') {
+        try {
+            console.log(`Loading fields and tags for measurement: ${measurement}, retention policy: ${retentionPolicy}`);
+            
+            // Get field keys - try without retention policy first
+            let fieldsQuery = `SHOW FIELD KEYS FROM "${measurement}"`;
+            console.log('Executing fields query:', fieldsQuery);
+            let fieldsResult = await this.executeSchemaQuery(fieldsQuery, 'influxdb');
+            console.log('Fields result:', fieldsResult);
+            
+            // Check if we got fields
+            let hasFields = false;
+            if (fieldsResult && fieldsResult.results && fieldsResult.results.A) {
+                const extractedFields = this.extractInfluxResults(fieldsResult.results.A);
+                if (extractedFields.length > 0) {
+                    this.influxFields[measurement] = extractedFields;
+                    console.log('Extracted fields:', this.influxFields[measurement]);
+                    hasFields = true;
+                }
+            }
+            
+            // If no fields found, try with retention policy
+            if (!hasFields) {
+                console.warn('No fields found with basic query, trying with retention policy:', retentionPolicy);
+                fieldsQuery = `SHOW FIELD KEYS FROM "${retentionPolicy}"."${measurement}"`;
+                console.log('Executing fields query with retention policy:', fieldsQuery);
+                fieldsResult = await this.executeSchemaQuery(fieldsQuery, 'influxdb');
+                console.log('Fields result with retention policy:', fieldsResult);
+                
+                if (fieldsResult && fieldsResult.results && fieldsResult.results.A) {
+                    this.influxFields[measurement] = this.extractInfluxResults(fieldsResult.results.A);
+                    console.log('Extracted fields with retention policy:', this.influxFields[measurement]);
+                } else {
+                    console.warn('No fields data found for measurement:', measurement);
+                    this.influxFields[measurement] = [];
+                }
+            }
+            
+            // Get tag keys
+            const tagsQuery = `SHOW TAG KEYS FROM "${retentionPolicy}"."${measurement}"`;
+            console.log('Executing tags query:', tagsQuery);
+            const tagsResult = await this.executeSchemaQuery(tagsQuery, 'influxdb');
+            console.log('Tags result:', tagsResult);
+            
+            if (tagsResult && tagsResult.results && tagsResult.results.A) {
+                this.influxTags[measurement] = this.extractInfluxResults(tagsResult.results.A);
+                console.log('Extracted tags:', this.influxTags[measurement]);
+            } else {
+                console.warn('No tags data found for measurement:', measurement);
+                this.influxTags[measurement] = [];
+            }
+            
+            console.log(`Fields and tags loaded for ${measurement}:`, {
+                fields: this.influxFields[measurement] ? this.influxFields[measurement].length : 0,
+                tags: this.influxTags[measurement] ? this.influxTags[measurement].length : 0
+            });
+            
+            return {
+                fields: this.influxFields[measurement] || [],
+                tags: this.influxTags[measurement] || []
+            };
+            
+        } catch (error) {
+            console.error('Error loading measurement fields and tags:', error);
+            this.influxFields[measurement] = [];
+            this.influxTags[measurement] = [];
+            return {
+                fields: [],
+                tags: []
+            };
         }
     },
     
@@ -1135,7 +1208,7 @@ async function toggleInfluxMeasurement(header, measurement, retentionPolicy) {
             content.innerHTML = '<div class="tree-item-empty">Loading fields...</div>';
             
             // Load fields for this measurement
-            await Schema.loadMeasurementSchema(measurement, retentionPolicy);
+            await Schema.loadMeasurementFieldsAndTags(measurement, retentionPolicy);
             
             // Render the fields
             const fields = Schema.influxFields[measurement] || [];
