@@ -111,9 +111,44 @@ function editConnection() {
     Interface.showToast('Edit connection functionality coming soon', 'info');
 }
 
-function deleteConnection() {
-    // TODO: Implement delete functionality in new interface
-    Interface.showToast('Delete connection functionality coming soon', 'info');
+function deleteConnection(connectionId) {
+    if (!connectionId) {
+        Interface.showToast('Invalid connection ID', 'error');
+        return;
+    }
+    
+    const connections = Storage.getSavedConnections();
+    const connection = connections[connectionId];
+    
+    if (!connection) {
+        Interface.showToast('Connection not found', 'error');
+        return;
+    }
+    
+    // Show confirmation dialog
+    const confirmed = confirm(`Are you sure you want to delete the connection "${connection.name}"?\n\nThis will also clear any stored authentication tokens.`);
+    
+    if (confirmed) {
+        // Check if this is the currently active connection
+        const isActiveConnection = GrafanaConfig.connectionId === connectionId || GrafanaConfig.currentConnectionId === connectionId;
+        
+        // Delete the connection from storage
+        Storage.deleteConnectionFromStorage(connectionId);
+        
+        // Clear any stored auth tokens
+        Storage.clearAuthToken(connectionId);
+        
+        // If this was the active connection, disconnect
+        if (isActiveConnection) {
+            Connections.disconnect();
+            Interface.showToast('Connection deleted and disconnected', 'success');
+        } else {
+            Interface.showToast(`Connection "${connection.name}" deleted`, 'success');
+        }
+        
+        // Reload the connections list
+        Interface.loadConnections();
+    }
 }
 
 function connectWithStoredConnection(connectionId) {

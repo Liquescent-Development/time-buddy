@@ -50,10 +50,21 @@ body {
 
 .connection-status {
     font-size: 11px;
-    color: #858585;
-    background-color: #2d2d30;
     padding: 2px 8px;
     border-radius: 3px;
+    font-weight: 500;
+}
+
+.connection-status.disconnected {
+    color: #ff4757 !important;
+    background-color: rgba(255, 71, 87, 0.15) !important;
+    border: 1px solid rgba(255, 71, 87, 0.4) !important;
+}
+
+.connection-status.connected {
+    color: #2ed573 !important;
+    background-color: rgba(46, 213, 115, 0.15) !important;
+    border: 1px solid rgba(46, 213, 115, 0.4) !important;
 }
 
 /* Main Layout */
@@ -261,14 +272,59 @@ body {
 }
 
 .connection-item .connection-status {
-    width: 6px;
-    height: 6px;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
     background-color: #858585;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
 }
 
 .connection-item.connected .connection-status {
-    background-color: #00ff00;
+    background-color: #2ed573 !important;
+}
+
+.delete-connection-btn {
+    color: #ff4757 !important;
+}
+
+.delete-connection-btn svg {
+    fill: #ff4757 !important;
+}
+
+/* Connection spinner animation */
+.connection-spinner {
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid rgba(255, 255, 255, 0.2);
+    border-top: 1.5px solid #007acc;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+    background: transparent;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Disconnect button styles */
+.disconnect-btn {
+    background-color: #ff4757 !important;
+    color: white !important;
+    border: none;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    margin-left: 8px;
+}
+
+.disconnect-btn:hover {
+    background-color: #ff3742 !important;
 }
 
 /* Search Input */

@@ -73,12 +73,22 @@ const Interface = {
         console.log('Updating sidebar content for view:', view);
         switch (view) {
             case 'connections':
+                console.log('Processing connections view - about to call loadConnections and loadDataSources');
                 // Activate connection panel sections
                 document.querySelectorAll('#connectionsPanel .panel-section').forEach(section => {
                     section.classList.add('active');
                 });
                 this.loadConnections();
-                this.loadDataSources();
+                console.log('About to call loadDataSources');
+                // Direct call to populate data sources with click handlers
+                if (GrafanaConfig.connected && typeof Connections !== 'undefined') {
+                    console.log('Calling populateDatasources directly');
+                    Connections.populateDatasources();
+                } else {
+                    console.log('Not connected or Connections unavailable, calling regular loadDataSources');
+                    Interface.loadDataSources();
+                }
+                console.log('Finished calling loadDataSources');
                 break;
             case 'explorer':
                 this.refreshSchemaExplorer();
@@ -541,12 +551,17 @@ const Interface = {
                         <div style="font-size: 11px; color: #858585;">${Utils.escapeHtml(connection.url)}${hasProxy}</div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <button class="icon-button" onclick="showEditConnectionDialog('${id}')" title="Edit Connection" style="padding: 2px 4px; font-size: 12px;">
+                        <button class="icon-button edit-connection-btn" data-connection-id="${id}" title="Edit Connection" style="padding: 2px 4px; font-size: 12px;">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
                             </svg>
                         </button>
-                        <div class="connection-status"></div>
+                        <button class="icon-button delete-connection-btn" data-connection-id="${id}" title="Delete Connection" style="padding: 2px 4px; font-size: 12px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                            </svg>
+                        </button>
+                        <div class="connection-status" id="connection-status-${id}"></div>
                     </div>
                 </div>
             `;
@@ -588,7 +603,28 @@ const Interface = {
         // Add click handlers
         connectionList.querySelectorAll('.connection-item').forEach(item => {
             item.addEventListener('click', () => {
-                this.connectToConnection(item.dataset.connectionId);
+                // Don't connect if already connected
+                if (!item.classList.contains('connected')) {
+                    connectToConnectionWithSpinner(item.dataset.connectionId);
+                }
+            });
+        });
+        
+        // Add edit button handlers
+        connectionList.querySelectorAll('.edit-connection-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                showEditConnectionDialog(btn.dataset.connectionId);
+            });
+        });
+        
+        // Add delete button handlers
+        connectionList.querySelectorAll('.delete-connection-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                deleteConnection(btn.dataset.connectionId);
             });
         });
         
@@ -600,15 +636,23 @@ const Interface = {
     },
 
     loadDataSources() {
+        console.log('Interface.loadDataSources called');
         const datasourceList = document.getElementById('datasourceList');
         
         if (!GrafanaConfig.connected) {
+            console.log('Not connected, showing empty state');
             datasourceList.innerHTML = '<div class="empty-state">Connect to Grafana first</div>';
             return;
         }
         
-        // This would be populated by the existing datasource loading logic
-        datasourceList.innerHTML = '<div class="empty-state">Loading data sources...</div>';
+        // Call the actual data source population function
+        if (typeof Connections !== 'undefined' && Connections.populateDatasources) {
+            console.log('Calling Connections.populateDatasources');
+            Connections.populateDatasources();
+        } else {
+            console.log('Connections.populateDatasources not available');
+            datasourceList.innerHTML = '<div class="empty-state">Loading data sources...</div>';
+        }
     },
 
     // Execute Query
@@ -776,6 +820,12 @@ const Interface = {
     // Schema explorer implementation
     refreshSchemaExplorer() {
         const container = document.getElementById('schemaContainer');
+        
+        console.log('refreshSchemaExplorer called with:', {
+            connected: GrafanaConfig.connected,
+            selectedDatasourceUid: GrafanaConfig.selectedDatasourceUid,
+            selectedDatasourceType: GrafanaConfig.selectedDatasourceType
+        });
         
         if (!GrafanaConfig.connected) {
             container.innerHTML = '<div class="empty-state">Connect to Grafana first</div>';
@@ -1150,4 +1200,148 @@ function closeTab(tabId) {
 
 function togglePanel() {
     Interface.togglePanel();
+}
+
+// Debug functions for SOCKS proxy testing
+async function testAuthWithoutProxy() {
+    if (!GrafanaConfig.url || !GrafanaConfig.authHeader) {
+        console.log('No connection configured');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/test-auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: GrafanaConfig.url,
+                authorization: GrafanaConfig.authHeader
+            })
+        });
+        
+        const result = await response.json();
+        console.log('Auth test without proxy:', result);
+        Interface.showToast(`Auth test without proxy: ${result.status}`, result.status === 200 ? 'success' : 'error');
+    } catch (error) {
+        console.error('Auth test error:', error);
+        Interface.showToast('Auth test failed: ' + error.message, 'error');
+    }
+}
+
+async function testAuthWithProxy() {
+    if (!GrafanaConfig.url || !GrafanaConfig.authHeader || !GrafanaConfig.proxyConfig) {
+        console.log('No connection or proxy configured');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/test-auth-proxy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                url: GrafanaConfig.url,
+                authorization: GrafanaConfig.authHeader,
+                proxyConfig: GrafanaConfig.proxyConfig
+            })
+        });
+        
+        const result = await response.json();
+        console.log('Auth test with proxy:', result);
+        Interface.showToast(`Auth test with proxy: ${result.status}`, result.status === 200 ? 'success' : 'error');
+    } catch (error) {
+        console.error('Proxy auth test error:', error);
+        Interface.showToast('Proxy auth test failed: ' + error.message, 'error');
+    }
+}
+
+// Delete connection function
+function deleteConnection(connectionId) {
+    if (!connectionId) {
+        Interface.showToast('Invalid connection ID', 'error');
+        return;
+    }
+    
+    const connections = Storage.getSavedConnections();
+    const connection = connections[connectionId];
+    
+    if (!connection) {
+        Interface.showToast('Connection not found', 'error');
+        return;
+    }
+    
+    // Show confirmation dialog
+    const confirmed = confirm(`Are you sure you want to delete the connection "${connection.name}"?\n\nThis will also clear any stored authentication tokens.`);
+    
+    if (confirmed) {
+        // Check if this is the currently active connection
+        const isActiveConnection = GrafanaConfig.connectionId === connectionId || GrafanaConfig.currentConnectionId === connectionId;
+        
+        // Delete the connection from storage
+        Storage.deleteConnectionFromStorage(connectionId);
+        
+        // Clear any stored auth tokens
+        Storage.clearAuthToken(connectionId);
+        
+        // If this was the active connection, disconnect
+        if (isActiveConnection) {
+            Connections.disconnect();
+            Interface.showToast('Connection deleted and disconnected', 'success');
+        } else {
+            Interface.showToast(`Connection "${connection.name}" deleted`, 'success');
+        }
+        
+        // Reload the connections list
+        Interface.loadConnections();
+    }
+}
+
+// Show connecting spinner for a connection
+function showConnectionSpinner(connectionId) {
+    const statusElement = document.getElementById(`connection-status-${connectionId}`);
+    if (statusElement) {
+        statusElement.innerHTML = '<div class="connection-spinner"></div>';
+        statusElement.style.backgroundColor = 'transparent';
+        statusElement.title = 'Connecting...';
+    }
+}
+
+// Hide connecting spinner and show connected state
+function hideConnectionSpinner(connectionId, connected = false) {
+    const statusElement = document.getElementById(`connection-status-${connectionId}`);
+    if (statusElement) {
+        statusElement.innerHTML = '';
+        statusElement.style.backgroundColor = connected ? '#2ed573' : '#858585';
+        statusElement.title = connected ? 'Connected' : 'Disconnected';
+    }
+}
+
+
+// Enhanced connection function with spinner
+async function connectToConnectionWithSpinner(connectionId) {
+    if (!connectionId) return;
+    
+    // Show spinner
+    showConnectionSpinner(connectionId);
+    
+    try {
+        // Get the connection
+        const connections = Storage.getSavedConnections();
+        const connection = connections[connectionId];
+        
+        if (!connection) {
+            Interface.showToast('Connection not found', 'error');
+            hideConnectionSpinner(connectionId, false);
+            return;
+        }
+        
+        // Try to connect
+        await Connections.connectWithStoredConnection(connectionId);
+        
+        // Connection successful - spinner will be hidden when loadConnections is called
+        
+    } catch (error) {
+        console.error('Connection failed:', error);
+        hideConnectionSpinner(connectionId, false);
+        Interface.showToast('Connection failed: ' + error.message, 'error');
+    }
 }

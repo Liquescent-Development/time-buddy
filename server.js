@@ -31,6 +31,103 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', timestamp: new Date().toISOString() });
 });
 
+// Test endpoint to verify credentials without proxy
+app.post('/test-auth', async (req, res) => {
+  const { url, authorization } = req.body;
+  
+  if (!url || !authorization) {
+    return res.status(400).json({ error: 'Missing url or authorization' });
+  }
+  
+  try {
+    console.log('Testing auth without proxy to:', url);
+    const response = await axios({
+      method: 'GET',
+      url: url + '/api/user',
+      headers: {
+        'Authorization': authorization,
+        'Accept': 'application/json'
+      },
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: false
+      }),
+      validateStatus: () => true
+    });
+    
+    console.log('Test auth response:', response.status);
+    res.json({
+      status: response.status,
+      statusText: response.statusText,
+      data: response.data
+    });
+  } catch (error) {
+    console.error('Test auth error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test endpoint to verify credentials with SOCKS proxy
+app.post('/test-auth-proxy', async (req, res) => {
+  const { url, authorization, proxyConfig } = req.body;
+  
+  if (!url || !authorization || !proxyConfig) {
+    return res.status(400).json({ error: 'Missing url, authorization, or proxyConfig' });
+  }
+  
+  try {
+    console.log('Testing auth with SOCKS proxy to:', url);
+    console.log('Proxy config:', proxyConfig.host + ':' + proxyConfig.port);
+    
+    // Build proxy URL
+    let proxyUrl = 'socks5://';
+    if (proxyConfig.username && proxyConfig.password) {
+      proxyUrl += `${encodeURIComponent(proxyConfig.username)}:${encodeURIComponent(proxyConfig.password)}@`;
+    }
+    proxyUrl += `${proxyConfig.host}:${proxyConfig.port}`;
+    
+    // Create SOCKS proxy agent
+    const socksAgent = new SocksProxyAgent(proxyUrl);
+    
+    const requestConfig = {
+      method: 'GET',
+      url: url + '/api/user',
+      headers: {
+        'Authorization': authorization,
+        'Accept': 'application/json',
+        'User-Agent': 'Grafana-Query-IDE/1.0'
+      },
+      validateStatus: () => true,
+      timeout: 30000
+    };
+    
+    // Set the agent properly for axios
+    if (url.startsWith('https:')) {
+        requestConfig.httpsAgent = socksAgent;
+    } else {
+        requestConfig.httpAgent = socksAgent;
+    }
+    
+    console.log('Proxy test request headers:', requestConfig.headers);
+    console.log('Authorization header:', authorization.substring(0, 20) + '...');
+    
+    const response = await axios(requestConfig);
+    
+    console.log('Proxy test auth response:', response.status);
+    if (response.status !== 200) {
+      console.log('Proxy test error response:', response.data);
+    }
+    
+    res.json({
+      status: response.status,
+      statusText: response.statusText,
+      data: response.data
+    });
+  } catch (error) {
+    console.error('Proxy test auth error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Create an axios instance that ignores SSL certificate errors (for self-signed certs)
 const axiosInstance = axios.create({
   httpsAgent: new https.Agent({
@@ -61,19 +158,44 @@ app.all('/api/*', async (req, res) => {
       }
 
       console.log(`Proxying ${req.method} request to: ${url}`);
+      
+      // Debug: Verify URL components
+      const urlParts = new URL(url);
+      console.log(`URL protocol: ${urlParts.protocol}, host: ${urlParts.host}, path: ${urlParts.pathname}`);
       console.log(
           `Query parameters: ${
               req.url.includes("?") ? req.url.split("?")[1] : "none"
           }`
       );
+      
+      // Debug: Log authorization header (masked)
+      if (authorization) {
+          console.log(`Authorization header present: ${authorization.substring(0, 10)}...`);
+          // Decode Basic auth to verify username (but not password)
+          if (authorization.startsWith('Basic ')) {
+              try {
+                  const decoded = Buffer.from(authorization.substring(6), 'base64').toString();
+                  const username = decoded.split(':')[0];
+                  console.log(`Basic auth username: ${username}`);
+              } catch (e) {
+                  console.log('Failed to decode Basic auth');
+              }
+          }
+      } else {
+          console.log('No authorization header provided');
+      }
 
       // Prepare headers to forward
       const headersToForward = {
-          Authorization: authorization,
           "Content-Type": req.headers["content-type"] || "application/json",
           Accept: "application/json",
           "User-Agent": req.headers["user-agent"] || "Grafana-Query-IDE/1.0",
       };
+      
+      // Add authorization header explicitly
+      if (authorization) {
+          headersToForward["Authorization"] = authorization;
+      }
 
       // Forward specific Grafana headers if present
       if (req.headers["x-grafana-org-id"]) {
@@ -112,6 +234,8 @@ app.all('/api/*', async (req, res) => {
           try {
               const proxyConfig = JSON.parse(req.headers['x-proxy-config']);
               console.log('Using SOCKS5 proxy:', proxyConfig.host + ':' + proxyConfig.port);
+              console.log('Headers being forwarded:', Object.keys(headersToForward));
+              console.log('Full headers object:', JSON.stringify(headersToForward, null, 2));
               
               // Build proxy URL
               let proxyUrl = 'socks5://';
@@ -121,14 +245,23 @@ app.all('/api/*', async (req, res) => {
               proxyUrl += `${proxyConfig.host}:${proxyConfig.port}`;
               
               // Create SOCKS proxy agent
-              const agent = new SocksProxyAgent(proxyUrl);
+              const socksAgent = new SocksProxyAgent(proxyUrl);
               
-              // Use the proxy agent based on protocol
+              // Set the agent properly for axios
               if (url.startsWith('https:')) {
-                  requestConfig.httpsAgent = agent;
+                  requestConfig.httpsAgent = socksAgent;
+                  // Remove the default HTTP agent
+                  delete requestConfig.httpAgent;
               } else {
-                  requestConfig.httpAgent = agent;
+                  requestConfig.httpAgent = socksAgent;
+                  // Remove the default HTTPS agent
+                  delete requestConfig.httpsAgent;
               }
+              
+              // Debug: Log the actual request config
+              console.log('Request config keys:', Object.keys(requestConfig));
+              console.log('Headers being sent:', requestConfig.headers);
+              console.log('Using SOCKS agent for URL:', url);
               
           } catch (error) {
               console.error('Error parsing proxy config:', error);
@@ -139,24 +272,38 @@ app.all('/api/*', async (req, res) => {
       // Add additional axios config options
       requestConfig.validateStatus = () => true; // Don't throw on any status code
       requestConfig.responseType = "json";
-      requestConfig.transformResponse = [
-              function (data) {
-                  // Try to parse JSON, but return raw data if it fails
-                  if (typeof data === "string") {
-                      try {
-                          return JSON.parse(data);
-                      } catch (e) {
-                          return data;
+      
+      // Only add transform response if not using proxy
+      if (!req.headers['x-proxy-config']) {
+          requestConfig.transformResponse = [
+                  function (data) {
+                      // Try to parse JSON, but return raw data if it fails
+                      if (typeof data === "string") {
+                          try {
+                              return JSON.parse(data);
+                          } catch (e) {
+                              return data;
+                          }
                       }
-                  }
-                  return data;
-              },
-          ];
+                      return data;
+                  },
+              ];
+      }
 
-      const response = await axiosInstance(requestConfig);
+      // Use plain axios instead of axiosInstance to avoid conflicting agent settings
+      const response = await axios(requestConfig);
 
       // Log response status and basic info
       console.log(`Response status: ${response.status}`);
+      
+      // Debug: Log response headers for auth failures
+      if (response.status === 401) {
+          console.log('Response headers:', Object.keys(response.headers));
+          if (response.headers['www-authenticate']) {
+              console.log('WWW-Authenticate:', response.headers['www-authenticate']);
+          }
+      }
+      
       if (response.status >= 400) {
           console.log(`Error response:`, response.data);
       }
@@ -190,6 +337,13 @@ app.all('/api/*', async (req, res) => {
       res.status(response.status).json(response.data);
   } catch (error) {
       console.error("Proxy error:", error.message);
+      console.error("Error type:", error.constructor.name);
+      console.error("Error code:", error.code);
+      
+      // Check if it's a SOCKS-specific error
+      if (error.message && error.message.includes('SOCKS')) {
+          console.error("SOCKS-specific error detected");
+      }
 
       // Log more details about the error
       if (error.response) {

@@ -26,7 +26,41 @@ const Connections = {
         // Update title bar connection status
         const titleBarStatus = document.getElementById('titleBarConnectionStatus');
         if (titleBarStatus) {
-            titleBarStatus.textContent = 'Connected: ' + connection.username + '@' + connection.url.replace(/^https?:\/\//, '');
+            // Find the connection name from saved connections
+            let connectionName = connection.name;
+            if (!connectionName && GrafanaConfig.currentConnectionId) {
+                const connections = Storage.getSavedConnections();
+                const savedConnection = connections[GrafanaConfig.currentConnectionId];
+                if (savedConnection) {
+                    connectionName = savedConnection.name;
+                }
+            }
+            
+            titleBarStatus.textContent = 'Connected: ' + (connectionName || connection.username);
+            titleBarStatus.className = 'connection-status connected';
+            
+            // Add disconnect button to title bar controls if not already present
+            const titleBarControls = document.querySelector('.title-bar-controls');
+            if (titleBarControls && !titleBarControls.querySelector('.title-bar-disconnect')) {
+                const disconnectBtn = document.createElement('button');
+                disconnectBtn.className = 'disconnect-btn title-bar-disconnect';
+                disconnectBtn.textContent = 'Disconnect';
+                disconnectBtn.title = 'Disconnect from Grafana';
+                disconnectBtn.addEventListener('click', () => {
+                    if (confirm('Are you sure you want to disconnect?')) {
+                        Connections.disconnect();
+                        
+                        // Update the UI after disconnection
+                        if (typeof Interface !== 'undefined') {
+                            Interface.loadConnections();
+                            Interface.loadDataSources();
+                        }
+                        
+                        Interface.showToast('Disconnected successfully', 'success');
+                    }
+                });
+                titleBarControls.appendChild(disconnectBtn);
+            }
         }
         
         // Update variables UI for the connected state
@@ -76,6 +110,12 @@ const Connections = {
             datasource.disabled = true;
         }
         
+        // Clear new interface data sources list
+        const datasourceList = document.getElementById('datasourceList');
+        if (datasourceList) {
+            datasourceList.innerHTML = '<div class="empty-state">Connect to Grafana first</div>';
+        }
+        
         const executeBtn = document.getElementById('executeBtn');
         if (executeBtn) {
             executeBtn.disabled = true;
@@ -96,6 +136,13 @@ const Connections = {
         const titleBarStatus = document.getElementById('titleBarConnectionStatus');
         if (titleBarStatus) {
             titleBarStatus.textContent = 'Not Connected';
+            titleBarStatus.className = 'connection-status disconnected';
+        }
+        
+        // Remove disconnect button from title bar
+        const titleBarDisconnectBtn = document.querySelector('.title-bar-disconnect');
+        if (titleBarDisconnectBtn) {
+            titleBarDisconnectBtn.remove();
         }
         
         // Update variables UI for the disconnected state
@@ -135,6 +182,10 @@ const Connections = {
         } else {
             const credentials = btoa(username + ':' + password);
             GrafanaConfig.authHeader = 'Basic ' + credentials;
+            
+            // Debug: Log credential info (not the actual password)
+            console.log('Creating Basic auth for user:', username);
+            console.log('Basic auth header length:', GrafanaConfig.authHeader.length);
         }
 
         Utils.showStatus('authStatus', 'Connecting...', 'info');
@@ -208,9 +259,11 @@ const Connections = {
         GrafanaConfig.password = '';
         GrafanaConfig.authHeader = '';
         GrafanaConfig.currentConnectionId = null;
+        GrafanaConfig.connectionId = null;
         GrafanaConfig.datasources = [];
         GrafanaConfig.currentResults = null;
         GrafanaConfig.proxyConfig = null;
+        GrafanaConfig.connected = false;
         
         localStorage.removeItem('grafanaConfig');
         
@@ -220,6 +273,7 @@ const Connections = {
 
     // Populate datasources dropdown
     populateDatasources() {
+        console.log('populateDatasources called');
         // For new interface, update the data sources list in the sidebar
         const datasourceList = document.getElementById('datasourceList');
         if (datasourceList) {
@@ -260,6 +314,13 @@ const Connections = {
                     GrafanaConfig.selectedDatasourceId = item.dataset.id;
                     GrafanaConfig.currentDatasourceId = item.dataset.uid; // Also set current for compatibility
                     
+                    // Debug log
+                    console.log('Data source selected:', {
+                        uid: GrafanaConfig.selectedDatasourceUid,
+                        type: GrafanaConfig.selectedDatasourceType,
+                        id: GrafanaConfig.selectedDatasourceId
+                    });
+                    
                     // Auto-select appropriate query type
                     const queryType = item.dataset.type === 'prometheus' ? 'promql' : 'influxql';
                     if (typeof Interface !== 'undefined' && Interface.setQueryType) {
@@ -271,8 +332,9 @@ const Connections = {
                         Editor.setQueryType(queryType);
                     }
                     
-                    // Refresh schema explorer if it's the current view
-                    if (typeof Interface !== 'undefined' && Interface.activeSidebarView === 'explorer') {
+                    // Always refresh schema explorer when data source is selected
+                    if (typeof Interface !== 'undefined' && Interface.refreshSchemaExplorer) {
+                        console.log('Calling refreshSchemaExplorer after data source selection');
                         Interface.refreshSchemaExplorer();
                     }
                     
@@ -371,7 +433,8 @@ const Connections = {
             const tempConfig = {
                 url: connection.url,
                 username: connection.username,
-                authHeader: authToken
+                authHeader: authToken,
+                proxyConfig: connection.proxy || null
             };
             
             const response = await API.makeApiRequestWithConfig(tempConfig, '/api/user');
@@ -381,6 +444,7 @@ const Connections = {
                 GrafanaConfig.username = tempConfig.username;
                 GrafanaConfig.authHeader = tempConfig.authHeader;
                 GrafanaConfig.currentConnectionId = connection.id;
+                GrafanaConfig.proxyConfig = connection.proxy || null;
                 
                 const dsResponse = await API.makeApiRequestWithConfig(tempConfig, '/api/datasources');
                 if (dsResponse.ok) {
