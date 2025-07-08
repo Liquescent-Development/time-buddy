@@ -806,6 +806,112 @@ body {
     padding: 40px 20px;
 }
 
+/* Group Summary Statistics */
+#results .series-stats {
+    background-color: #252526;
+    border: 1px solid #2d2d30;
+    border-radius: 4px;
+    padding: 16px;
+    margin: 16px 0;
+}
+
+#results .series-stats h4 {
+    color: #cccccc;
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 12px 0;
+    border-bottom: 1px solid #2d2d30;
+    padding-bottom: 8px;
+}
+
+#results .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+}
+
+#results .stat-item {
+    background-color: #1e1e1e;
+    border: 1px solid #2d2d30;
+    border-radius: 3px;
+    padding: 8px 12px;
+    text-align: center;
+}
+
+#results .stat-label {
+    color: #858585;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+}
+
+#results .stat-value {
+    color: #cccccc;
+    font-size: 16px;
+    font-weight: 600;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+}
+
+/* Details/Summary sections (View All Groups Summary, View Raw Response) */
+#results details {
+    background-color: #252526;
+    border: 1px solid #2d2d30;
+    border-radius: 4px;
+    margin: 16px 0;
+    overflow: hidden;
+}
+
+#results details summary {
+    background-color: #2d2d30;
+    color: #f46800 !important;
+    cursor: pointer;
+    padding: 12px 16px;
+    font-weight: 500;
+    font-size: 13px;
+    user-select: none;
+    border-bottom: 1px solid #2d2d30;
+    transition: background-color 0.1s ease;
+}
+
+#results details summary:hover {
+    background-color: #37373d;
+}
+
+#results details[open] summary {
+    border-bottom: 1px solid #2d2d30;
+}
+
+#results details > div {
+    padding: 16px;
+}
+
+#results details p {
+    color: #b0b0b0 !important;
+    margin: 8px 0 !important;
+    font-size: 13px;
+}
+
+#results details p strong {
+    color: #cccccc;
+    font-weight: 600;
+}
+
+#results details pre {
+    background-color: #1e1e1e;
+    border: 1px solid #2d2d30;
+    border-radius: 3px;
+    padding: 12px;
+    color: #cccccc;
+    font-size: 11px;
+    line-height: 1.4;
+    overflow: auto;
+    max-height: 400px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
 /* Settings Grid */
 .settings-grid {
     display: grid;

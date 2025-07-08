@@ -23,6 +23,12 @@ const Connections = {
             headerStatus.textContent = 'Connected: ' + connection.url;
         }
         
+        // Update title bar connection status
+        const titleBarStatus = document.getElementById('titleBarConnectionStatus');
+        if (titleBarStatus) {
+            titleBarStatus.textContent = 'Connected: ' + connection.username + '@' + connection.url.replace(/^https?:\/\//, '');
+        }
+        
         // Update variables UI for the connected state
         if (typeof Variables !== 'undefined') {
             Variables.renderVariablesUI();
@@ -84,6 +90,12 @@ const Connections = {
         const headerStatus = document.getElementById('authHeaderStatus');
         if (headerStatus) {
             headerStatus.textContent = '';
+        }
+        
+        // Clear title bar connection status
+        const titleBarStatus = document.getElementById('titleBarConnectionStatus');
+        if (titleBarStatus) {
+            titleBarStatus.textContent = 'Not Connected';
         }
         
         // Update variables UI for the disconnected state
