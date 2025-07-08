@@ -595,6 +595,66 @@ const Schema = {
         }
     },
     
+    // Load tag values for tree expansion (with explicit measurement)
+    async loadTagValuesForMeasurement(tag, measurement) {
+        try {
+            console.log(`Loading values for tag: ${tag} in measurement: ${measurement}`);
+            
+            const key = `${measurement}:${tag}`;
+            
+            // Query for tag values from the specific measurement
+            const tagValuesQuery = `SHOW TAG VALUES FROM "${measurement}" WITH KEY = "${tag}"`;
+            console.log('Executing tag values query:', tagValuesQuery);
+            const tagValuesResult = await this.executeSchemaQuery(tagValuesQuery, 'influxdb');
+            console.log('Tag values result:', tagValuesResult);
+            
+            if (tagValuesResult && tagValuesResult.results && tagValuesResult.results.A) {
+                // Extract values from the result
+                const values = [];
+                const frames = tagValuesResult.results.A.frames || [];
+                
+                for (const frame of frames) {
+                    if (!frame.data || !frame.data.values) continue;
+                    
+                    // SHOW TAG VALUES returns results with the tag key in first column and value in second
+                    for (let i = 0; i < frame.data.values.length; i++) {
+                        const column = frame.data.values[i];
+                        if (Array.isArray(column)) {
+                            // Skip the first column if it contains the tag name
+                            if (i === 0 && column.length > 0 && column[0] === tag) {
+                                continue;
+                            }
+                            
+                            // Extract values from this column
+                            for (const value of column) {
+                                if (value !== null && value !== undefined && value !== tag) {
+                                    const stringValue = String(value);
+                                    if (!values.includes(stringValue)) {
+                                        values.push(stringValue);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                this.influxTagValues[key] = values.sort();
+                console.log(`Extracted ${values.length} values for tag ${tag} in ${measurement}:`, this.influxTagValues[key]);
+                return this.influxTagValues[key];
+            } else {
+                console.warn('No tag values found for:', tag, 'in measurement:', measurement);
+                this.influxTagValues[key] = [];
+                return [];
+            }
+            
+        } catch (error) {
+            console.error('Error loading tag values:', error);
+            const key = `${measurement}:${tag}`;
+            this.influxTagValues[key] = [];
+            return [];
+        }
+    },
+    
     // Load tag values for a specific tag
     async loadTagValues(tag) {
         if (!this.selectedMeasurement || !tag) return;
@@ -1291,7 +1351,7 @@ async function toggleInfluxTag(header, tag, field, measurement) {
             content.innerHTML = '<div class="tree-item-empty">Loading tag values...</div>';
             
             // Load tag values
-            await Schema.loadTagValues(tag);
+            await Schema.loadTagValuesForMeasurement(tag, measurement);
             
             // Render the tag values
             const tagValues = Schema.influxTagValues[key] || [];

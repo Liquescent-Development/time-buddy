@@ -624,17 +624,71 @@ const Interface = {
         // Switch to results panel
         this.switchPanel('results');
         
+        // Check if we have a datasource selected
+        if (!GrafanaConfig.selectedDatasourceUid) {
+            this.showToast('Please select a data source first', 'error');
+            return;
+        }
+        
         // Call existing query execution logic
         if (typeof Queries !== 'undefined' && Queries.executeQuery) {
             // Temporarily set the global query editor value
             const originalGetQueryValue = Editor.getQueryValue;
             Editor.getQueryValue = () => query;
             
+            // Create temporary select element for compatibility with old Queries module
+            const tempSelect = document.createElement('select');
+            tempSelect.id = 'datasource';
+            tempSelect.innerHTML = `<option value="${GrafanaConfig.selectedDatasourceUid}" data-type="${GrafanaConfig.selectedDatasourceType}" data-id="${GrafanaConfig.selectedDatasourceId}" selected></option>`;
+            
+            // Create temporary time inputs
+            const tempTimeFrom = document.createElement('input');
+            tempTimeFrom.id = 'timeFrom';
+            tempTimeFrom.value = document.querySelector(`[data-tab-id="${tabId}"] .time-from`)?.value || '1';
+            
+            const tempTimeTo = document.createElement('input');
+            tempTimeTo.id = 'timeTo';
+            tempTimeTo.value = document.querySelector(`[data-tab-id="${tabId}"] .time-to`)?.value || '0';
+            
+            const tempMaxDataPoints = document.createElement('input');
+            tempMaxDataPoints.id = 'maxDataPoints';
+            tempMaxDataPoints.value = '1000';
+            
+            const tempIntervalMs = document.createElement('input');
+            tempIntervalMs.id = 'intervalMs';
+            tempIntervalMs.value = '15000';
+            
+            const tempInstantQuery = document.createElement('input');
+            tempInstantQuery.id = 'instantQuery';
+            tempInstantQuery.type = 'checkbox';
+            tempInstantQuery.checked = tabData.queryType === 'promql';
+            
+            // Temporarily add elements to DOM
+            document.body.appendChild(tempSelect);
+            document.body.appendChild(tempTimeFrom);
+            document.body.appendChild(tempTimeTo);
+            document.body.appendChild(tempMaxDataPoints);
+            document.body.appendChild(tempIntervalMs);
+            document.body.appendChild(tempInstantQuery);
+            
             Queries.executeQuery().then(() => {
-                // Restore original function
+                // Restore original function and clean up
                 Editor.getQueryValue = originalGetQueryValue;
-            }).catch(() => {
+                document.body.removeChild(tempSelect);
+                document.body.removeChild(tempTimeFrom);
+                document.body.removeChild(tempTimeTo);
+                document.body.removeChild(tempMaxDataPoints);
+                document.body.removeChild(tempIntervalMs);
+                document.body.removeChild(tempInstantQuery);
+            }).catch((error) => {
                 Editor.getQueryValue = originalGetQueryValue;
+                document.body.removeChild(tempSelect);
+                document.body.removeChild(tempTimeFrom);
+                document.body.removeChild(tempTimeTo);
+                document.body.removeChild(tempMaxDataPoints);
+                document.body.removeChild(tempIntervalMs);
+                document.body.removeChild(tempInstantQuery);
+                console.error('Query execution failed:', error);
             });
         }
     },
