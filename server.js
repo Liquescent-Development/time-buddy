@@ -2,10 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const https = require('https');
+const http = require('http');
 const path = require('path');
 const compression = require('compression');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const { SocksProxyAgent } = require('socks-proxy-agent');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -92,15 +94,52 @@ app.all('/api/*', async (req, res) => {
           console.log("Request body:", JSON.stringify(req.body, null, 2));
       }
 
-      const response = await axiosInstance({
+      // Check for proxy configuration
+      let requestConfig = {
           method: req.method,
           url: url,
           headers: headersToForward,
           data: req.body,
-          validateStatus: () => true, // Don't throw on any status code
-          // Ensure we handle different response types
-          responseType: "json",
-          transformResponse: [
+          timeout: 30000,
+          httpsAgent: new https.Agent({
+              rejectUnauthorized: false
+          }),
+          httpAgent: new http.Agent()
+      };
+
+      // Handle SOCKS5 proxy if configured
+      if (req.headers['x-proxy-config']) {
+          try {
+              const proxyConfig = JSON.parse(req.headers['x-proxy-config']);
+              console.log('Using SOCKS5 proxy:', proxyConfig.host + ':' + proxyConfig.port);
+              
+              // Build proxy URL
+              let proxyUrl = 'socks5://';
+              if (proxyConfig.username && proxyConfig.password) {
+                  proxyUrl += `${encodeURIComponent(proxyConfig.username)}:${encodeURIComponent(proxyConfig.password)}@`;
+              }
+              proxyUrl += `${proxyConfig.host}:${proxyConfig.port}`;
+              
+              // Create SOCKS proxy agent
+              const agent = new SocksProxyAgent(proxyUrl);
+              
+              // Use the proxy agent based on protocol
+              if (url.startsWith('https:')) {
+                  requestConfig.httpsAgent = agent;
+              } else {
+                  requestConfig.httpAgent = agent;
+              }
+              
+          } catch (error) {
+              console.error('Error parsing proxy config:', error);
+              return res.status(400).json({ error: 'Invalid proxy configuration' });
+          }
+      }
+
+      // Add additional axios config options
+      requestConfig.validateStatus = () => true; // Don't throw on any status code
+      requestConfig.responseType = "json";
+      requestConfig.transformResponse = [
               function (data) {
                   // Try to parse JSON, but return raw data if it fails
                   if (typeof data === "string") {
@@ -112,8 +151,9 @@ app.all('/api/*', async (req, res) => {
                   }
                   return data;
               },
-          ],
-      });
+          ];
+
+      const response = await axiosInstance(requestConfig);
 
       // Log response status and basic info
       console.log(`Response status: ${response.status}`);

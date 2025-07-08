@@ -111,6 +111,19 @@ const Connections = {
         GrafanaConfig.password = password;
         GrafanaConfig.currentConnectionId = connectionId;
         
+        // Set proxy configuration if connection has one
+        if (connectionId) {
+            const connections = Storage.getSavedConnections();
+            const connection = connections[connectionId];
+            if (connection && connection.proxy) {
+                GrafanaConfig.proxyConfig = connection.proxy;
+            } else {
+                GrafanaConfig.proxyConfig = null;
+            }
+        } else {
+            GrafanaConfig.proxyConfig = null;
+        }
+        
         // Use cached token if available, otherwise create new Basic auth
         if (connectionId && !password) {
             const cachedToken = Storage.getAuthToken(connectionId);
@@ -197,6 +210,7 @@ const Connections = {
         GrafanaConfig.currentConnectionId = null;
         GrafanaConfig.datasources = [];
         GrafanaConfig.currentResults = null;
+        GrafanaConfig.proxyConfig = null;
         
         localStorage.removeItem('grafanaConfig');
         

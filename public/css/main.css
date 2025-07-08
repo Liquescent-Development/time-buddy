@@ -1044,6 +1044,34 @@ body {
     box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
 }
 
+.form-group input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+    accent-color: #007acc;
+}
+
+.form-group label input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+/* Proxy fields container */
+.proxy-fields {
+    background-color: rgba(0, 122, 204, 0.05);
+    border: 1px solid rgba(0, 122, 204, 0.2);
+    border-radius: 4px;
+    padding: 16px;
+    margin-top: 8px;
+    transition: all 0.3s ease;
+}
+
+.proxy-fields .form-group {
+    margin-bottom: 12px;
+}
+
+.proxy-fields .form-group:last-child {
+    margin-bottom: 0;
+}
+
 /* Buttons */
 .primary-button {
     background-color: #007acc;

@@ -533,13 +533,21 @@ const Interface = {
         let html = '';
         for (const [id, connection] of Object.entries(connections)) {
             const isConnected = GrafanaConfig.connectionId === id || GrafanaConfig.currentConnectionId === id;
+            const hasProxy = connection.proxy ? ' (via proxy)' : '';
             html += `
                 <div class="connection-item ${isConnected ? 'active connected' : ''}" data-connection-id="${id}">
                     <div style="flex: 1;">
                         <div style="font-weight: 500; color: #cccccc; font-size: 13px;">${Utils.escapeHtml(connection.name)}</div>
-                        <div style="font-size: 11px; color: #858585;">${Utils.escapeHtml(connection.url)}</div>
+                        <div style="font-size: 11px; color: #858585;">${Utils.escapeHtml(connection.url)}${hasProxy}</div>
                     </div>
-                    <div class="connection-status"></div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button class="icon-button" onclick="showEditConnectionDialog('${id}')" title="Edit Connection" style="padding: 2px 4px; font-size: 12px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                            </svg>
+                        </button>
+                        <div class="connection-status"></div>
+                    </div>
                 </div>
             `;
         }
@@ -917,7 +925,7 @@ const Interface = {
     },
 
     // Handle connection form submission with proper authentication flow
-    async handleConnectionSave(name, url, username, password) {
+    async handleConnectionSave(name, url, username, password, proxyConfig = null, editingConnectionId = null) {
         if (!name || !url || !username || !password) {
             this.showToast('Please fill in all fields', 'error');
             return false;
@@ -926,10 +934,11 @@ const Interface = {
         try {
             // Create connection object
             const connection = {
-                id: Date.now().toString(),
+                id: editingConnectionId || Date.now().toString(),
                 name: name,
                 url: url,
-                username: username
+                username: username,
+                proxy: proxyConfig
             };
 
             // Save to storage (without password)
@@ -968,11 +977,31 @@ const Interface = {
     }
 };
 
+// Proxy fields toggle
+function toggleProxyFields() {
+    const enableProxy = document.getElementById('enableProxy');
+    const proxyFields = document.getElementById('proxyFields');
+    
+    if (enableProxy.checked) {
+        proxyFields.style.display = 'block';
+    } else {
+        proxyFields.style.display = 'none';
+        // Clear proxy fields when disabled
+        document.getElementById('proxyHost').value = '';
+        document.getElementById('proxyPort').value = '';
+        document.getElementById('proxyUsername').value = '';
+        document.getElementById('proxyPassword').value = '';
+    }
+}
+
 // Dialog management
 function showNewConnectionDialog() {
     console.log('Showing new connection dialog...');
     const dialog = document.getElementById('connectionDialog');
     if (dialog) {
+        // Clear form for new connection
+        document.getElementById('connectionDialogTitle').textContent = 'New Connection';
+        hideConnectionDialog(); // This clears all fields
         dialog.classList.add('active');
         console.log('Dialog shown');
     } else {
@@ -981,14 +1010,73 @@ function showNewConnectionDialog() {
     }
 }
 
+function showEditConnectionDialog(connectionId) {
+    console.log('Showing edit connection dialog for:', connectionId);
+    const dialog = document.getElementById('connectionDialog');
+    if (!dialog) {
+        console.error('Connection dialog not found');
+        Interface.showToast('Connection dialog not found', 'error');
+        return;
+    }
+    
+    const connections = Storage.getSavedConnections();
+    const connection = connections[connectionId];
+    
+    if (!connection) {
+        console.error('Connection not found:', connectionId);
+        Interface.showToast('Connection not found', 'error');
+        return;
+    }
+    
+    // Set dialog title
+    document.getElementById('connectionDialogTitle').textContent = 'Edit Connection';
+    
+    // Populate form fields
+    document.getElementById('connectionName').value = connection.name;
+    document.getElementById('connectionUrl').value = connection.url;
+    document.getElementById('connectionUsername').value = connection.username;
+    document.getElementById('connectionPassword').value = ''; // Never prefill password
+    
+    // Populate proxy fields if proxy is configured
+    if (connection.proxy) {
+        document.getElementById('enableProxy').checked = true;
+        document.getElementById('proxyHost').value = connection.proxy.host;
+        document.getElementById('proxyPort').value = connection.proxy.port;
+        document.getElementById('proxyUsername').value = connection.proxy.username || '';
+        document.getElementById('proxyPassword').value = ''; // Never prefill proxy password
+        document.getElementById('proxyFields').style.display = 'block';
+    } else {
+        document.getElementById('enableProxy').checked = false;
+        document.getElementById('proxyFields').style.display = 'none';
+    }
+    
+    // Store connection ID for editing
+    dialog.dataset.editingConnectionId = connectionId;
+    
+    dialog.classList.add('active');
+    console.log('Edit dialog shown');
+}
+
 function hideConnectionDialog() {
-    document.getElementById('connectionDialog').classList.remove('active');
+    const dialog = document.getElementById('connectionDialog');
+    dialog.classList.remove('active');
     
     // Clear form
     document.getElementById('connectionName').value = '';
     document.getElementById('connectionUrl').value = '';
     document.getElementById('connectionUsername').value = '';
     document.getElementById('connectionPassword').value = '';
+    
+    // Clear proxy fields
+    document.getElementById('enableProxy').checked = false;
+    document.getElementById('proxyHost').value = '';
+    document.getElementById('proxyPort').value = '';
+    document.getElementById('proxyUsername').value = '';
+    document.getElementById('proxyPassword').value = '';
+    document.getElementById('proxyFields').style.display = 'none';
+    
+    // Clear editing ID
+    delete dialog.dataset.editingConnectionId;
 }
 
 async function saveConnection() {
@@ -997,7 +1085,34 @@ async function saveConnection() {
     const username = document.getElementById('connectionUsername').value.trim();
     const password = document.getElementById('connectionPassword').value;
     
-    const success = await Interface.handleConnectionSave(name, url, username, password);
+    // Get proxy data
+    const enableProxy = document.getElementById('enableProxy').checked;
+    let proxyConfig = null;
+    
+    if (enableProxy) {
+        const proxyHost = document.getElementById('proxyHost').value.trim();
+        const proxyPort = document.getElementById('proxyPort').value.trim();
+        const proxyUsername = document.getElementById('proxyUsername').value.trim();
+        const proxyPassword = document.getElementById('proxyPassword').value;
+        
+        if (!proxyHost || !proxyPort) {
+            Interface.showToast('Please provide proxy host and port', 'error');
+            return;
+        }
+        
+        proxyConfig = {
+            host: proxyHost,
+            port: parseInt(proxyPort),
+            username: proxyUsername || null,
+            password: proxyPassword || null
+        };
+    }
+    
+    // Check if we're editing an existing connection
+    const dialog = document.getElementById('connectionDialog');
+    const editingConnectionId = dialog.dataset.editingConnectionId;
+    
+    const success = await Interface.handleConnectionSave(name, url, username, password, proxyConfig, editingConnectionId);
     
     if (success) {
         hideConnectionDialog();
