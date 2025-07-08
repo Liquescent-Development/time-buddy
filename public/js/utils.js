@@ -14,6 +14,11 @@ const Utils = {
     // Show status messages
     showStatus(elementId, message, type) {
         const element = document.getElementById(elementId);
+        if (!element) {
+            // Element doesn't exist in new interface, log instead
+            console.log(`Status [${elementId}] [${type}]:`, message);
+            return;
+        }
         if (type === 'loading') {
             element.innerHTML = '<div class="loading">' + message + '</div>';
         } else {
@@ -24,6 +29,10 @@ const Utils = {
     // Show results with different types
     showResults(message, type) {
         const resultsDiv = document.getElementById('results');
+        if (!resultsDiv) {
+            console.log(`Results [${type}]:`, message);
+            return;
+        }
         GrafanaConfig.currentResults = null;
         GrafanaConfig.selectedSeries = 0;
         if (type === 'loading') {
@@ -42,6 +51,12 @@ const Utils = {
             statusDiv.className = 'token-status';
             
             const connectionMgmt = document.getElementById('connectionManagement');
+            // Handle case where old interface elements don't exist
+            if (!connectionMgmt) {
+                // For new interface, just log the status or handle differently
+                console.log(`Token Status [${type}]:`, message);
+                return;
+            }
             connectionMgmt.parentNode.insertBefore(statusDiv, connectionMgmt.nextSibling);
         }
         

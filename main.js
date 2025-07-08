@@ -73,18 +73,28 @@ async function startServer() {
         });
 
         serverProcess.stderr.on('data', (data) => {
-            console.error('Server Error:', data.toString());
+            const errorStr = data.toString();
+            console.error('Server Error:', errorStr);
+            
+            // If port is already in use, resolve anyway (server already running)
+            if (errorStr.includes('EADDRINUSE')) {
+                console.log('Server already running, continuing...');
+                resolve();
+            }
         });
 
         serverProcess.on('error', (error) => {
             console.error('Failed to start server:', error);
-            reject(error);
+            // Don't reject - the server might already be running
+            console.log('Server start failed, but continuing anyway...');
+            resolve();
         });
 
-        // Timeout after 10 seconds
+        // Timeout after 5 seconds
         setTimeout(() => {
+            console.log('Server startup timeout, assuming server is ready...');
             resolve(); // Resolve anyway, the server might be starting
-        }, 10000);
+        }, 5000);
     });
 }
 
@@ -348,9 +358,14 @@ function createMenu() {
 // App event handlers
 app.whenReady().then(async () => {
     try {
-        console.log('Starting Express server...');
-        await startServer();
-        console.log('Server started, creating main window...');
+        // Check if server was already started by electron-start.js
+        if (process.env.ELECTRON_SERVER_STARTED === 'true') {
+            console.log('Server already started by electron-start.js, skipping server startup...');
+        } else {
+            console.log('Starting Express server...');
+            await startServer();
+            console.log('Server started, creating main window...');
+        }
         
         createMainWindow();
         createMenu();

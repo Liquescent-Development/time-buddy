@@ -77,7 +77,7 @@ const Schema = {
         }
     },
     
-    // Load Prometheus schema (metrics and labels)
+    // Load Prometheus schema (metrics only, labels loaded per-metric)
     async loadPrometheusSchema() {
         try {
             // Method 1: Use a series query to get all metrics - this works universally
@@ -127,62 +127,62 @@ const Schema = {
                 console.log('Sample metrics:', this.prometheusMetrics.slice(0, 10));
             }
             
-            // Method 2: Try to get labels using group by query
-            try {
-                const labelsQuery = 'group by () ({__name__=~".+"})';
-                console.log('Executing labels discovery query:', labelsQuery);
-                const labelsResult = await this.executeSchemaQuery(labelsQuery, 'prometheus');
-                
-                console.log('Labels query result:', labelsResult);
-                
-                if (labelsResult && labelsResult.results && labelsResult.results.A && labelsResult.results.A.frames) {
-                    const labels = new Set(['__name__', 'job', 'instance']); // Common labels
-                    
-                    // Extract label names from frame schema
-                    for (const frame of labelsResult.results.A.frames) {
-                        if (frame.schema && frame.schema.fields) {
-                            frame.schema.fields.forEach(field => {
-                                if (field.labels) {
-                                    Object.keys(field.labels).forEach(labelName => {
-                                        labels.add(labelName);
-                                        console.log('Found label:', labelName);
-                                    });
-                                }
-                            });
-                        }
-                    }
-                    
-                    this.prometheusLabels = {};
-                    Array.from(labels).sort().forEach(label => {
-                        this.prometheusLabels[label] = [];
-                    });
-                    
-                    console.log('Extracted labels count:', Object.keys(this.prometheusLabels).length);
-                    console.log('Sample labels:', Object.keys(this.prometheusLabels).slice(0, 10));
-                }
-            } catch (labelsError) {
-                console.warn('Labels discovery failed, using defaults:', labelsError);
-                this.prometheusLabels = {
-                    '__name__': [],
-                    'job': [],
-                    'instance': []
-                };
-            }
+            // Initialize empty labels structure - labels will be loaded per metric
+            this.prometheusLabels = {};
             
             console.log('Final Prometheus schema:', {
-                metrics: this.prometheusMetrics.length,
-                labels: Object.keys(this.prometheusLabels).length
+                metrics: this.prometheusMetrics.length
             });
             
         } catch (error) {
             console.error('Error loading Prometheus schema:', error);
             // Set some default common metrics if discovery fails
             this.prometheusMetrics = ['up', 'prometheus_build_info', 'process_start_time_seconds'];
-            this.prometheusLabels = {
-                'job': [],
-                'instance': [],
-                '__name__': []
-            };
+            this.prometheusLabels = {};
+        }
+    },
+    
+    // Load labels for a specific Prometheus metric
+    async loadPrometheusMetricLabels(metric) {
+        try {
+            console.log('Loading labels for metric:', metric);
+            
+            // Query to get labels for this specific metric
+            const labelsQuery = `group by (__name__) ({__name__="${metric}"})`;
+            console.log('Executing metric labels query:', labelsQuery);
+            const labelsResult = await this.executeSchemaQuery(labelsQuery, 'prometheus');
+            
+            console.log('Metric labels result:', labelsResult);
+            
+            const metricLabels = new Set(['__name__']); // Always include __name__
+            
+            if (labelsResult && labelsResult.results && labelsResult.results.A && labelsResult.results.A.frames) {
+                // Extract label names from frame schema
+                for (const frame of labelsResult.results.A.frames) {
+                    if (frame.schema && frame.schema.fields) {
+                        frame.schema.fields.forEach(field => {
+                            if (field.labels) {
+                                Object.keys(field.labels).forEach(labelName => {
+                                    metricLabels.add(labelName);
+                                    console.log('Found label for metric:', labelName);
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+            
+            // Store labels for this metric
+            this.prometheusLabels[metric] = Array.from(metricLabels).sort();
+            console.log(`Found ${this.prometheusLabels[metric].length} labels for ${metric}:`, this.prometheusLabels[metric]);
+            
+            return this.prometheusLabels[metric];
+            
+        } catch (error) {
+            console.error('Error loading labels for metric:', metric, error);
+            // Set some default labels
+            this.prometheusLabels[metric] = ['__name__', 'job', 'instance'];
+            return this.prometheusLabels[metric];
         }
     },
     
@@ -308,10 +308,20 @@ const Schema = {
     
     // Execute schema discovery query
     async executeSchemaQuery(query, datasourceType) {
-        const selectedOption = document.getElementById('datasource').selectedOptions[0];
-        if (!selectedOption) return null;
+        // Try to get datasource info from old interface first, fallback to global config
+        let datasourceNumericId;
+        const selectedOption = document.getElementById('datasource');
+        if (selectedOption && selectedOption.selectedOptions && selectedOption.selectedOptions[0]) {
+            datasourceNumericId = selectedOption.selectedOptions[0].dataset.id;
+        } else {
+            // Use global config for new interface
+            datasourceNumericId = GrafanaConfig.selectedDatasourceId;
+        }
         
-        const datasourceNumericId = selectedOption.dataset.id;
+        if (!datasourceNumericId) {
+            console.warn('No datasource ID available for schema query');
+            return null;
+        }
         
         let requestBody;
         let urlParams = '';
@@ -683,130 +693,192 @@ const Schema = {
         container.innerHTML = html;
     },
     
-    // Render Prometheus schema
+    // Render Prometheus schema as a tree
     renderPrometheusSchema() {
-        let html = '<div class="schema-content">';
+        let html = '<div class="schema-tree">';
         
-        // Metrics section
-        html += '<div class="schema-subsection">';
-        html += '<h4>Metrics</h4>';
-        
-        // Search box
+        // Search box at the top
         html += '<div class="schema-search">';
         html += '<input type="text" id="metricsSearch" placeholder="Search metrics..." onkeyup="filterPrometheusMetrics(this.value)">';
         html += '</div>';
         
-        // Metrics list
-        html += '<div class="schema-list" id="metricsList">';
+        // Metrics tree node
+        html += '<div class="tree-node">';
+        html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
+        html += '<span class="tree-node-icon">▼</span>';
+        html += '<span class="tree-node-label">Metrics</span>';
+        html += '<span class="tree-node-count">(' + this.prometheusMetrics.length + ')</span>';
+        html += '</div>';
+        html += '<div class="tree-node-content expanded" id="metricsList">';
         
         if (this.prometheusMetrics.length === 0) {
-            html += '<div class="schema-empty">No metrics found</div>';
+            html += '<div class="tree-item-empty">No metrics found</div>';
         } else {
-            for (const metric of this.prometheusMetrics) {
-                html += '<div class="schema-item" onclick="insertMetric(\'' + Utils.escapeHtml(metric) + '\')">';
-                html += '<span class="schema-item-name">' + Utils.escapeHtml(metric) + '</span>';
-                html += '<span class="schema-item-type metric">metric</span>';
-                html += '</div>';
+            // Group metrics by prefix for better organization
+            const groupedMetrics = this.groupMetricsByPrefix(this.prometheusMetrics);
+            
+            for (const [prefix, metrics] of Object.entries(groupedMetrics)) {
+                if (metrics.length > 1 && prefix !== 'other') {
+                    // Create a sub-group for metrics with common prefix
+                    html += '<div class="tree-subnode">';
+                    html += '<div class="tree-subnode-header" onclick="toggleTreeNode(this)">';
+                    html += '<span class="tree-node-icon">▼</span>';
+                    html += '<span class="tree-node-label">' + Utils.escapeHtml(prefix) + '</span>';
+                    html += '<span class="tree-node-count">(' + metrics.length + ')</span>';
+                    html += '</div>';
+                    html += '<div class="tree-subnode-content expanded">';
+                    
+                    for (const metric of metrics) {
+                        html += this.renderPrometheusMetricWithLabels(metric);
+                    }
+                    
+                    html += '</div>';
+                    html += '</div>';
+                } else {
+                    // Show individual metrics
+                    for (const metric of metrics) {
+                        html += this.renderPrometheusMetricWithLabels(metric);
+                    }
+                }
             }
         }
         
         html += '</div>';
         html += '</div>';
-        
-        // Labels section
-        if (Object.keys(this.prometheusLabels).length > 0) {
-            html += '<div class="schema-subsection">';
-            html += '<h4>Common Labels</h4>';
-            html += '<div class="schema-list">';
-            
-            for (const labelName of Object.keys(this.prometheusLabels).sort()) {
-                html += '<div class="schema-item" onclick="insertLabel(\'' + Utils.escapeHtml(labelName) + '\')">';
-                html += '<span class="schema-item-name">' + Utils.escapeHtml(labelName) + '</span>';
-                html += '<span class="schema-item-type label">label</span>';
-                html += '</div>';
-            }
-            
-            html += '</div>';
-            html += '</div>';
-        }
         
         html += '</div>';
         return html;
     },
     
-    // Render InfluxDB schema
-    renderInfluxDBSchema() {
-        let html = '<div class="schema-content">';
+    // Render a single Prometheus metric with its labels as children
+    renderPrometheusMetricWithLabels(metric) {
+        let html = '';
         
-        // Retention Policies Dropdown
+        // Metric node with expandable labels
+        html += '<div class="tree-subnode">';
+        html += '<div class="tree-subnode-header metric-header">';
+        html += '<span class="tree-node-icon" onclick="togglePrometheusMetric(this.parentElement, \'' + Utils.escapeHtml(metric) + '\')">▶</span>';
+        html += '<span class="tree-item-icon">📊</span>';
+        html += '<span class="tree-item-name" onclick="insertMetric(\'' + Utils.escapeHtml(metric) + '\')" title="Click to insert metric">' + Utils.escapeHtml(metric) + '</span>';
+        html += '</div>';
+        html += '<div class="tree-subnode-content collapsed" id="labels-' + Utils.escapeHtml(metric).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        
+        // Labels will be loaded when expanded
+        html += '<div class="tree-item-empty">Click arrow to load labels...</div>';
+        
+        html += '</div>';
+        html += '</div>';
+        
+        return html;
+    },
+    
+    // Group metrics by common prefix for better tree organization
+    groupMetricsByPrefix(metrics) {
+        const groups = {};
+        const prefixCounts = {};
+        
+        // Count common prefixes
+        for (const metric of metrics) {
+            const parts = metric.split('_');
+            if (parts.length > 1) {
+                const prefix = parts[0];
+                prefixCounts[prefix] = (prefixCounts[prefix] || 0) + 1;
+            }
+        }
+        
+        // Group metrics by prefix if there are enough items
+        for (const metric of metrics) {
+            const parts = metric.split('_');
+            if (parts.length > 1) {
+                const prefix = parts[0];
+                if (prefixCounts[prefix] >= 3) { // Only group if 3+ metrics share prefix
+                    if (!groups[prefix]) groups[prefix] = [];
+                    groups[prefix].push(metric);
+                    continue;
+                }
+            }
+            
+            // Add to 'other' group
+            if (!groups.other) groups.other = [];
+            groups.other.push(metric);
+        }
+        
+        return groups;
+    },
+    
+    // Render InfluxDB schema as a tree
+    renderInfluxDBSchema() {
+        let html = '<div class="schema-tree">';
+        
+        // Retention Policy tree node
         if (this.influxRetentionPolicies.length > 0) {
-            html += '<div class="schema-subsection">';
-            html += '<h4>Retention Policy</h4>';
-            html += '<select id="retentionPolicySelect" onchange="selectRetentionPolicy(this.value)" class="schema-dropdown">';
-            html += '<option value="">Select retention policy...</option>';
+            html += '<div class="tree-node">';
+            html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
+            html += '<span class="tree-node-icon">▼</span>';
+            html += '<span class="tree-node-label">Retention Policies</span>';
+            html += '<span class="tree-node-count">(' + this.influxRetentionPolicies.length + ')</span>';
+            html += '</div>';
+            html += '<div class="tree-node-content expanded">';
             
             for (const policy of this.influxRetentionPolicies) {
                 const isSelected = policy === this.selectedRetentionPolicy;
-                html += '<option value="' + Utils.escapeHtml(policy) + '"' + (isSelected ? ' selected' : '') + '>';
-                html += Utils.escapeHtml(policy);
-                html += '</option>';
+                html += '<div class="tree-item' + (isSelected ? ' selected' : '') + '" onclick="selectRetentionPolicy(\'' + Utils.escapeHtml(policy) + '\')">';
+                html += '<span class="tree-item-icon">🗄️</span>';
+                html += '<span class="tree-item-name">' + Utils.escapeHtml(policy) + '</span>';
+                html += '</div>';
             }
             
-            html += '</select>';
+            html += '</div>';
             html += '</div>';
         }
         
-        // Measurements Dropdown
-        html += '<div class="schema-subsection">';
-        html += '<h4>Measurement</h4>';
+        // Measurements tree node
+        html += '<div class="tree-node">';
+        html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
+        html += '<span class="tree-node-icon">▼</span>';
+        html += '<span class="tree-node-label">Measurements</span>';
+        html += '<span class="tree-node-count">(' + this.influxMeasurements.length + ')</span>';
+        html += '</div>';
+        html += '<div class="tree-node-content expanded">';
         
         if (this.influxMeasurements.length === 0) {
-            html += '<div class="schema-empty">No measurements found</div>';
+            html += '<div class="tree-item-empty">No measurements found</div>';
         } else {
-            html += '<select id="measurementSelect" onchange="selectMeasurement(this.value)" class="schema-dropdown">';
-            html += '<option value="">Select measurement...</option>';
-            
             for (const measurement of this.influxMeasurements) {
                 const isSelected = measurement === this.selectedMeasurement;
-                html += '<option value="' + Utils.escapeHtml(measurement) + '"' + (isSelected ? ' selected' : '') + '>';
-                html += Utils.escapeHtml(measurement);
-                html += '</option>';
+                html += '<div class="tree-item' + (isSelected ? ' selected' : '') + '" onclick="selectMeasurement(\'' + Utils.escapeHtml(measurement) + '\')">';
+                html += '<span class="tree-item-icon">📋</span>';
+                html += '<span class="tree-item-name">' + Utils.escapeHtml(measurement) + '</span>';
+                html += '</div>';
             }
-            
-            html += '</select>';
         }
         
+        html += '</div>';
         html += '</div>';
         
         // Fields and Tags (when measurement is selected)
         if (this.selectedMeasurement) {
             if (this.isLoadingMeasurement) {
-                // Show loading state for fields and tags
-                html += '<div class="schema-subsection">';
-                html += '<h4>Fields & Tags</h4>';
-                html += '<div class="schema-loading">Loading fields and tags...</div>';
-                html += '</div>';
+                html += '<div class="tree-item-empty">Loading fields and tags...</div>';
             } else {
                 const fields = this.influxFields[this.selectedMeasurement] || [];
                 const tags = this.influxTags[this.selectedMeasurement] || [];
                 
+                // Fields tree node
                 if (fields.length > 0) {
-                    html += '<div class="schema-subsection">';
-                    html += '<h4>Fields (' + Utils.escapeHtml(this.selectedMeasurement) + ')</h4>';
-                    
-                    // Search box for fields
-                    html += '<div class="schema-search">';
-                    html += '<input type="text" id="fieldsSearch" placeholder="Search fields..." onkeyup="filterInfluxFields(this.value)">';
+                    html += '<div class="tree-node">';
+                    html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
+                    html += '<span class="tree-node-icon">▼</span>';
+                    html += '<span class="tree-node-label">Fields (' + Utils.escapeHtml(this.selectedMeasurement) + ')</span>';
+                    html += '<span class="tree-node-count">(' + fields.length + ')</span>';
                     html += '</div>';
-                    
-                    html += '<div class="schema-list" id="fieldsList">';
+                    html += '<div class="tree-node-content expanded" id="fieldsList">';
                     
                     for (const field of fields) {
                         const isSelected = this.selectedField === field;
-                        
-                        html += '<div class="schema-item' + (isSelected ? ' selected' : '') + '" onclick="selectField(\'' + Utils.escapeHtml(field) + '\')">';
-                        html += '<span class="schema-item-name">' + Utils.escapeHtml(field) + '</span>';
-                        html += '<span class="schema-item-type field">field</span>';
+                        html += '<div class="tree-item' + (isSelected ? ' selected' : '') + '" onclick="selectField(\'' + Utils.escapeHtml(field) + '\')">';
+                        html += '<span class="tree-item-icon">🔢</span>';
+                        html += '<span class="tree-item-name">' + Utils.escapeHtml(field) + '</span>';
                         html += '</div>';
                     }
                     
@@ -814,25 +886,15 @@ const Schema = {
                     html += '</div>';
                 }
                 
+                // Tags tree node
                 if (tags.length > 0) {
-                    html += '<div class="schema-subsection">';
-                    html += '<h4>Tags & Values (' + Utils.escapeHtml(this.selectedMeasurement) + ')</h4>';
-                    
-                    // Container for side-by-side layout
-                    html += '<div class="schema-tags-container">';
-                    
-                    // Left panel - Tags
-                    html += '<div class="schema-tags-panel">';
-                    html += '<div class="schema-panel-header">';
-                    html += '<h5>Tag Keys' + (this.selectedField ? ' (for ' + Utils.escapeHtml(this.selectedField) + ')' : '') + '</h5>';
+                    html += '<div class="tree-node">';
+                    html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
+                    html += '<span class="tree-node-icon">▼</span>';
+                    html += '<span class="tree-node-label">Tags (' + Utils.escapeHtml(this.selectedMeasurement) + ')</span>';
+                    html += '<span class="tree-node-count">(' + tags.length + ')</span>';
                     html += '</div>';
-                    
-                    // Search box for tags
-                    html += '<div class="schema-search">';
-                    html += '<input type="text" id="tagsSearch" placeholder="Search tags..." onkeyup="filterInfluxTags(this.value)">';
-                    html += '</div>';
-                    
-                    html += '<div class="schema-list" id="tagsList">';
+                    html += '<div class="tree-node-content expanded" id="tagsList">';
                     
                     // Filter tags based on selected field if available
                     let displayTags = tags;
@@ -846,56 +908,44 @@ const Schema = {
                     
                     for (const tag of displayTags) {
                         const isSelected = this.selectedTag === tag;
-                        
-                        html += '<div class="schema-item' + (isSelected ? ' selected' : '') + '" onclick="selectTag(\'' + Utils.escapeHtml(tag) + '\')">';
-                        html += '<span class="schema-item-name">' + Utils.escapeHtml(tag) + '</span>';
-                        html += '<span class="schema-item-type tag">tag</span>';
+                        html += '<div class="tree-item' + (isSelected ? ' selected' : '') + '" onclick="selectTag(\'' + Utils.escapeHtml(tag) + '\')">';
+                        html += '<span class="tree-item-icon">🏷️</span>';
+                        html += '<span class="tree-item-name">' + Utils.escapeHtml(tag) + '</span>';
                         html += '</div>';
                     }
                     
                     html += '</div>';
-                    html += '</div>'; // End tags panel
-                    
-                    // Right panel - Tag Values
-                    html += '<div class="schema-values-panel">';
-                    html += '<div class="schema-panel-header">';
-                    html += '<h5>Tag Values' + (this.selectedTag ? ' (' + Utils.escapeHtml(this.selectedTag) + ')' : '') + '</h5>';
                     html += '</div>';
                     
+                    // Tag Values (when tag is selected)
                     if (this.selectedTag) {
                         const key = `${this.selectedMeasurement}:${this.selectedTag}`;
                         const tagValues = this.influxTagValues[key] || [];
                         
-                        // Search box for tag values
-                        html += '<div class="schema-search">';
-                        html += '<input type="text" id="tagValuesSearch" placeholder="Search values..." onkeyup="filterTagValues(this.value)">';
+                        html += '<div class="tree-node">';
+                        html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
+                        html += '<span class="tree-node-icon">▼</span>';
+                        html += '<span class="tree-node-label">Values (' + Utils.escapeHtml(this.selectedTag) + ')</span>';
+                        html += '<span class="tree-node-count">(' + tagValues.length + ')</span>';
                         html += '</div>';
-                        
-                        html += '<div class="schema-list" id="tagValuesList">';
+                        html += '<div class="tree-node-content expanded" id="tagValuesList">';
                         
                         if (this.isLoadingTagValues) {
-                            html += '<div class="schema-loading">Loading tag values...</div>';
+                            html += '<div class="tree-item-empty">Loading tag values...</div>';
                         } else if (tagValues.length === 0) {
-                            html += '<div class="schema-empty">No values found</div>';
+                            html += '<div class="tree-item-empty">No values found</div>';
                         } else {
                             for (const value of tagValues) {
-                                html += '<div class="schema-value-item" onclick="insertTagValue(\'' + Utils.escapeHtml(this.selectedTag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
-                                html += '<span class="schema-value-name">' + Utils.escapeHtml(value) + '</span>';
+                                html += '<div class="tree-item" onclick="insertTagValue(\'' + Utils.escapeHtml(this.selectedTag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
+                                html += '<span class="tree-item-icon">📄</span>';
+                                html += '<span class="tree-item-name">' + Utils.escapeHtml(value) + '</span>';
                                 html += '</div>';
                             }
                         }
                         
                         html += '</div>';
-                    } else {
-                        html += '<div class="schema-list">';
-                        html += '<div class="schema-empty">Select a tag to view values</div>';
                         html += '</div>';
                     }
-                    
-                    html += '</div>'; // End values panel
-                    
-                    html += '</div>'; // End container
-                    html += '</div>';
                 }
             }
         }
@@ -1022,6 +1072,61 @@ const Schema = {
 };
 
 // Global functions for HTML onclick handlers
+function toggleTreeNode(header) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+    }
+}
+
+// Toggle Prometheus metric and load its labels
+async function togglePrometheusMetric(header, metric) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Check if labels are already loaded
+        if (!Schema.prometheusLabels[metric]) {
+            // Show loading state
+            content.innerHTML = '<div class="tree-item-empty">Loading labels...</div>';
+            
+            // Load labels for this metric
+            const labels = await Schema.loadPrometheusMetricLabels(metric);
+            
+            // Render the labels
+            let labelsHtml = '';
+            if (labels.length === 0) {
+                labelsHtml = '<div class="tree-item-empty">No labels found</div>';
+            } else {
+                for (const label of labels) {
+                    labelsHtml += '<div class="tree-item" onclick="insertLabel(\'' + Utils.escapeHtml(label) + '\')">';
+                    labelsHtml += '<span class="tree-item-icon">🏷️</span>';
+                    labelsHtml += '<span class="tree-item-name">' + Utils.escapeHtml(label) + '</span>';
+                    labelsHtml += '</div>';
+                }
+            }
+            
+            content.innerHTML = labelsHtml;
+        }
+    }
+}
+
 function filterPrometheusMetrics(searchTerm) {
     const metricsList = document.getElementById('metricsList');
     if (!metricsList) return;

@@ -185,7 +185,9 @@ const Editor = {
         const errorDisplay = document.getElementById('queryErrorDisplay');
         
         if (!query) {
-            errorDisplay.classList.add('hidden');
+            if (errorDisplay) {
+                errorDisplay.classList.add('hidden');
+            }
             return;
         }
         
@@ -196,11 +198,18 @@ const Editor = {
             errors = this.validateInfluxQL(query);
         }
         
-        if (errors.length > 0) {
-            errorDisplay.textContent = errors.join(', ');
-            errorDisplay.classList.remove('hidden');
+        if (errorDisplay) {
+            if (errors.length > 0) {
+                errorDisplay.textContent = errors.join(', ');
+                errorDisplay.classList.remove('hidden');
+            } else {
+                errorDisplay.classList.add('hidden');
+            }
         } else {
-            errorDisplay.classList.add('hidden');
+            // For new interface, we could log errors to console or handle differently
+            if (errors.length > 0) {
+                console.warn('Query validation errors:', errors.join(', '));
+            }
         }
     },
 
@@ -319,10 +328,12 @@ const Editor = {
         });
         
         const promqlOptions = document.getElementById('promqlOptions');
-        if (type === 'promql') {
-            promqlOptions.style.display = 'block';
-        } else {
-            promqlOptions.style.display = 'none';
+        if (promqlOptions) {
+            if (type === 'promql') {
+                promqlOptions.style.display = 'block';
+            } else {
+                promqlOptions.style.display = 'none';
+            }
         }
         
         // Update CodeMirror mode

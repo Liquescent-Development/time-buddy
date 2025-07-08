@@ -108,7 +108,11 @@ function startElectron() {
     
     const electronProcess = spawn('electron', ['.'], {
         stdio: 'inherit',
-        env: { ...process.env, NODE_ENV: 'development' }
+        env: { 
+            ...process.env, 
+            NODE_ENV: 'development',
+            ELECTRON_SERVER_STARTED: 'true'
+        }
     });
     
     electronProcess.on('error', (error) => {

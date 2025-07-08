@@ -2,8 +2,20 @@ const Connections = {
     // Show connected state
     showConnectedState(connection) {
         Utils.hideAllAuthSections();
-        document.getElementById('authInfo').classList.remove('hidden');
-        document.getElementById('connectedUrl').textContent = connection.url + ' (' + connection.username + ')';
+        
+        // Handle old interface elements (may not exist in Electron version)
+        const authInfo = document.getElementById('authInfo');
+        if (authInfo) {
+            authInfo.classList.remove('hidden');
+        }
+        
+        const connectedUrl = document.getElementById('connectedUrl');
+        if (connectedUrl) {
+            connectedUrl.textContent = connection.url + ' (' + connection.username + ')';
+        }
+        
+        // Log connection status for new interface
+        console.log('Connected to:', connection.url, 'as', connection.username);
         
         // Update header status
         const headerStatus = document.getElementById('authHeaderStatus');
@@ -87,8 +99,18 @@ const Connections = {
         GrafanaConfig.password = password;
         GrafanaConfig.currentConnectionId = connectionId;
         
-        const credentials = btoa(username + ':' + password);
-        GrafanaConfig.authHeader = 'Basic ' + credentials;
+        // Use cached token if available, otherwise create new Basic auth
+        if (connectionId && !password) {
+            const cachedToken = Storage.getAuthToken(connectionId);
+            if (cachedToken) {
+                GrafanaConfig.authHeader = cachedToken;
+            } else {
+                throw new Error('No cached authentication token available');
+            }
+        } else {
+            const credentials = btoa(username + ':' + password);
+            GrafanaConfig.authHeader = 'Basic ' + credentials;
+        }
 
         Utils.showStatus('authStatus', 'Connecting...', 'info');
 
@@ -118,6 +140,8 @@ const Connections = {
             }
 
             GrafanaConfig.datasources = await response.json();
+            GrafanaConfig.connected = true;
+            GrafanaConfig.connectionId = connectionId;
             
             Storage.saveGrafanaConfig();
 
@@ -125,9 +149,7 @@ const Connections = {
                 const expiresAt = Date.now() + (24 * 60 * 60 * 1000);
                 Storage.saveAuthToken(connectionId, GrafanaConfig.authHeader, expiresAt);
                 
-                this.loadSavedConnections();
-                const select = document.getElementById('savedConnections');
-                select.value = connectionId;
+                // Connection saved successfully for new interface
                 
                 Utils.showTokenStatus(connectionId, 'Authentication saved for future use', 'success');
             }
@@ -139,9 +161,14 @@ const Connections = {
             
             this.populateDatasources();
             Editor.enableQueryEditor();
+            
+            // Update connection status in new interface
+            if (typeof Interface !== 'undefined' && Interface.loadConnections) {
+                Interface.loadConnections();
+                Interface.updateExecuteButton(Interface.activeTab);
+            }
 
-            document.getElementById('password').value = '';
-            document.getElementById('connectionPassword').value = '';
+            // Password fields cleared automatically in new interface
 
         } catch (error) {
             Utils.showStatus('authStatus', 'Connection failed: ' + error.message, 'error');
@@ -167,65 +194,116 @@ const Connections = {
 
     // Populate datasources dropdown
     populateDatasources() {
-        const select = document.getElementById('datasource');
-        select.innerHTML = '<option value="">Select a data source</option>';
-        
-        const supportedDatasources = GrafanaConfig.datasources.filter(function(ds) {
-            return ds.type === 'influxdb' || ds.type === 'prometheus';
-        });
-        
-        supportedDatasources.forEach(function(ds) {
-            const option = document.createElement('option');
-            option.value = ds.uid;
-            option.textContent = ds.name + ' (' + ds.type + ')';
-            option.dataset.type = ds.type;
-            option.dataset.id = ds.id;
-            select.appendChild(option);
-        });
-        
-        // Add event listener for auto-selecting query type based on datasource
-        select.addEventListener('change', function() {
-            const selectedOption = this.selectedOptions[0];
-            if (selectedOption && selectedOption.dataset.type) {
-                const datasourceType = selectedOption.dataset.type;
-                
-                // Auto-select appropriate query type
-                if (datasourceType === 'prometheus') {
-                    Editor.setQueryType('promql');
-                } else if (datasourceType === 'influxdb') {
-                    Editor.setQueryType('influxql');
-                }
-                
-                // Show a brief notification about the auto-selection
-                Utils.showDataSourceNotification(datasourceType);
+        // For new interface, update the data sources list in the sidebar
+        const datasourceList = document.getElementById('datasourceList');
+        if (datasourceList) {
+            const supportedDatasources = GrafanaConfig.datasources.filter(function(ds) {
+                return ds.type === 'influxdb' || ds.type === 'prometheus';
+            });
+            
+            if (supportedDatasources.length === 0) {
+                datasourceList.innerHTML = '<div class="empty-state">No supported data sources found</div>';
+                return;
             }
-        });
+            
+            let html = '';
+            supportedDatasources.forEach(function(ds) {
+                html += `
+                    <div class="datasource-item" data-uid="${ds.uid}" data-type="${ds.type}" data-id="${ds.id}">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 500; color: #cccccc; font-size: 13px;">${Utils.escapeHtml(ds.name)}</div>
+                            <div style="font-size: 11px; color: #858585;">${ds.type}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            datasourceList.innerHTML = html;
+            
+            // Add click handlers for data source selection
+            datasourceList.querySelectorAll('.datasource-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    // Remove previous selection
+                    datasourceList.querySelectorAll('.datasource-item').forEach(ds => ds.classList.remove('selected'));
+                    // Add selection to clicked item
+                    item.classList.add('selected');
+                    
+                    // Update global config
+                    GrafanaConfig.selectedDatasourceUid = item.dataset.uid;
+                    GrafanaConfig.selectedDatasourceType = item.dataset.type;
+                    GrafanaConfig.selectedDatasourceId = item.dataset.id;
+                    GrafanaConfig.currentDatasourceId = item.dataset.uid; // Also set current for compatibility
+                    
+                    // Auto-select appropriate query type
+                    const queryType = item.dataset.type === 'prometheus' ? 'promql' : 'influxql';
+                    if (typeof Interface !== 'undefined' && Interface.setQueryType) {
+                        // Add small delay to ensure tab DOM is ready
+                        setTimeout(() => {
+                            Interface.setQueryType(Interface.activeTab, queryType);
+                        }, 100);
+                    } else if (typeof Editor !== 'undefined' && Editor.setQueryType) {
+                        Editor.setQueryType(queryType);
+                    }
+                    
+                    // Refresh schema explorer if it's the current view
+                    if (typeof Interface !== 'undefined' && Interface.activeSidebarView === 'explorer') {
+                        Interface.refreshSchemaExplorer();
+                    }
+                    
+                    // Update execute button
+                    if (typeof Interface !== 'undefined' && Interface.updateExecuteButton) {
+                        Interface.updateExecuteButton(Interface.activeTab);
+                    }
+                });
+            });
+        }
         
-        select.disabled = false;
+        // Also update old interface if it exists (for backward compatibility)
+        const select = document.getElementById('datasource');
+        if (select) {
+            select.innerHTML = '<option value="">Select a data source</option>';
+            
+            const supportedDatasources = GrafanaConfig.datasources.filter(function(ds) {
+                return ds.type === 'influxdb' || ds.type === 'prometheus';
+            });
+            
+            supportedDatasources.forEach(function(ds) {
+                const option = document.createElement('option');
+                option.value = ds.uid;
+                option.textContent = ds.name + ' (' + ds.type + ')';
+                option.dataset.type = ds.type;
+                option.dataset.id = ds.id;
+                select.appendChild(option);
+            });
+            
+            // Add event listener for auto-selecting query type based on datasource
+            select.addEventListener('change', function() {
+                const selectedOption = this.selectedOptions[0];
+                if (selectedOption && selectedOption.dataset.type) {
+                    const datasourceType = selectedOption.dataset.type;
+                    
+                    // Auto-select appropriate query type
+                    if (typeof Editor !== 'undefined' && Editor.setQueryType) {
+                        if (datasourceType === 'prometheus') {
+                            Editor.setQueryType('promql');
+                        } else if (datasourceType === 'influxdb') {
+                            Editor.setQueryType('influxql');
+                        }
+                    }
+                    
+                    // Show a brief notification about the auto-selection
+                    if (typeof Utils !== 'undefined' && Utils.showDataSourceNotification) {
+                        Utils.showDataSourceNotification(datasourceType);
+                    }
+                }
+            });
+            
+            select.disabled = false;
+        }
     },
 
     // Load saved connections
-    loadSavedConnections() {
-        const connections = Storage.getSavedConnections();
-        const select = document.getElementById('savedConnections');
-        
-        while (select.children.length > 1) {
-            select.removeChild(select.lastChild);
-        }
-        
-        Object.values(connections).forEach(function(conn) {
-            const option = document.createElement('option');
-            option.value = conn.id;
-            
-            const hasValidToken = Storage.getAuthToken(conn.id) !== null;
-            const statusIcon = hasValidToken ? '🔐' : '🔓';
-            
-            option.textContent = statusIcon + ' ' + conn.name;
-            select.appendChild(option);
-        });
-        
-        this.updateConnectionButtons();
-    },
+    // Removed loadSavedConnections - only needed for old interface
 
     // Load a saved connection
     loadSavedConnection() {
@@ -248,7 +326,7 @@ const Connections = {
             }
         }
         
-        this.updateConnectionButtons();
+        // Connection buttons updated automatically in new interface
     },
 
     // Show password input for connection
@@ -298,7 +376,7 @@ const Connections = {
             Storage.clearAuthToken(connection.id);
             Utils.showTokenStatus(connection.id, 'Stored authentication expired - password required', 'error');
             
-            this.loadSavedConnections();
+            // Connection list updated automatically in new interface
             
             const select = document.getElementById('savedConnections');
             select.value = connection.id;
@@ -307,18 +385,17 @@ const Connections = {
     },
 
     // Connect with stored connection
-    async connectWithStoredConnection() {
-        const select = document.getElementById('savedConnections');
-        const connectionId = select.value;
-        const password = document.getElementById('password').value.trim();
+    async connectWithStoredConnection(connectionId) {
+        // If connectionId is provided directly, use it; otherwise get from form
+        if (!connectionId) {
+            const select = document.getElementById('savedConnections');
+            if (select) {
+                connectionId = select.value;
+            }
+        }
         
         if (!connectionId) {
             Utils.showStatus('authStatus', 'Please select a connection first', 'error');
-            return;
-        }
-        
-        if (!password) {
-            Utils.showStatus('authStatus', 'Please enter your password', 'error');
             return;
         }
         
@@ -330,32 +407,136 @@ const Connections = {
             return;
         }
         
+        // Check if we have a cached authentication token
+        const cachedToken = Storage.getAuthToken(connectionId);
+        if (cachedToken) {
+            // Try to connect with cached token first
+            await this.connectToGrafana(connection.url, connection.username, null, connectionId);
+            return;
+        }
+        
+        // If no cached token, prompt for password
+        const password = await this.promptForPassword(connection.name);
+        if (!password) {
+            Utils.showStatus('authStatus', 'Password required for connection', 'error');
+            return;
+        }
+        
         await this.connectToGrafana(connection.url, connection.username, password, connectionId);
     },
-
-    // Update connection buttons state
-    updateConnectionButtons() {
-        const select = document.getElementById('savedConnections');
-        const hasSelection = select.value !== '';
-        
-        const editBtn = document.getElementById('editConnectionBtn');
-        const deleteBtn = document.getElementById('deleteConnectionBtn');
-        const clearTokenBtn = document.getElementById('clearTokenBtn');
-        
-        if (editBtn) editBtn.disabled = !hasSelection;
-        if (deleteBtn) deleteBtn.disabled = !hasSelection;
-        
-        if (clearTokenBtn) {
-            if (hasSelection) {
-                const connectionId = select.value;
-                const hasToken = Storage.getAuthToken(connectionId) !== null;
-                clearTokenBtn.disabled = !hasToken;
-                clearTokenBtn.style.display = hasToken ? 'inline-block' : 'none';
-            } else {
-                clearTokenBtn.style.display = 'none';
-            }
-        }
+    
+    async promptForPassword(connectionName) {
+        return new Promise((resolve) => {
+            // Create password dialog
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.6);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 1000;
+            `;
+            
+            const dialog = document.createElement('div');
+            dialog.className = 'password-dialog';
+            dialog.style.cssText = `
+                background-color: #2d2d30;
+                border: 1px solid #454545;
+                border-radius: 4px;
+                padding: 20px;
+                min-width: 300px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            `;
+            
+            dialog.innerHTML = `
+                <div style="margin-bottom: 16px; color: #cccccc; font-size: 14px; font-weight: 500;">
+                    Connect to ${Utils.escapeHtml(connectionName)}
+                </div>
+                <div style="margin-bottom: 8px; color: #cccccc; font-size: 12px;">
+                    Password:
+                </div>
+                <input type="password" id="passwordInput" style="
+                    width: 100%;
+                    padding: 8px;
+                    border: 1px solid #454545;
+                    border-radius: 3px;
+                    background-color: #3c3c3c;
+                    color: #cccccc;
+                    font-size: 13px;
+                    margin-bottom: 16px;
+                " placeholder="Enter password...">
+                <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                    <button id="cancelBtn" style="
+                        padding: 8px 16px;
+                        border: 1px solid #454545;
+                        border-radius: 3px;
+                        background-color: transparent;
+                        color: #cccccc;
+                        font-size: 13px;
+                        cursor: pointer;
+                    ">Cancel</button>
+                    <button id="connectBtn" style="
+                        padding: 8px 16px;
+                        border: none;
+                        border-radius: 3px;
+                        background-color: #007acc;
+                        color: white;
+                        font-size: 13px;
+                        cursor: pointer;
+                    ">Connect</button>
+                </div>
+            `;
+            
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+            
+            const passwordInput = dialog.querySelector('#passwordInput');
+            const cancelBtn = dialog.querySelector('#cancelBtn');
+            const connectBtn = dialog.querySelector('#connectBtn');
+            
+            // Focus password input
+            passwordInput.focus();
+            
+            // Handle connect button
+            connectBtn.addEventListener('click', () => {
+                const password = passwordInput.value;
+                document.body.removeChild(overlay);
+                resolve(password);
+            });
+            
+            // Handle cancel button
+            cancelBtn.addEventListener('click', () => {
+                document.body.removeChild(overlay);
+                resolve(null);
+            });
+            
+            // Handle Enter key
+            passwordInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    const password = passwordInput.value;
+                    document.body.removeChild(overlay);
+                    resolve(password);
+                }
+            });
+            
+            // Handle Escape key
+            document.addEventListener('keydown', function escapeHandler(e) {
+                if (e.key === 'Escape') {
+                    document.removeEventListener('keydown', escapeHandler);
+                    document.body.removeChild(overlay);
+                    resolve(null);
+                }
+            });
+        });
     },
+
+    // Removed updateConnectionButtons - only needed for old interface
 
     // Clear connection token
     clearConnectionToken(connectionId) {
@@ -363,13 +544,13 @@ const Connections = {
         
         if (confirm('Clear stored authentication for this connection?')) {
             Storage.clearAuthToken(connectionId);
-            this.loadSavedConnections();
+            // Connection list updated automatically in new interface
             
             const select = document.getElementById('savedConnections');
             if (select.value === connectionId) {
                 Utils.showTokenStatus(connectionId, 'Authentication cleared - password required', 'info');
             }
-            this.updateConnectionButtons();
+            // Connection buttons updated automatically in new interface
         }
     },
 
@@ -389,7 +570,7 @@ const Connections = {
             form.classList.remove('hidden');
             
             document.getElementById('savedConnections').value = '';
-            this.updateConnectionButtons();
+            // Connection buttons updated automatically in new interface
         } else {
             Utils.hideAllAuthSections();
         }
@@ -436,12 +617,12 @@ const Connections = {
         };
         
         Storage.saveConnectionToStorage(connection);
-        this.loadSavedConnections();
+        // Connection list updated automatically in new interface
         
         document.getElementById('savedConnections').value = connection.id;
         
         this.cancelConnectionForm();
-        this.updateConnectionButtons();
+        // Connection buttons updated automatically in new interface
         
         Utils.showStatus('authStatus', 'Connection "' + name + '" saved successfully', 'success');
     },
@@ -466,11 +647,11 @@ const Connections = {
         };
         
         Storage.saveConnectionToStorage(connection);
-        this.loadSavedConnections();
+        // Connection list updated automatically in new interface
         
         document.getElementById('savedConnections').value = connection.id;
         this.cancelConnectionForm();
-        this.updateConnectionButtons();
+        // Connection buttons updated automatically in new interface
         
         this.connectToGrafana(url, username, password, connection.id);
     },
@@ -484,7 +665,7 @@ const Connections = {
         if (select.value) {
             this.loadSavedConnection();
         }
-        this.updateConnectionButtons();
+        // Connection buttons updated automatically in new interface
     },
 
     // Delete connection
@@ -500,12 +681,12 @@ const Connections = {
         if (connection && confirm('Are you sure you want to delete the connection "' + connection.name + '"? This will also clear any stored authentication.')) {
             Storage.deleteConnectionFromStorage(connectionId);
             Storage.clearAuthToken(connectionId);
-            this.loadSavedConnections();
+            // Connection list updated automatically in new interface
             
             select.value = '';
             Utils.hideAllAuthSections();
             Utils.clearTokenStatus();
-            this.updateConnectionButtons();
+            // Connection buttons updated automatically in new interface
         }
     }
 };

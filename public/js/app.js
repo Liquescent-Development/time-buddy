@@ -6,7 +6,8 @@ const App = {
         // Initialize the new VS Code-like interface
         Interface.initialize();
         
-        // Initialize existing modules that are still used
+        // Initialize CodeMirror modes and helpers for the new interface
+        Editor.setupCodeMirrorHelpers();
         Variables.initialize();
         Dashboard.initialize();
         

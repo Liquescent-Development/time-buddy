@@ -169,11 +169,18 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: 8px 0;
+    min-height: 200px;
+    height: auto;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Panel Sections */
 .panel-section {
     margin-bottom: 16px;
+    min-height: 50px;
+    display: flex;
+    flex-direction: column;
 }
 
 .section-header {
@@ -221,7 +228,12 @@ body {
 
 /* Connection List */
 .connection-list, .datasource-list {
-    padding: 0 8px;
+    padding: 8px;
+    min-height: 100px;
+    height: auto;
+    overflow: visible;
+    flex: 1;
+    display: block;
 }
 
 .connection-item, .datasource-item {
@@ -926,4 +938,187 @@ body {
 
 .electron-app .title-bar button {
     -webkit-app-region: no-drag;
+}
+
+/* Tree View Styles (VS Code-like) */
+.schema-tree {
+    color: #cccccc;
+    font-size: 13px;
+    line-height: 1.4;
+    padding: 8px 0;
+}
+
+.tree-node, .tree-subnode {
+    margin-bottom: 2px;
+}
+
+.tree-node-header, .tree-subnode-header {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px 4px 0;
+    cursor: pointer;
+    user-select: none;
+    border-radius: 3px;
+    transition: background-color 0.15s ease;
+}
+
+.tree-node-header:hover, .tree-subnode-header:hover {
+    background-color: #2a2d2e;
+}
+
+.tree-node-icon {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 4px;
+    font-size: 10px;
+    color: #858585;
+    flex-shrink: 0;
+}
+
+.tree-node-label {
+    font-weight: 500;
+    color: #cccccc;
+    flex: 1;
+}
+
+.tree-node-count {
+    font-size: 11px;
+    color: #858585;
+    margin-left: 8px;
+}
+
+.tree-node-content, .tree-subnode-content {
+    margin-left: 16px;
+    border-left: 1px solid #404040;
+    padding-left: 8px;
+    transition: all 0.15s ease;
+}
+
+.tree-node-content.expanded, .tree-subnode-content.expanded {
+    display: block;
+    max-height: none;
+    opacity: 1;
+}
+
+.tree-node-content.collapsed, .tree-subnode-content.collapsed {
+    display: none;
+    max-height: 0;
+    opacity: 0;
+}
+
+.tree-subnode {
+    margin-left: 8px;
+}
+
+.tree-subnode-header {
+    padding-left: 4px;
+}
+
+.tree-item {
+    display: flex;
+    align-items: center;
+    padding: 2px 8px 2px 4px;
+    cursor: pointer;
+    border-radius: 3px;
+    margin: 1px 0;
+    transition: background-color 0.15s ease;
+}
+
+.tree-item:hover {
+    background-color: #2a2d2e;
+}
+
+.tree-item:active {
+    background-color: #094771;
+}
+
+.tree-item.selected {
+    background-color: #094771;
+}
+
+.tree-item-icon {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 6px;
+    font-size: 12px;
+    flex-shrink: 0;
+}
+
+.tree-item-name {
+    color: #cccccc;
+    font-size: 13px;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tree-item-empty {
+    padding: 8px 16px;
+    color: #858585;
+    font-style: italic;
+    text-align: center;
+}
+
+/* Schema search input in tree */
+.schema-tree .schema-search {
+    padding: 8px;
+    margin-bottom: 8px;
+}
+
+.schema-tree .schema-search input {
+    width: 100%;
+    padding: 6px 8px;
+    background-color: #3c3c3c;
+    border: 1px solid #454545;
+    border-radius: 3px;
+    color: #cccccc;
+    font-size: 12px;
+    outline: none;
+}
+
+.schema-tree .schema-search input:focus {
+    border-color: #007acc;
+    box-shadow: 0 0 0 1px #007acc;
+}
+
+.schema-tree .schema-search input::placeholder {
+    color: #858585;
+}
+
+/* Prometheus metric header styling */
+.metric-header {
+    display: flex;
+    align-items: center;
+}
+
+.metric-header .tree-item-name {
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    transition: background-color 0.15s ease;
+}
+
+.metric-header .tree-item-name:hover {
+    background-color: #2a2d2e;
+}
+
+.metric-header .tree-node-icon {
+    cursor: pointer;
+    padding: 2px;
+    margin: -2px;
+    border-radius: 3px;
+    transition: background-color 0.15s ease;
+}
+
+.metric-header .tree-node-icon:hover {
+    background-color: #2a2d2e;
 }

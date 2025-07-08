@@ -27,6 +27,9 @@ const Interface = {
         // Force initial content load
         setTimeout(() => {
             this.updateSidebarContent('connections');
+            
+            // Ensure CodeMirror is initialized for the active tab
+            this.ensureCodeMirrorInitialized();
         }, 100);
     },
 
@@ -53,6 +56,11 @@ const Interface = {
             panel.classList.remove('active');
         });
         document.getElementById(`${view}Panel`).classList.add('active');
+        
+        // Deactivate all panel sections first (except results panel)
+        document.querySelectorAll('.panel-section:not(#resultsPanel)').forEach(section => {
+            section.classList.remove('active');
+        });
 
         this.activeSidebarView = view;
 
@@ -64,6 +72,10 @@ const Interface = {
         console.log('Updating sidebar content for view:', view);
         switch (view) {
             case 'connections':
+                // Activate connection panel sections
+                document.querySelectorAll('#connectionsPanel .panel-section').forEach(section => {
+                    section.classList.add('active');
+                });
                 this.loadConnections();
                 this.loadDataSources();
                 break;
@@ -98,11 +110,15 @@ const Interface = {
     },
 
     createInitialTab() {
+        console.log('Creating initial tab...');
         // Create the initial tab content if it doesn't exist
         const existingContainer = document.querySelector(`[data-tab-id="untitled-1"].editor-container`);
+        console.log('Existing container found:', !!existingContainer);
         if (!existingContainer) {
+            console.log('Creating tab content for untitled-1');
             this.createTabContent('untitled-1');
         }
+        console.log('Switching to untitled-1 tab');
         this.switchTab('untitled-1');
     },
 
@@ -151,7 +167,9 @@ const Interface = {
     },
 
     createTabContent(tabId) {
+        console.log('createTabContent called for:', tabId);
         const tabContent = document.querySelector('.tab-content');
+        console.log('tabContent element found:', !!tabContent);
         const container = document.createElement('div');
         container.className = 'editor-container';
         container.dataset.tabId = tabId;
@@ -195,16 +213,44 @@ const Interface = {
             });
         });
         
-        // Initialize CodeMirror for this tab
-        this.initializeCodeMirror(tabId);
+        // Initialize CodeMirror for this tab after DOM is ready
+        console.log('About to initialize CodeMirror for tab:', tabId);
+        setTimeout(() => {
+            console.log('Timeout executed, calling initializeCodeMirror for tab:', tabId);
+            this.initializeCodeMirror(tabId);
+        }, 50);
     },
 
     initializeCodeMirror(tabId) {
         const container = document.querySelector(`[data-tab-id="${tabId}"] .code-editor-container`);
-        const textarea = container.querySelector('textarea');
+        if (!container) {
+            console.error('CodeMirror container not found for tab:', tabId);
+            return;
+        }
         
-        const editor = CodeMirror.fromTextArea(textarea, {
-            mode: 'text/x-sql',
+        const textarea = container.querySelector('textarea');
+        if (!textarea) {
+            console.error('Textarea not found for tab:', tabId);
+            return;
+        }
+        
+        console.log('Initializing CodeMirror for tab:', tabId);
+        console.log('Current query type:', GrafanaConfig.currentQueryType);
+        console.log('CodeMirror available:', typeof CodeMirror);
+        console.log('PromQL mode available:', CodeMirror.modes && CodeMirror.modes.promql);
+        
+        try {
+            let mode = GrafanaConfig.currentQueryType === 'promql' ? 'promql' : 'sql';
+            
+            // Fallback to basic modes if custom modes aren't available
+            if (mode === 'promql' && (!CodeMirror.modes || !CodeMirror.modes.promql)) {
+                console.warn('PromQL mode not available, falling back to text/x-sql');
+                mode = 'text/x-sql';
+            }
+            console.log('Using mode:', mode);
+            
+            const editor = CodeMirror.fromTextArea(textarea, {
+            mode: mode,
             theme: 'monokai',
             lineNumbers: true,
             matchBrackets: true,
@@ -219,15 +265,53 @@ const Interface = {
             }
         });
 
-        // Store editor reference
-        const tabData = this.tabs.get(tabId);
-        tabData.editor = editor;
+            // Store editor reference
+            const tabData = this.tabs.get(tabId);
+            tabData.editor = editor;
+            
+            // Always set global reference initially, switchTab will update it if needed
+            GrafanaConfig.queryEditor = editor;
+            console.log('Set global queryEditor for tab:', tabId);
+            
+            // Listen for changes
+            editor.on('change', () => {
+                tabData.content = editor.getValue();
+                this.markTabUnsaved(tabId);
+            });
+            
+            console.log('CodeMirror successfully initialized for tab:', tabId);
+            
+        } catch (error) {
+            console.error('Failed to initialize CodeMirror for tab:', tabId, error);
+        }
+    },
+    
+    ensureCodeMirrorInitialized() {
+        console.log('Ensuring CodeMirror is initialized...');
+        console.log('Active tab:', this.activeTab);
+        console.log('Available tabs:', Array.from(this.tabs.keys()));
         
-        // Listen for changes
-        editor.on('change', () => {
-            tabData.content = editor.getValue();
-            this.markTabUnsaved(tabId);
-        });
+        if (!this.activeTab) {
+            console.log('No active tab, creating initial tab');
+            this.createInitialTab();
+            return;
+        }
+        
+        const tabData = this.tabs.get(this.activeTab);
+        if (!tabData) {
+            console.log('No tab data found for active tab');
+            return;
+        }
+        
+        if (!tabData.editor) {
+            console.log('No editor found for active tab, initializing...');
+            this.initializeCodeMirror(this.activeTab);
+        } else {
+            console.log('Editor already exists for tab:', this.activeTab);
+            // Make sure global reference is set
+            GrafanaConfig.queryEditor = tabData.editor;
+            console.log('Set global queryEditor reference');
+        }
     },
 
     switchTab(tabId) {
@@ -245,9 +329,11 @@ const Interface = {
 
         this.activeTab = tabId;
         
-        // Refresh CodeMirror
+        // Refresh CodeMirror and set global reference
         const tabData = this.tabs.get(tabId);
         if (tabData && tabData.editor) {
+            GrafanaConfig.queryEditor = tabData.editor; // Set global reference
+            console.log('Updated global queryEditor for tab:', tabId);
             setTimeout(() => tabData.editor.refresh(), 1);
         }
 
@@ -285,23 +371,39 @@ const Interface = {
     },
 
     setQueryType(tabId, type) {
-        const container = document.querySelector(`[data-tab-id="${tabId}"]`);
+        const container = document.querySelector(`[data-tab-id="${tabId}"].editor-container`);
+        if (!container) {
+            console.warn('Container not found for tab:', tabId);
+            return;
+        }
         
         // Update button states
-        container.querySelectorAll('.query-type-button').forEach(btn => {
+        const queryTypeButtons = container.querySelectorAll('.query-type-button');
+        queryTypeButtons.forEach(btn => {
             btn.classList.remove('active');
         });
-        container.querySelector(`[data-type="${type}"]`).classList.add('active');
+        
+        const targetButton = container.querySelector(`[data-type="${type}"]`);
+        if (targetButton) {
+            targetButton.classList.add('active');
+        } else {
+            console.warn('Query type button not found for type:', type);
+        }
         
         // Update tab data
         const tabData = this.tabs.get(tabId);
-        tabData.queryType = type;
-        
-        // Update CodeMirror mode
-        if (tabData.editor) {
-            const mode = type === 'promql' ? 'text/x-sql' : 'text/x-sql'; // Would need PromQL mode
-            tabData.editor.setOption('mode', mode);
+        if (tabData) {
+            tabData.queryType = type;
+            
+            // Update CodeMirror mode
+            if (tabData.editor) {
+                const mode = type === 'promql' ? 'promql' : 'sql';
+                tabData.editor.setOption('mode', mode);
+            }
         }
+        
+        // Update global query type for compatibility
+        GrafanaConfig.currentQueryType = type;
         
         this.updateExecuteButton(tabId);
     },
@@ -397,9 +499,9 @@ const Interface = {
         if (!hasConnections) {
             console.log('No connections found, showing empty state');
             const html = `
-                <div class="empty-state" style="padding: 20px; text-align: center; background-color: #2d2d30; margin: 10px; border-radius: 4px; min-height: 100px; display: block !important; visibility: visible !important; position: relative; z-index: 999;">
+                <div class="empty-state" style="padding: 20px; text-align: center; background-color: #2d2d30; margin: 10px; border-radius: 4px; min-height: 100px; display: block; visibility: visible;">
                     <div style="margin-bottom: 16px; color: #cccccc; font-size: 14px;">No connections configured</div>
-                    <button class="primary-button" onclick="showNewConnectionDialog()" style="font-size: 13px; padding: 10px 16px; background-color: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500; display: inline-block !important; visibility: visible !important;">
+                    <button class="primary-button" onclick="showNewConnectionDialog()" style="font-size: 13px; padding: 10px 16px; background-color: #007acc; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 500;">
                         Add Your First Connection
                     </button>
                 </div>
@@ -425,13 +527,15 @@ const Interface = {
             return;
         }
         
+        console.log('Has connections, building connection list HTML...');
+        
         let html = '';
         for (const [id, connection] of Object.entries(connections)) {
-            const isConnected = GrafanaConfig.connectionId === id;
+            const isConnected = GrafanaConfig.connectionId === id || GrafanaConfig.currentConnectionId === id;
             html += `
                 <div class="connection-item ${isConnected ? 'active connected' : ''}" data-connection-id="${id}">
-                    <div>
-                        <div style="font-weight: 500;">${Utils.escapeHtml(connection.name)}</div>
+                    <div style="flex: 1;">
+                        <div style="font-weight: 500; color: #cccccc; font-size: 13px;">${Utils.escapeHtml(connection.name)}</div>
                         <div style="font-size: 11px; color: #858585;">${Utils.escapeHtml(connection.url)}</div>
                     </div>
                     <div class="connection-status"></div>
@@ -441,12 +545,49 @@ const Interface = {
         
         connectionList.innerHTML = html;
         
+        // Ensure proper styling for connection list
+        connectionList.style.cssText = `
+            display: block !important;
+            visibility: visible !important;
+            height: auto !important;
+            min-height: 100px !important;
+            overflow: visible !important;
+            flex: 1 !important;
+        `;
+        
+        console.log('connectionList after styling:', connectionList);
+        console.log('connectionList parent:', connectionList.parentElement);
+        console.log('connectionList getBoundingClientRect:', connectionList.getBoundingClientRect());
+        
+        // Force each connection item to be visible
+        connectionList.querySelectorAll('.connection-item').forEach(item => {
+            item.style.display = 'flex';
+            item.style.visibility = 'visible';
+            item.style.opacity = '1';
+            item.style.height = 'auto';
+        });
+        
+        console.log('Set connectionList HTML with', connectionList.querySelectorAll('.connection-item').length, 'connections');
+        
+        // Remove the backup button if connections exist
+        const backupBtn = document.querySelector('.backup-add-btn');
+        if (backupBtn) {
+            backupBtn.remove();
+            console.log('Removed backup button');
+        }
+        
         // Add click handlers
         connectionList.querySelectorAll('.connection-item').forEach(item => {
             item.addEventListener('click', () => {
                 this.connectToConnection(item.dataset.connectionId);
             });
         });
+        
+        // Debug: Check if HTML is still there after a short delay
+        setTimeout(() => {
+            console.log('After timeout - connectionList contains:', connectionList.innerHTML.length, 'characters');
+            console.log('Connection items found:', connectionList.querySelectorAll('.connection-item').length);
+        }, 50);
     },
 
     loadDataSources() {
@@ -463,8 +604,13 @@ const Interface = {
 
     // Execute Query
     executeQuery(tabId) {
+        console.log('executeQuery called with tabId:', tabId);
         const tabData = this.tabs.get(tabId || this.activeTab);
-        if (!tabData || !tabData.editor) return;
+        console.log('tabData:', tabData);
+        if (!tabData || !tabData.editor) {
+            console.error('No tab data or editor found');
+            return;
+        }
         
         const query = tabData.editor.getValue();
         if (!query.trim()) {
@@ -494,22 +640,29 @@ const Interface = {
     },
 
     updateExecuteButton(tabId) {
-        const container = document.querySelector(`[data-tab-id="${tabId}"]`);
-        if (!container) {
-            console.warn('Container not found for tab:', tabId);
-            return;
+        // Update per-tab execute button in new interface
+        if (tabId) {
+            const tabContainer = document.querySelector(`[data-tab-id="${tabId}"]`);
+            if (tabContainer) {
+                const executeBtn = tabContainer.querySelector('.execute-button');
+                if (executeBtn) {
+                    if (GrafanaConfig.connected && (GrafanaConfig.selectedDatasourceId || GrafanaConfig.selectedDatasourceUid)) {
+                        executeBtn.disabled = false;
+                    } else {
+                        executeBtn.disabled = true;
+                    }
+                }
+            }
         }
         
-        const executeBtn = container.querySelector('.execute-button');
-        if (!executeBtn) {
-            console.warn('Execute button not found for tab:', tabId);
-            return;
-        }
-        
-        if (GrafanaConfig.connected && GrafanaConfig.currentDatasourceId) {
-            executeBtn.disabled = false;
-        } else {
-            executeBtn.disabled = true;
+        // Also update global execute button for backward compatibility
+        const globalExecuteBtn = document.getElementById('executeBtn');
+        if (globalExecuteBtn) {
+            if (GrafanaConfig.connected && (GrafanaConfig.selectedDatasourceId || GrafanaConfig.selectedDatasourceUid)) {
+                globalExecuteBtn.disabled = false;
+            } else {
+                globalExecuteBtn.disabled = true;
+            }
         }
     },
 
@@ -557,10 +710,34 @@ const Interface = {
         });
     },
 
-    // Placeholder methods to be implemented
+    // Schema explorer implementation
     refreshSchemaExplorer() {
         const container = document.getElementById('schemaContainer');
-        container.innerHTML = '<div class="empty-state">Select a data source to explore schema</div>';
+        
+        if (!GrafanaConfig.connected) {
+            container.innerHTML = '<div class="empty-state">Connect to Grafana first</div>';
+            return;
+        }
+        
+        if (!GrafanaConfig.selectedDatasourceUid) {
+            container.innerHTML = '<div class="empty-state">Select a data source to explore schema</div>';
+            return;
+        }
+        
+        // Show loading state
+        container.innerHTML = '<div class="empty-state">Loading schema...</div>';
+        
+        // Update Schema module with current datasource info
+        Schema.currentDatasourceType = GrafanaConfig.selectedDatasourceType;
+        Schema.currentDatasourceId = GrafanaConfig.selectedDatasourceUid; // Use UID, not numeric ID
+        
+        console.log('Refreshing schema for:', {
+            type: Schema.currentDatasourceType,
+            uid: Schema.currentDatasourceId
+        });
+        
+        // Load and render schema
+        Schema.loadSchema();
     },
 
     refreshDashboards() {
