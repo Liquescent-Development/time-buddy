@@ -806,151 +806,105 @@ const Schema = {
         return groups;
     },
     
-    // Render InfluxDB schema as a tree
+    // Render InfluxDB schema as a tree with proper hierarchy
     renderInfluxDBSchema() {
         let html = '<div class="schema-tree">';
         
-        // Retention Policy tree node
+        // Retention Policies as top level, with measurements as children
         if (this.influxRetentionPolicies.length > 0) {
-            html += '<div class="tree-node">';
-            html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
-            html += '<span class="tree-node-icon">▼</span>';
-            html += '<span class="tree-node-label">Retention Policies</span>';
-            html += '<span class="tree-node-count">(' + this.influxRetentionPolicies.length + ')</span>';
-            html += '</div>';
-            html += '<div class="tree-node-content expanded">';
-            
             for (const policy of this.influxRetentionPolicies) {
-                const isSelected = policy === this.selectedRetentionPolicy;
-                html += '<div class="tree-item' + (isSelected ? ' selected' : '') + '" onclick="selectRetentionPolicy(\'' + Utils.escapeHtml(policy) + '\')">';
-                html += '<span class="tree-item-icon">🗄️</span>';
-                html += '<span class="tree-item-name">' + Utils.escapeHtml(policy) + '</span>';
-                html += '</div>';
+                html += this.renderRetentionPolicyWithMeasurements(policy);
             }
-            
-            html += '</div>';
-            html += '</div>';
-        }
-        
-        // Measurements tree node
-        html += '<div class="tree-node">';
-        html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
-        html += '<span class="tree-node-icon">▼</span>';
-        html += '<span class="tree-node-label">Measurements</span>';
-        html += '<span class="tree-node-count">(' + this.influxMeasurements.length + ')</span>';
-        html += '</div>';
-        html += '<div class="tree-node-content expanded">';
-        
-        if (this.influxMeasurements.length === 0) {
-            html += '<div class="tree-item-empty">No measurements found</div>';
         } else {
-            for (const measurement of this.influxMeasurements) {
-                const isSelected = measurement === this.selectedMeasurement;
-                html += '<div class="tree-item' + (isSelected ? ' selected' : '') + '" onclick="selectMeasurement(\'' + Utils.escapeHtml(measurement) + '\')">';
-                html += '<span class="tree-item-icon">📋</span>';
-                html += '<span class="tree-item-name">' + Utils.escapeHtml(measurement) + '</span>';
-                html += '</div>';
-            }
+            html += '<div class="tree-item-empty">No retention policies found</div>';
         }
         
         html += '</div>';
-        html += '</div>';
+        return html;
+    },
+    
+    // Render a retention policy with its measurements as children
+    renderRetentionPolicyWithMeasurements(retentionPolicy) {
+        let html = '';
         
-        // Fields and Tags (when measurement is selected)
-        if (this.selectedMeasurement) {
-            if (this.isLoadingMeasurement) {
-                html += '<div class="tree-item-empty">Loading fields and tags...</div>';
-            } else {
-                const fields = this.influxFields[this.selectedMeasurement] || [];
-                const tags = this.influxTags[this.selectedMeasurement] || [];
-                
-                // Fields tree node
-                if (fields.length > 0) {
-                    html += '<div class="tree-node">';
-                    html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
-                    html += '<span class="tree-node-icon">▼</span>';
-                    html += '<span class="tree-node-label">Fields (' + Utils.escapeHtml(this.selectedMeasurement) + ')</span>';
-                    html += '<span class="tree-node-count">(' + fields.length + ')</span>';
-                    html += '</div>';
-                    html += '<div class="tree-node-content expanded" id="fieldsList">';
-                    
-                    for (const field of fields) {
-                        const isSelected = this.selectedField === field;
-                        html += '<div class="tree-item' + (isSelected ? ' selected' : '') + '" onclick="selectField(\'' + Utils.escapeHtml(field) + '\')">';
-                        html += '<span class="tree-item-icon">🔢</span>';
-                        html += '<span class="tree-item-name">' + Utils.escapeHtml(field) + '</span>';
-                        html += '</div>';
-                    }
-                    
-                    html += '</div>';
-                    html += '</div>';
-                }
-                
-                // Tags tree node
-                if (tags.length > 0) {
-                    html += '<div class="tree-node">';
-                    html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
-                    html += '<span class="tree-node-icon">▼</span>';
-                    html += '<span class="tree-node-label">Tags (' + Utils.escapeHtml(this.selectedMeasurement) + ')</span>';
-                    html += '<span class="tree-node-count">(' + tags.length + ')</span>';
-                    html += '</div>';
-                    html += '<div class="tree-node-content expanded" id="tagsList">';
-                    
-                    // Filter tags based on selected field if available
-                    let displayTags = tags;
-                    if (this.selectedField) {
-                        const key = `${this.selectedMeasurement}:${this.selectedField}`;
-                        const associatedTags = this.fieldAssociatedTags[key];
-                        if (associatedTags !== null && associatedTags !== undefined) {
-                            displayTags = tags.filter(tag => associatedTags.includes(tag));
-                        }
-                    }
-                    
-                    for (const tag of displayTags) {
-                        const isSelected = this.selectedTag === tag;
-                        html += '<div class="tree-item' + (isSelected ? ' selected' : '') + '" onclick="selectTag(\'' + Utils.escapeHtml(tag) + '\')">';
-                        html += '<span class="tree-item-icon">🏷️</span>';
-                        html += '<span class="tree-item-name">' + Utils.escapeHtml(tag) + '</span>';
-                        html += '</div>';
-                    }
-                    
-                    html += '</div>';
-                    html += '</div>';
-                    
-                    // Tag Values (when tag is selected)
-                    if (this.selectedTag) {
-                        const key = `${this.selectedMeasurement}:${this.selectedTag}`;
-                        const tagValues = this.influxTagValues[key] || [];
-                        
-                        html += '<div class="tree-node">';
-                        html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
-                        html += '<span class="tree-node-icon">▼</span>';
-                        html += '<span class="tree-node-label">Values (' + Utils.escapeHtml(this.selectedTag) + ')</span>';
-                        html += '<span class="tree-node-count">(' + tagValues.length + ')</span>';
-                        html += '</div>';
-                        html += '<div class="tree-node-content expanded" id="tagValuesList">';
-                        
-                        if (this.isLoadingTagValues) {
-                            html += '<div class="tree-item-empty">Loading tag values...</div>';
-                        } else if (tagValues.length === 0) {
-                            html += '<div class="tree-item-empty">No values found</div>';
-                        } else {
-                            for (const value of tagValues) {
-                                html += '<div class="tree-item" onclick="insertTagValue(\'' + Utils.escapeHtml(this.selectedTag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
-                                html += '<span class="tree-item-icon">📄</span>';
-                                html += '<span class="tree-item-name">' + Utils.escapeHtml(value) + '</span>';
-                                html += '</div>';
-                            }
-                        }
-                        
-                        html += '</div>';
-                        html += '</div>';
-                    }
-                }
-            }
-        }
+        html += '<div class="tree-node">';
+        html += '<div class="tree-node-header" onclick="toggleInfluxRetentionPolicy(this, \'' + Utils.escapeHtml(retentionPolicy) + '\')">';
+        html += '<span class="tree-node-icon">▶</span>';
+        html += '<span class="tree-item-icon">🗄️</span>';
+        html += '<span class="tree-node-label">' + Utils.escapeHtml(retentionPolicy) + '</span>';
+        html += '<span class="tree-node-count">(' + this.influxMeasurements.length + ' measurements)</span>';
+        html += '</div>';
+        html += '<div class="tree-node-content collapsed" id="measurements-' + Utils.escapeHtml(retentionPolicy).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        
+        // Measurements will be loaded when expanded
+        html += '<div class="tree-item-empty">Click to load measurements...</div>';
         
         html += '</div>';
+        html += '</div>';
+        
+        return html;
+    },
+    
+    // Render a measurement with its fields as children
+    renderMeasurementWithFields(measurement, retentionPolicy) {
+        let html = '';
+        
+        html += '<div class="tree-subnode">';
+        html += '<div class="tree-subnode-header measurement-header">';
+        html += '<span class="tree-node-icon" onclick="toggleInfluxMeasurement(this.parentElement, \'' + Utils.escapeHtml(measurement) + '\', \'' + Utils.escapeHtml(retentionPolicy) + '\')">▶</span>';
+        html += '<span class="tree-item-icon">📋</span>';
+        html += '<span class="tree-item-name" onclick="insertMeasurement(\'' + Utils.escapeHtml(measurement) + '\')" title="Click to insert measurement">' + Utils.escapeHtml(measurement) + '</span>';
+        html += '</div>';
+        html += '<div class="tree-subnode-content collapsed" id="fields-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        
+        // Fields will be loaded when expanded
+        html += '<div class="tree-item-empty">Click arrow to load fields...</div>';
+        
+        html += '</div>';
+        html += '</div>';
+        
+        return html;
+    },
+    
+    // Render a field with its tag keys as children
+    renderFieldWithTags(field, measurement) {
+        let html = '';
+        
+        html += '<div class="tree-subnode">';
+        html += '<div class="tree-subnode-header field-header">';
+        html += '<span class="tree-node-icon" onclick="toggleInfluxField(this.parentElement, \'' + Utils.escapeHtml(field) + '\', \'' + Utils.escapeHtml(measurement) + '\')">▶</span>';
+        html += '<span class="tree-item-icon">🔢</span>';
+        html += '<span class="tree-item-name" onclick="insertField(\'' + Utils.escapeHtml(field) + '\')" title="Click to insert field">' + Utils.escapeHtml(field) + '</span>';
+        html += '</div>';
+        html += '<div class="tree-subnode-content collapsed" id="tags-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        
+        // Tag keys will be loaded when expanded
+        html += '<div class="tree-item-empty">Click arrow to load tag keys...</div>';
+        
+        html += '</div>';
+        html += '</div>';
+        
+        return html;
+    },
+    
+    // Render a tag key with its values as children
+    renderTagWithValues(tag, field, measurement) {
+        let html = '';
+        
+        html += '<div class="tree-subnode">';
+        html += '<div class="tree-subnode-header tag-header">';
+        html += '<span class="tree-node-icon" onclick="toggleInfluxTag(this.parentElement, \'' + Utils.escapeHtml(tag) + '\', \'' + Utils.escapeHtml(field) + '\', \'' + Utils.escapeHtml(measurement) + '\')">▶</span>';
+        html += '<span class="tree-item-icon">🏷️</span>';
+        html += '<span class="tree-item-name" onclick="insertTag(\'' + Utils.escapeHtml(tag) + '\')" title="Click to insert tag key">' + Utils.escapeHtml(tag) + '</span>';
+        html += '</div>';
+        html += '<div class="tree-subnode-content collapsed" id="values-' + Utils.escapeHtml(tag).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        
+        // Tag values will be loaded when expanded
+        html += '<div class="tree-item-empty">Click arrow to load tag values...</div>';
+        
+        html += '</div>';
+        html += '</div>';
+        
         return html;
     },
     
@@ -1127,6 +1081,164 @@ async function togglePrometheusMetric(header, metric) {
     }
 }
 
+// Toggle InfluxDB retention policy and load its measurements
+async function toggleInfluxRetentionPolicy(header, retentionPolicy) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Check if measurements are already loaded
+        if (content.innerHTML.includes('Click to load measurements')) {
+            // Show loading state
+            content.innerHTML = '<div class="tree-item-empty">Loading measurements...</div>';
+            
+            // Load measurements (they should already be loaded)
+            let measurementsHtml = '';
+            if (Schema.influxMeasurements.length === 0) {
+                measurementsHtml = '<div class="tree-item-empty">No measurements found</div>';
+            } else {
+                for (const measurement of Schema.influxMeasurements) {
+                    measurementsHtml += Schema.renderMeasurementWithFields(measurement, retentionPolicy);
+                }
+            }
+            
+            content.innerHTML = measurementsHtml;
+        }
+    }
+}
+
+// Toggle InfluxDB measurement and load its fields
+async function toggleInfluxMeasurement(header, measurement, retentionPolicy) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Check if fields are already loaded
+        if (!Schema.influxFields[measurement] || content.innerHTML.includes('Click to load fields')) {
+            // Show loading state
+            content.innerHTML = '<div class="tree-item-empty">Loading fields...</div>';
+            
+            // Load fields for this measurement
+            await Schema.loadMeasurementSchema(measurement, retentionPolicy);
+            
+            // Render the fields
+            const fields = Schema.influxFields[measurement] || [];
+            let fieldsHtml = '';
+            if (fields.length === 0) {
+                fieldsHtml = '<div class="tree-item-empty">No fields found</div>';
+            } else {
+                for (const field of fields) {
+                    fieldsHtml += Schema.renderFieldWithTags(field, measurement);
+                }
+            }
+            
+            content.innerHTML = fieldsHtml;
+        }
+    }
+}
+
+// Toggle InfluxDB field and load its tag keys
+async function toggleInfluxField(header, field, measurement) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Show loading state
+        content.innerHTML = '<div class="tree-item-empty">Loading tag keys...</div>';
+        
+        // Load tags associated with this field
+        await Schema.loadFieldAssociatedTags(field);
+        
+        // Get tags for this measurement, filtered by field association
+        const allTags = Schema.influxTags[measurement] || [];
+        const key = `${measurement}:${field}`;
+        const associatedTags = Schema.fieldAssociatedTags[key];
+        
+        let tagsToShow = allTags;
+        if (associatedTags !== null && associatedTags !== undefined) {
+            tagsToShow = allTags.filter(tag => associatedTags.includes(tag));
+        }
+        
+        // Render the tag keys
+        let tagsHtml = '';
+        if (tagsToShow.length === 0) {
+            tagsHtml = '<div class="tree-item-empty">No tag keys found for this field</div>';
+        } else {
+            for (const tag of tagsToShow) {
+                tagsHtml += Schema.renderTagWithValues(tag, field, measurement);
+            }
+        }
+        
+        content.innerHTML = tagsHtml;
+    }
+}
+
+// Toggle InfluxDB tag and load its values
+async function toggleInfluxTag(header, tag, field, measurement) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Check if tag values are already loaded
+        const key = `${measurement}:${tag}`;
+        if (!Schema.influxTagValues[key] || content.innerHTML.includes('Click to load tag values')) {
+            // Show loading state
+            content.innerHTML = '<div class="tree-item-empty">Loading tag values...</div>';
+            
+            // Load tag values
+            await Schema.loadTagValues(tag);
+            
+            // Render the tag values
+            const tagValues = Schema.influxTagValues[key] || [];
+            let valuesHtml = '';
+            if (tagValues.length === 0) {
+                valuesHtml = '<div class="tree-item-empty">No values found</div>';
+            } else {
+                for (const value of tagValues) {
+                    valuesHtml += '<div class="tree-item" onclick="insertTagValue(\'' + Utils.escapeHtml(tag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
+                    valuesHtml += '<span class="tree-item-icon">📄</span>';
+                    valuesHtml += '<span class="tree-item-name">' + Utils.escapeHtml(value) + '</span>';
+                    valuesHtml += '</div>';
+                }
+            }
+            
+            content.innerHTML = valuesHtml;
+        }
+    }
+}
+
 function filterPrometheusMetrics(searchTerm) {
     const metricsList = document.getElementById('metricsList');
     if (!metricsList) return;
@@ -1154,6 +1266,10 @@ function insertMetric(metric) {
 
 function insertLabel(label) {
     Schema.insertIntoQuery(label);
+}
+
+function insertMeasurement(measurement) {
+    Schema.insertIntoQuery(measurement);
 }
 
 function insertField(field) {

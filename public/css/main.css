@@ -1122,3 +1122,41 @@ body {
 .metric-header .tree-node-icon:hover {
     background-color: #2a2d2e;
 }
+
+/* InfluxDB header styling for clickable items */
+.measurement-header, .field-header, .tag-header {
+    display: flex;
+    align-items: center;
+}
+
+.measurement-header .tree-item-name,
+.field-header .tree-item-name,
+.tag-header .tree-item-name {
+    cursor: pointer;
+    border-radius: 3px;
+    padding: 2px 4px;
+    margin: -2px -4px;
+    transition: background-color 0.15s ease;
+}
+
+.measurement-header .tree-item-name:hover,
+.field-header .tree-item-name:hover,
+.tag-header .tree-item-name:hover {
+    background-color: #2a2d2e;
+}
+
+.measurement-header .tree-node-icon,
+.field-header .tree-node-icon,
+.tag-header .tree-node-icon {
+    cursor: pointer;
+    padding: 2px;
+    margin: -2px;
+    border-radius: 3px;
+    transition: background-color 0.15s ease;
+}
+
+.measurement-header .tree-node-icon:hover,
+.field-header .tree-node-icon:hover,
+.tag-header .tree-node-icon:hover {
+    background-color: #2a2d2e;
+}
