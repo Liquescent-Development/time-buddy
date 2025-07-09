@@ -212,7 +212,34 @@ const Queries = {
         // Initialize chart if in chart view mode
         if (GrafanaConfig.currentViewMode === 'chart') {
             setTimeout(function() {
-                Charts.initializeChart(hasMultipleSeries ? result.frames : [frameToDisplay]);
+                Charts.initializeChart(result.frames);
+                
+                // Attach event listeners after chart is initialized
+                const showAllSeriesEl = document.getElementById('showAllSeries');
+                const chartTypeEl = document.getElementById('chartType');
+                const smoothLinesEl = document.getElementById('smoothLines');
+                
+                if (showAllSeriesEl && !showAllSeriesEl.hasAttribute('data-listener-attached')) {
+                    showAllSeriesEl.setAttribute('data-listener-attached', 'true');
+                    showAllSeriesEl.addEventListener('change', function() {
+                        console.log('Show All Series changed to:', showAllSeriesEl.checked);
+                        updateChart();
+                    });
+                }
+                if (chartTypeEl && !chartTypeEl.hasAttribute('data-listener-attached')) {
+                    chartTypeEl.setAttribute('data-listener-attached', 'true');
+                    chartTypeEl.addEventListener('change', function() {
+                        console.log('Chart Type changed to:', chartTypeEl.value);
+                        updateChart();
+                    });
+                }
+                if (smoothLinesEl && !smoothLinesEl.hasAttribute('data-listener-attached')) {
+                    smoothLinesEl.setAttribute('data-listener-attached', 'true');
+                    smoothLinesEl.addEventListener('change', function() {
+                        console.log('Smooth Lines changed to:', smoothLinesEl.checked);
+                        updateChart();
+                    });
+                }
             }, 50);
         }
     },
@@ -299,19 +326,19 @@ const Queries = {
         let html = '<div class="chart-controls">';
         html += '<div class="chart-options">';
         html += '<div class="chart-option">';
-        html += '<input type="checkbox" id="showAllSeries" onchange="updateChart()" ' + (allFrames.length > 1 ? '' : 'disabled') + '>';
+        html += '<input type="checkbox" id="showAllSeries" ' + (allFrames.length > 1 ? '' : 'disabled') + '>';
         html += '<label for="showAllSeries">Show All Groups</label>';
         html += '</div>';
         html += '<div class="chart-option">';
-        html += '<label>Chart Type:</label>';
-        html += '<select id="chartType" onchange="updateChart()">';
-        html += '<option value="line">Line</option>';
+        html += '<label for="chartType">Chart Type:</label>';
+        html += '<select id="chartType">';
+        html += '<option value="line" selected>Line</option>';
         html += '<option value="bar">Bar</option>';
         html += '<option value="scatter">Scatter</option>';
         html += '</select>';
         html += '</div>';
         html += '<div class="chart-option">';
-        html += '<input type="checkbox" id="smoothLines" onchange="updateChart()" checked>';
+        html += '<input type="checkbox" id="smoothLines" checked>';
         html += '<label for="smoothLines">Smooth Lines</label>';
         html += '</div>';
         html += '</div>';

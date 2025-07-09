@@ -930,13 +930,72 @@ body {
     cursor: not-allowed;
 }
 
+#results .chart-controls {
+    margin: 12px 0;
+    padding: 12px;
+    background-color: #252526;
+    border: 1px solid #2d2d30;
+    border-radius: 4px;
+}
+
+#results .chart-options {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+#results .chart-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #cccccc;
+}
+
+#results .chart-option label {
+    color: #cccccc;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+#results .chart-option select {
+    background-color: #3c3c3c;
+    border: 1px solid #2d2d30;
+    color: #cccccc;
+    padding: 4px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    min-width: 80px;
+}
+
+#results .chart-option select:focus {
+    outline: none;
+    border-color: #007acc;
+}
+
+#results .chart-option input[type="checkbox"] {
+    accent-color: #007acc;
+}
+
 #results .chart-container {
     margin: 16px 0;
     background-color: #252526;
     border: 1px solid #2d2d30;
     border-radius: 4px;
     padding: 16px;
-    min-height: 300px;
+    height: 450px; /* Fixed height for better chart display */
+}
+
+#results .chart-wrapper {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+#results .chart-wrapper canvas {
+    max-width: 100%;
+    max-height: 100%;
 }
 
 #results .empty-state {

@@ -378,11 +378,7 @@ function changePageSize(newSize) {
     }
 }
 
-function updateChart() {
-    if (typeof Charts !== 'undefined' && Charts.updateChart) {
-        Charts.updateChart();
-    }
-}
+// updateChart is defined in charts.js as a global function
 
 // Legacy function compatibility
 function toggleSchemaExplorer() {
