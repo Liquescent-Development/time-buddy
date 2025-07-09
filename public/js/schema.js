@@ -943,6 +943,11 @@ const Schema = {
     renderInfluxDBSchema() {
         let html = '<div class="schema-tree">';
         
+        // Search box for measurements at the top
+        html += '<div class="schema-search">';
+        html += '<input type="text" id="measurementsSearch" placeholder="Search measurements..." onkeyup="filterInfluxMeasurements(this.value)">';
+        html += '</div>';
+        
         // Retention Policies as top level, with measurements as children
         if (this.influxRetentionPolicies.length > 0) {
             for (const policy of this.influxRetentionPolicies) {
@@ -1238,7 +1243,15 @@ async function toggleInfluxRetentionPolicy(header, retentionPolicy) {
             if (Schema.influxMeasurements.length === 0) {
                 measurementsHtml = '<div class="tree-item-empty">No measurements found</div>';
             } else {
-                for (const measurement of Schema.influxMeasurements) {
+                // Apply any current filter from the measurements search box
+                const measurementsSearchInput = document.getElementById('measurementsSearch');
+                const searchTerm = measurementsSearchInput ? measurementsSearchInput.value : '';
+                const filteredMeasurements = searchTerm ? 
+                    Schema.influxMeasurements.filter(measurement => 
+                        measurement.toLowerCase().includes(searchTerm.toLowerCase())
+                    ) : Schema.influxMeasurements;
+                
+                for (const measurement of filteredMeasurements) {
                     measurementsHtml += Schema.renderMeasurementWithFields(measurement, retentionPolicy);
                 }
             }
@@ -1270,16 +1283,24 @@ async function toggleInfluxMeasurement(header, measurement, retentionPolicy) {
             // Load fields for this measurement
             await Schema.loadMeasurementFieldsAndTags(measurement, retentionPolicy);
             
-            // Render the fields
+            // Render the fields with search functionality
             const fields = Schema.influxFields[measurement] || [];
             let fieldsHtml = '';
+            
+            // Add search box for fields
+            fieldsHtml += '<div class="schema-search" style="margin: 8px 0;">';
+            fieldsHtml += '<input type="text" id="fieldsSearch-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '" placeholder="Search fields..." onkeyup="filterMeasurementFields(this.value, \'' + Utils.escapeHtml(measurement) + '\')" style="width: 100%; padding: 4px; font-size: 11px; background: #2d2d30; color: #cccccc; border: 1px solid #454545; border-radius: 3px;">';
+            fieldsHtml += '</div>';
+            
+            fieldsHtml += '<div id="fieldsList-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
             if (fields.length === 0) {
-                fieldsHtml = '<div class="tree-item-empty">No fields found</div>';
+                fieldsHtml += '<div class="tree-item-empty">No fields found</div>';
             } else {
                 for (const field of fields) {
                     fieldsHtml += Schema.renderFieldWithTags(field, measurement);
                 }
             }
+            fieldsHtml += '</div>';
             
             content.innerHTML = fieldsHtml;
         }
@@ -1316,15 +1337,23 @@ async function toggleInfluxField(header, field, measurement) {
             tagsToShow = allTags.filter(tag => associatedTags.includes(tag));
         }
         
-        // Render the tag keys
+        // Render the tag keys with search functionality
         let tagsHtml = '';
+        
+        // Add search box for tags
+        tagsHtml += '<div class="schema-search" style="margin: 8px 0;">';
+        tagsHtml += '<input type="text" id="tagsSearch-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '" placeholder="Search tags..." onkeyup="filterFieldTags(this.value, \'' + Utils.escapeHtml(field) + '\', \'' + Utils.escapeHtml(measurement) + '\')" style="width: 100%; padding: 4px; font-size: 11px; background: #2d2d30; color: #cccccc; border: 1px solid #454545; border-radius: 3px;">';
+        tagsHtml += '</div>';
+        
+        tagsHtml += '<div id="tagsList-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
         if (tagsToShow.length === 0) {
-            tagsHtml = '<div class="tree-item-empty">No tag keys found for this field</div>';
+            tagsHtml += '<div class="tree-item-empty">No tag keys found for this field</div>';
         } else {
             for (const tag of tagsToShow) {
                 tagsHtml += Schema.renderTagWithValues(tag, field, measurement);
             }
         }
+        tagsHtml += '</div>';
         
         content.innerHTML = tagsHtml;
     }
@@ -1353,11 +1382,18 @@ async function toggleInfluxTag(header, tag, field, measurement) {
             // Load tag values
             await Schema.loadTagValuesForMeasurement(tag, measurement);
             
-            // Render the tag values
+            // Render the tag values with search functionality
             const tagValues = Schema.influxTagValues[key] || [];
             let valuesHtml = '';
+            
+            // Add search box for tag values
+            valuesHtml += '<div class="schema-search" style="margin: 8px 0;">';
+            valuesHtml += '<input type="text" id="tagValuesSearch-' + Utils.escapeHtml(tag).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '" placeholder="Search values..." onkeyup="filterTagValuesList(this.value, \'' + Utils.escapeHtml(tag) + '\', \'' + Utils.escapeHtml(field) + '\', \'' + Utils.escapeHtml(measurement) + '\')" style="width: 100%; padding: 4px; font-size: 11px; background: #2d2d30; color: #cccccc; border: 1px solid #454545; border-radius: 3px;">';
+            valuesHtml += '</div>';
+            
+            valuesHtml += '<div id="tagValuesList-' + Utils.escapeHtml(tag).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
             if (tagValues.length === 0) {
-                valuesHtml = '<div class="tree-item-empty">No values found</div>';
+                valuesHtml += '<div class="tree-item-empty">No values found</div>';
             } else {
                 for (const value of tagValues) {
                     valuesHtml += '<div class="tree-item" onclick="insertTagValue(\'' + Utils.escapeHtml(tag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
@@ -1366,6 +1402,7 @@ async function toggleInfluxTag(header, tag, field, measurement) {
                     valuesHtml += '</div>';
                 }
             }
+            valuesHtml += '</div>';
             
             content.innerHTML = valuesHtml;
         }
@@ -1638,4 +1675,108 @@ function toggleSchemaExplorer() {
         schemaSection.classList.add('collapsed');
         toggleButton.textContent = 'Show';
     }
+}
+
+// Filter InfluxDB measurements
+function filterInfluxMeasurements(searchTerm) {
+    if (Schema.currentDatasourceType !== 'influxdb') return;
+    
+    const filteredMeasurements = searchTerm ? 
+        Schema.influxMeasurements.filter(measurement => 
+            measurement.toLowerCase().includes(searchTerm.toLowerCase())
+        ) : Schema.influxMeasurements;
+    
+    // Update all retention policy measurement lists
+    for (const policy of Schema.influxRetentionPolicies) {
+        const measurementsContainer = document.getElementById('measurements-' + Utils.escapeHtml(policy).replace(/[^a-zA-Z0-9]/g, '_'));
+        if (measurementsContainer && !measurementsContainer.innerHTML.includes('Click to load measurements')) {
+            let measurementsHtml = '';
+            if (filteredMeasurements.length === 0) {
+                measurementsHtml = '<div class="tree-item-empty">No measurements found</div>';
+            } else {
+                for (const measurement of filteredMeasurements) {
+                    measurementsHtml += Schema.renderMeasurementWithFields(measurement, policy);
+                }
+            }
+            measurementsContainer.innerHTML = measurementsHtml;
+        }
+    }
+}
+
+// Filter fields for a specific measurement
+function filterMeasurementFields(searchTerm, measurement) {
+    const fields = Schema.influxFields[measurement] || [];
+    const filteredFields = searchTerm ? 
+        fields.filter(field => field.toLowerCase().includes(searchTerm.toLowerCase())) : 
+        fields;
+    
+    const fieldsContainer = document.getElementById('fieldsList-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_'));
+    if (!fieldsContainer) return;
+    
+    let fieldsHtml = '';
+    if (filteredFields.length === 0) {
+        fieldsHtml = '<div class="tree-item-empty">No fields found</div>';
+    } else {
+        for (const field of filteredFields) {
+            fieldsHtml += Schema.renderFieldWithTags(field, measurement);
+        }
+    }
+    
+    fieldsContainer.innerHTML = fieldsHtml;
+}
+
+// Filter tags for a specific field in a measurement
+function filterFieldTags(searchTerm, field, measurement) {
+    let allTags = Schema.influxTags[measurement] || [];
+    
+    // Filter tags based on field association if available
+    const key = `${measurement}:${field}`;
+    const associatedTags = Schema.fieldAssociatedTags[key];
+    if (associatedTags !== null && associatedTags !== undefined) {
+        allTags = allTags.filter(tag => associatedTags.includes(tag));
+    }
+    
+    const filteredTags = searchTerm ? 
+        allTags.filter(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())) : 
+        allTags;
+    
+    const tagsContainer = document.getElementById('tagsList-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_'));
+    if (!tagsContainer) return;
+    
+    let tagsHtml = '';
+    if (filteredTags.length === 0) {
+        tagsHtml = '<div class="tree-item-empty">No tag keys found</div>';
+    } else {
+        for (const tag of filteredTags) {
+            tagsHtml += Schema.renderTagWithValues(tag, field, measurement);
+        }
+    }
+    
+    tagsContainer.innerHTML = tagsHtml;
+}
+
+// Filter tag values for a specific tag
+function filterTagValuesList(searchTerm, tag, field, measurement) {
+    const key = `${measurement}:${tag}`;
+    const tagValues = Schema.influxTagValues[key] || [];
+    const filteredValues = searchTerm ? 
+        tagValues.filter(value => value.toLowerCase().includes(searchTerm.toLowerCase())) : 
+        tagValues;
+    
+    const valuesContainer = document.getElementById('tagValuesList-' + Utils.escapeHtml(tag).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_'));
+    if (!valuesContainer) return;
+    
+    let valuesHtml = '';
+    if (filteredValues.length === 0) {
+        valuesHtml = '<div class="tree-item-empty">No values found</div>';
+    } else {
+        for (const value of filteredValues) {
+            valuesHtml += '<div class="tree-item" onclick="insertTagValue(\'' + Utils.escapeHtml(tag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
+            valuesHtml += '<span class="tree-item-icon">📄</span>';
+            valuesHtml += '<span class="tree-item-name">' + Utils.escapeHtml(value) + '</span>';
+            valuesHtml += '</div>';
+        }
+    }
+    
+    valuesContainer.innerHTML = valuesHtml;
 }

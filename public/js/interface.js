@@ -954,7 +954,7 @@ const Interface = {
             
             const height = startHeight - (e.clientY - startY);
             const minHeight = 150;
-            const maxHeight = window.innerHeight * 0.6; // 60% of viewport height
+            const maxHeight = (window.innerHeight - 35) * 0.9; // 90% of available height (minus title bar)
             
             if (height >= minHeight && height <= maxHeight) {
                 panel.style.height = height + 'px';

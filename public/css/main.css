@@ -93,14 +93,23 @@ body {
 .main-content-area {
     display: flex;
     flex: 1;
-    flex-direction: column;
+    flex-direction: row; /* Sidebar and editor content side by side */
     overflow: hidden;
 }
 
-/* Horizontal Layout (sidebar + editor) */
+/* Horizontal Layout (now just the editor + panel column) */
 .horizontal-layout {
     display: flex;
     flex: 1;
+    flex-direction: row; /* Sidebar and editor-panel-area side by side */
+    overflow: hidden;
+}
+
+/* Editor and Panel Area (right side - contains editor and panel stacked) */
+.editor-panel-area {
+    display: flex;
+    flex: 1;
+    flex-direction: column; /* Editor and panel stacked vertically */
     overflow: hidden;
 }
 
@@ -654,7 +663,7 @@ body {
 .panel-area {
     height: 250px;
     min-height: 150px;
-    max-height: 60vh;
+    max-height: calc(90vh - 35px); /* Allow up to 90% of available height (minus title bar) */
     background-color: #252526;
     border-top: 1px solid #2d2d30;
     display: flex;
@@ -662,6 +671,7 @@ body {
     overflow: hidden;
     flex-shrink: 0;
     position: relative;
+    width: 100%; /* Take full width of main content area */
 }
 
 .panel-tabs {
@@ -827,10 +837,8 @@ body {
     width: 100%;
     border-collapse: collapse;
     background-color: #1e1e1e;
-    margin: 16px 0;
-    border: 1px solid #2d2d30;
-    border-radius: 4px;
-    overflow: hidden;
+    margin: 0;
+    border: none;
 }
 
 #results th, #results td {
@@ -865,12 +873,15 @@ body {
     background-color: #2a2d2e;
 }
 
-#results .pagination {
+
+#results .pagination-controls {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 16px;
+    margin-top: 12px;
     padding: 8px 0;
+    border-top: 1px solid #2d2d30;
+    background-color: #252526;
 }
 
 #results .pagination-info {
@@ -878,9 +889,26 @@ body {
     font-size: 12px;
 }
 
-#results .pagination-controls {
+#results .page-size-selector {
+    color: #858585;
+    font-size: 12px;
     display: flex;
+    align-items: center;
     gap: 8px;
+}
+
+#results .page-size-selector select {
+    background-color: #3c3c3c;
+    border: 1px solid #2d2d30;
+    color: #cccccc;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+#results .pagination-buttons {
+    display: flex;
+    gap: 4px;
 }
 
 #results .pagination-controls button {
@@ -918,7 +946,45 @@ body {
     padding: 40px 20px;
 }
 
-/* Group Summary Statistics */
+/* Compact Group Summary Statistics */
+#results .series-stats-compact {
+    background-color: #252526;
+    border: 1px solid #2d2d30;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin: 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+#results .compact-stat {
+    color: #cccccc;
+    font-size: 12px;
+}
+
+#results .compact-stat strong {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+/* Table Container with Scrolling */
+#results .table-container {
+    border: 1px solid #2d2d30;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 16px 0;
+    background-color: #1e1e1e;
+}
+
+#results .table-wrapper {
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: auto;
+}
+
+/* Group Summary Statistics (legacy - kept for compatibility) */
 #results .series-stats {
     background-color: #252526;
     border: 1px solid #2d2d30;

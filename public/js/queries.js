@@ -140,9 +140,7 @@ const Queries = {
             return;
         }
         
-        let html = '<div class="status success">Query executed successfully</div>';
-        
-        html += '<div class="view-toggle">';
+        let html = '<div class="view-toggle">';
         html += '<button class="' + (GrafanaConfig.currentViewMode === 'table' ? 'active' : '') + '" onclick="setViewMode(\'table\')">Table View</button>';
         html += '<button class="' + (GrafanaConfig.currentViewMode === 'chart' ? 'active' : '') + '" onclick="setViewMode(\'chart\')">Chart View</button>';
         html += '</div>';
@@ -184,9 +182,7 @@ const Queries = {
                 html += '<h3>Results</h3>';
             }
             
-            if (frameToDisplay.schema.meta && frameToDisplay.schema.meta.executedQueryString) {
-                html += '<p style="color: #888; margin-bottom: 10px; font-size: 12px;">Executed: ' + Utils.escapeHtml(frameToDisplay.schema.meta.executedQueryString) + '</p>';
-            }
+            // Removed redundant executed query display since it's visible in the editor
             
             if (GrafanaConfig.currentViewMode === 'chart') {
                 html += this.renderChartView(frameToDisplay, hasMultipleSeries ? result.frames : [frameToDisplay]);
@@ -229,7 +225,8 @@ const Queries = {
         const totalPages = Math.ceil(GrafanaConfig.totalRows / GrafanaConfig.pageSize);
         GrafanaConfig.currentPage = page;
         
-        let html = '<div class="table-wrapper"><table>';
+        let html = '<div class="table-container">';
+        html += '<div class="table-wrapper"><table>';
         
         // Table header
         html += '<thead><tr>';
@@ -265,14 +262,16 @@ const Queries = {
         }
         
         html += '</tbody></table></div>';
+        html += '</div>'; // Close table-container
         
-        // Pagination controls
+        // Pagination controls (outside the scrollable area)
         if (GrafanaConfig.totalRows > 0) {
             html += '<div class="pagination-controls">';
+            
             html += '<div class="pagination-info">Showing ' + (startRow + 1) + '-' + endRow + ' of ' + GrafanaConfig.totalRows + ' rows</div>';
             
             html += '<div class="page-size-selector">';
-            html += 'Rows per page: ';
+            html += '<span>Rows per page:</span>';
             html += '<select onchange="changePageSize(this.value)">';
             [25, 50, 100, 250, 500].forEach(function(size) {
                 const selected = size === GrafanaConfig.pageSize ? 'selected' : '';
@@ -284,10 +283,11 @@ const Queries = {
             html += '<div class="pagination-buttons">';
             html += '<button onclick="goToPage(1)" ' + (page === 1 ? 'disabled' : '') + '>First</button>';
             html += '<button onclick="goToPage(' + (page - 1) + ')" ' + (page === 1 ? 'disabled' : '') + '>Previous</button>';
-            html += '<span style="margin: 0 10px; color: #b0b0b0;">Page ' + page + ' of ' + totalPages + '</span>';
+            html += '<span style="margin: 0 8px; color: #b0b0b0; font-size: 11px;">Page ' + page + ' of ' + totalPages + '</span>';
             html += '<button onclick="goToPage(' + (page + 1) + ')" ' + (page === totalPages ? 'disabled' : '') + '>Next</button>';
             html += '<button onclick="goToPage(' + totalPages + ')" ' + (page === totalPages ? 'disabled' : '') + '>Last</button>';
             html += '</div>';
+            
             html += '</div>';
         }
         
@@ -326,19 +326,9 @@ const Queries = {
         return html;
     },
 
-    // Generate group summary statistics
+    // Generate compact group summary statistics
     generateGroupSummary(frames) {
         if (!frames || frames.length <= 1) return '';
-        
-        let html = '<div class="series-stats">';
-        html += '<h4>Group Summary Statistics</h4>';
-        html += '<div class="stats-grid">';
-        
-        // Total groups
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Total Groups</div>';
-        html += '<div class="stat-value">' + frames.length + '</div>';
-        html += '</div>';
         
         // Total rows across all groups
         const totalRows = frames.reduce(function(sum, frame) {
@@ -346,37 +336,19 @@ const Queries = {
             return sum + rows;
         }, 0);
         
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Total Rows</div>';
-        html += '<div class="stat-value">' + totalRows.toLocaleString() + '</div>';
-        html += '</div>';
-        
-        // Average rows per group
-        const avgRows = frames.length > 0 ? Math.round(totalRows / frames.length) : 0;
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Avg Rows/Group</div>';
-        html += '<div class="stat-value">' + avgRows + '</div>';
-        html += '</div>';
-        
-        // Largest group
+        // Largest and smallest groups
         const maxRows = Math.max.apply(Math, frames.map(function(frame) {
             return frame.data && frame.data.values && frame.data.values[0] ? frame.data.values[0].length : 0;
         }));
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Largest Group</div>';
-        html += '<div class="stat-value">' + maxRows + '</div>';
-        html += '</div>';
-        
-        // Smallest group
         const minRows = Math.min.apply(Math, frames.map(function(frame) {
             return frame.data && frame.data.values && frame.data.values[0] ? frame.data.values[0].length : 0;
         }));
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Smallest Group</div>';
-        html += '<div class="stat-value">' + minRows + '</div>';
-        html += '</div>';
         
-        html += '</div></div>';
+        let html = '<div class="series-stats-compact">';
+        html += '<span class="compact-stat"><strong>' + frames.length + '</strong> groups</span>';
+        html += '<span class="compact-stat"><strong>' + totalRows.toLocaleString() + '</strong> total rows</span>';
+        html += '<span class="compact-stat">Range: <strong>' + minRows + '</strong> - <strong>' + maxRows + '</strong> rows</span>';
+        html += '</div>';
         return html;
     },
 

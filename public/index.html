@@ -180,57 +180,58 @@
                         </div>
                     </div>
 
-                    <!-- Main Editor Area -->
-                    <div class="editor-area">
-                        <!-- Tab Bar -->
-                        <div class="tab-bar" id="tabBar">
-                            <div class="tab active" data-tab-id="untitled-1">
-                                <span class="tab-label">Untitled-1</span>
-                                <button class="tab-close" onclick="closeTab('untitled-1')">×</button>
+                    <!-- Editor and Panel Area -->
+                    <div class="editor-panel-area">
+                        <!-- Main Editor Area -->
+                        <div class="editor-area">
+                            <!-- Tab Bar -->
+                            <div class="tab-bar" id="tabBar">
+                                <div class="tab active" data-tab-id="untitled-1">
+                                    <span class="tab-label">Untitled-1</span>
+                                    <button class="tab-close" onclick="closeTab('untitled-1')">×</button>
+                                </div>
+                                <button class="new-tab-button" onclick="createNewTab()" title="New Query">+</button>
                             </div>
-                            <button class="new-tab-button" onclick="createNewTab()" title="New Query">+</button>
-                        </div>
 
-                        <!-- Tab Content -->
-                        <div class="tab-content">
-                            <div class="editor-container active" data-tab-id="untitled-1">
-                                <!-- Query Type and Options Bar -->
-                                <div class="editor-toolbar">
-                                    <div class="query-type-selector">
-                                        <button class="query-type-button active" data-type="influxql">InfluxQL</button>
-                                        <button class="query-type-button" data-type="promql">PromQL</button>
+                            <!-- Tab Content -->
+                            <div class="tab-content">
+                                <div class="editor-container active" data-tab-id="untitled-1">
+                                    <!-- Query Type and Options Bar -->
+                                    <div class="editor-toolbar">
+                                        <div class="query-type-selector">
+                                            <button class="query-type-button active" data-type="influxql">InfluxQL</button>
+                                            <button class="query-type-button" data-type="promql">PromQL</button>
+                                        </div>
+                                        <div class="editor-options">
+                                            <div class="option-group">
+                                                <label>From (hours ago):</label>
+                                                <input type="number" id="timeFrom" value="1" min="0" step="0.1" class="small-input">
+                                            </div>
+                                            <div class="option-group">
+                                                <label>To (hours ago):</label>
+                                                <input type="number" id="timeTo" value="0" min="0" step="0.1" class="small-input">
+                                            </div>
+                                            <div class="option-group">
+                                                <button class="execute-button" onclick="executeQuery()" disabled id="executeBtn">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                        <path d="M8 5v14l11-7z"/>
+                                                    </svg>
+                                                    Execute
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="editor-options">
-                                        <div class="option-group">
-                                            <label>From (hours ago):</label>
-                                            <input type="number" id="timeFrom" value="1" min="0" step="0.1" class="small-input">
-                                        </div>
-                                        <div class="option-group">
-                                            <label>To (hours ago):</label>
-                                            <input type="number" id="timeTo" value="0" min="0" step="0.1" class="small-input">
-                                        </div>
-                                        <div class="option-group">
-                                            <button class="execute-button" onclick="executeQuery()" disabled id="executeBtn">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                                    <path d="M8 5v14l11-7z"/>
-                                                </svg>
-                                                Execute
-                                            </button>
-                                        </div>
+
+                                    <!-- CodeMirror Editor -->
+                                    <div class="code-editor-container">
+                                        <textarea id="query" placeholder="Enter your query here..."></textarea>
                                     </div>
                                 </div>
-
-                                <!-- CodeMirror Editor -->
-                                <div class="code-editor-container">
-                                    <textarea id="query" placeholder="Enter your query here..."></textarea>
-                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                <!-- Bottom Panel (Results, Variables, etc.) -->
-                <div class="panel-area">
+                        <!-- Bottom Panel (Results, Variables, etc.) -->
+                        <div class="panel-area">
                     <div class="panel-resizer"></div>
                     <div class="panel-tabs">
                         <div class="panel-tab active" data-panel="results">Results</div>
@@ -281,6 +282,7 @@
                                 </div>
                             </div>
                         </div>
+                    </div>
                     </div>
                 </div>
             </div>
