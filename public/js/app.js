@@ -80,6 +80,11 @@ function showConnectedState(connection) {
         Interface.updateExecuteButton(tabId);
     });
     
+    // Populate tab datasource selects after a delay to ensure datasources are loaded
+    setTimeout(() => {
+        Interface.populateAllTabDatasourceSelects();
+    }, 200);
+    
     Interface.showToast(`Connected to ${connection.name}`, 'success');
 }
 
@@ -279,8 +284,19 @@ function populateDataSourceList(datasources) {
             
             // Trigger change event
             onDataSourceChange();
+            
+            // Update schema dropdown if it exists
+            const schemaSelect = document.getElementById('schemaDatasourceSelect');
+            if (schemaSelect) {
+                schemaSelect.value = item.dataset.uid;
+            }
         });
     });
+    
+    // Populate tab datasource selects after a short delay to ensure DOM is updated
+    setTimeout(() => {
+        Interface.populateAllTabDatasourceSelects();
+    }, 100);
 }
 
 // Connection backup functions
@@ -377,6 +393,32 @@ function changePageSize(newSize) {
 }
 
 // updateChart is defined in charts.js as a global function
+
+// Schema datasource selector
+function onSchemaDatasourceChange() {
+    const select = document.getElementById('schemaDatasourceSelect');
+    if (!select || !select.value) return;
+    
+    // Find the datasource item and simulate a click
+    const datasourceItem = document.querySelector(`[data-uid="${select.value}"]`);
+    if (datasourceItem) {
+        datasourceItem.click();
+    }
+}
+
+// Tab datasource selector
+function onTabDatasourceChange() {
+    const activeTab = Interface.activeTab;
+    if (!activeTab) return;
+    
+    const container = document.querySelector(`[data-tab-id="${activeTab}"].editor-container`);
+    if (!container) return;
+    
+    const select = container.querySelector('.tab-datasource-select');
+    if (!select) return;
+    
+    Interface.setTabDatasource(activeTab, select.value);
+}
 
 // Legacy function compatibility
 function toggleSchemaExplorer() {

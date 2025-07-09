@@ -302,7 +302,7 @@ const Connections = {
             let html = '';
             supportedDatasources.forEach(function(ds) {
                 html += `
-                    <div class="datasource-item" data-uid="${ds.uid}" data-type="${ds.type}" data-id="${ds.id}">
+                    <div class="datasource-item" data-uid="${ds.uid}" data-type="${ds.type}" data-id="${ds.id}" data-name="${Utils.escapeHtml(ds.name)}">
                         <div style="flex: 1;">
                             <div style="font-weight: 500; color: #cccccc; font-size: 13px;">${Utils.escapeHtml(ds.name)}</div>
                             <div style="font-size: 11px; color: #858585;">${ds.type}</div>
@@ -408,6 +408,13 @@ const Connections = {
             });
             
             select.disabled = false;
+        }
+        
+        // Populate tab datasource selects after datasources are loaded
+        if (typeof Interface !== 'undefined' && Interface.populateAllTabDatasourceSelects) {
+            setTimeout(() => {
+                Interface.populateAllTabDatasourceSelects();
+            }, 50);
         }
     },
 

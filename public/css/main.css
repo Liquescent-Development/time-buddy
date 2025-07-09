@@ -413,6 +413,35 @@ body {
     border-color: #007acc;
 }
 
+/* Datasource Selector */
+.datasource-selector-container {
+    padding: 8px 12px;
+    background-color: #252526;
+    border-bottom: 1px solid #2d2d30;
+}
+
+.datasource-select {
+    width: 100%;
+    background-color: #3c3c3c;
+    border: 1px solid #2d2d30;
+    border-radius: 3px;
+    padding: 6px 8px;
+    color: #cccccc;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    cursor: pointer;
+}
+
+.datasource-select:focus {
+    outline: none;
+    border-color: #007acc;
+}
+
+.datasource-select option {
+    background-color: #3c3c3c;
+    color: #cccccc;
+}
+
 /* Empty State */
 .empty-state {
     color: #858585;
@@ -601,7 +630,22 @@ body {
     font-size: 12px;
 }
 
+.tab-datasource-select {
+    min-width: 180px;
+    background-color: #3c3c3c;
+    border: 1px solid #2d2d30;
+    border-radius: 3px;
+    padding: 4px 6px;
+    color: #cccccc;
+    font-size: 12px;
+}
+
 .small-input:focus {
+    outline: none;
+    border-color: #007acc;
+}
+
+.tab-datasource-select:focus {
     outline: none;
     border-color: #007acc;
 }
@@ -641,8 +685,20 @@ body {
 .code-editor-container .CodeMirror {
     height: 100%;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-    font-size: 14px;
-    line-height: 1.5;
+    font-size: 12px;
+    line-height: 1.4;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
+}
+
+.code-editor-container .CodeMirror-gutters {
+    background-color: #1e1e1e;
+    border-right: 1px solid #2d2d30;
+}
+
+.code-editor-container .CodeMirror-linenumber {
+    color: #858585;
+    font-size: 11px;
 }
 
 .code-editor-container textarea {
@@ -1454,23 +1510,23 @@ body {
 }
 
 .history-item {
-    padding: 12px;
-    margin-bottom: 8px;
-    background-color: #2d2d30;
-    border-radius: 4px;
-    border-left: 3px solid #007acc;
+    padding: 8px 10px;
+    margin-bottom: 4px;
+    background-color: transparent;
+    border-radius: 3px;
+    cursor: pointer;
     transition: all 0.1s ease;
 }
 
 .history-item:hover {
-    background-color: #37373d;
+    background-color: #2a2d2e;
 }
 
 .history-item-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
 }
 
 .history-timestamp {
@@ -1520,11 +1576,11 @@ body {
 }
 
 .history-query {
-    font-size: 12px;
+    font-size: 11px;
     color: #cccccc;
     font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
-    background-color: #1e1e1e;
-    padding: 8px;
+    background-color: transparent;
+    padding: 4px 0;
     border-radius: 3px;
     margin-bottom: 8px;
     cursor: pointer;
@@ -1534,7 +1590,7 @@ body {
 }
 
 .history-query:hover {
-    background-color: #252526;
+    color: #ffffff;
 }
 
 .history-metadata {
@@ -1772,8 +1828,9 @@ body {
 
 .schema-tree {
     color: #cccccc;
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    font-weight: 400;
     line-height: 1.4;
     padding: 8px 0;
 }
@@ -1906,8 +1963,8 @@ body {
 
 .tree-item-name {
     color: #cccccc;
-    font-size: 13px;
-    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-size: 12px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2063,9 +2120,8 @@ body {
 }
 
 .dashboard-queries {
-    margin-top: 16px;
-    border-top: 1px solid #2d2d30;
-    padding-top: 16px;
+    margin-top: 8px;
+    padding-top: 0;
 }
 
 .dashboard-queries.hidden {
@@ -2073,48 +2129,51 @@ body {
 }
 
 .dashboard-info {
-    margin-bottom: 16px;
+    padding: 0 12px;
+    margin-bottom: 12px;
 }
 
 .dashboard-info h4 {
     color: #cccccc;
-    margin: 0 0 8px 0;
-    font-size: 14px;
+    margin: 0 0 4px 0;
+    font-size: 13px;
+    font-weight: 500;
 }
 
 .dashboard-info p {
     color: #858585;
     margin: 0;
-    font-size: 12px;
-    line-height: 1.4;
+    font-size: 11px;
+    line-height: 1.3;
 }
 
 .dashboard-query-list {
-    margin-top: 12px;
+    margin-top: 0;
 }
 
 .dashboard-queries-header {
-    padding: 4px 8px;
+    padding: 4px 12px;
     font-size: 11px;
     font-weight: 600;
-    color: #cccccc;
+    color: #858585;
     text-transform: uppercase;
-    border-bottom: 1px solid #2d2d30;
-    margin-bottom: 4px;
+    letter-spacing: 0.5px;
+    margin-bottom: 2px;
 }
 
 .query-list {
     max-height: 200px;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .query-list-item {
-    padding: 6px 8px;
-    margin: 1px 0;
-    border-radius: 3px;
+    padding: 6px 12px;
+    margin: 0;
     cursor: pointer;
     transition: background-color 0.15s ease;
     font-size: 12px;
+    border: none;
 }
 
 .query-list-item:hover {
@@ -2123,25 +2182,23 @@ body {
 
 .query-list-item.selected {
     background-color: #37373d;
-    border-left: 2px solid #007acc;
-    padding-left: 6px;
 }
 
 .query-item-panel {
     color: #cccccc;
     font-weight: 400;
-    margin-bottom: 2px;
+    margin-bottom: 1px;
+    font-size: 12px;
 }
 
 .query-item-ref {
     color: #858585;
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .query-preview {
-    margin-top: 12px;
-    border-top: 1px solid #2d2d30;
-    padding-top: 12px;
+    margin-top: 8px;
+    padding-top: 8px;
 }
 
 .query-preview.hidden {
@@ -2149,48 +2206,51 @@ body {
 }
 
 .query-preview-header {
-    padding: 4px 8px;
+    padding: 4px 12px;
     font-size: 11px;
     font-weight: 600;
-    color: #cccccc;
+    color: #858585;
     text-transform: uppercase;
-    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
 }
 
 .dashboard-query-info {
-    background-color: #2d2d30;
-    border-radius: 4px;
-    padding: 12px;
+    background-color: transparent;
+    padding: 0 12px;
 }
 
 .dashboard-query-title {
     font-weight: 500;
     color: #cccccc;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
 }
 
 .dashboard-query-datasource {
-    font-size: 12px;
+    font-size: 11px;
     color: #858585;
     margin-bottom: 8px;
 }
 
 .dashboard-query-expression {
     background-color: #1e1e1e;
-    border: 1px solid #454545;
+    border: 1px solid #2d2d30;
     border-radius: 3px;
-    padding: 8px;
-    font-family: 'Consolas', 'Monaco', monospace;
-    font-size: 12px;
-    color: #9cdcfe;
-    margin-bottom: 12px;
+    padding: 8px 10px;
+    font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    font-size: 11px;
+    color: #d4d4d4;
+    margin: 8px 0 12px 0;
     white-space: pre-wrap;
     word-break: break-all;
+    line-height: 1.4;
 }
 
 .dashboard-query-actions {
     display: flex;
     gap: 8px;
+    margin-bottom: 8px;
 }
 
 .dashboard-empty {

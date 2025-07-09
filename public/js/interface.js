@@ -92,6 +92,7 @@ const Interface = {
                 break;
             case 'explorer':
                 this.refreshSchemaExplorer();
+                this.populateSchemaDatasourceSelect();
                 break;
             case 'dashboards':
                 this.refreshDashboards();
@@ -116,8 +117,21 @@ const Interface = {
             content: '',
             queryType: 'influxql',
             saved: false,
-            filePath: null
+            filePath: null,
+            datasourceId: null,
+            datasourceName: null,
+            datasourceType: null
         });
+
+        // Add click handler to initial tab
+        const initialTab = document.querySelector('[data-tab-id="untitled-1"].tab');
+        if (initialTab) {
+            initialTab.addEventListener('click', (e) => {
+                if (!e.target.classList.contains('tab-close')) {
+                    this.switchTab('untitled-1');
+                }
+            });
+        }
     },
 
     createInitialTab() {
@@ -144,7 +158,10 @@ const Interface = {
             content: '',
             queryType: 'influxql',
             saved: false,
-            filePath: null
+            filePath: null,
+            datasourceId: null,
+            datasourceName: null,
+            datasourceType: null
         });
 
         // Create tab DOM element
@@ -153,6 +170,14 @@ const Interface = {
         
         // Switch to new tab
         this.switchTab(tabId);
+        
+        // Populate datasource dropdown after tab is created and switched
+        setTimeout(() => {
+            this.populateTabDatasourceSelect(tabId);
+        }, 100);
+        
+        // Return the tab ID for use by other functions
+        return tabId;
     },
 
     createTabElement(tabId) {
@@ -193,6 +218,12 @@ const Interface = {
                 </div>
                 <div class="editor-options">
                     <div class="option-group">
+                        <label>Data Source:</label>
+                        <select class="tab-datasource-select" onchange="onTabDatasourceChange()">
+                            <option value="">Select data source</option>
+                        </select>
+                    </div>
+                    <div class="option-group">
                         <label>From (hours ago):</label>
                         <input type="number" class="small-input time-from" value="1" min="0" step="0.1">
                     </div>
@@ -223,6 +254,14 @@ const Interface = {
                 this.setQueryType(tabId, btn.dataset.type);
             });
         });
+        
+        // Initialize datasource select
+        const datasourceSelect = container.querySelector('.tab-datasource-select');
+        if (datasourceSelect) {
+            datasourceSelect.addEventListener('change', () => {
+                this.setTabDatasource(tabId, datasourceSelect.value);
+            });
+        }
         
         // Initialize CodeMirror for this tab after DOM is ready
         console.log('About to initialize CodeMirror for tab:', tabId);
@@ -347,6 +386,11 @@ const Interface = {
             console.log('Updated global queryEditor for tab:', tabId);
             setTimeout(() => tabData.editor.refresh(), 1);
         }
+        
+        // Restore datasource selection for this tab only if connected
+        if (GrafanaConfig.connected) {
+            this.restoreTabDatasourceSelection(tabId);
+        }
 
         // Update execute button state
         this.updateExecuteButton(tabId);
@@ -417,6 +461,100 @@ const Interface = {
         GrafanaConfig.currentQueryType = type;
         
         this.updateExecuteButton(tabId);
+    },
+    
+    setTabDatasource(tabId, datasourceId) {
+        const tabData = this.tabs.get(tabId);
+        if (!tabData) return;
+        
+        // Find datasource details
+        const datasourceItem = document.querySelector(`[data-uid="${datasourceId}"]`);
+        if (datasourceItem) {
+            tabData.datasourceId = datasourceId;
+            tabData.datasourceName = datasourceItem.dataset.name;
+            tabData.datasourceType = datasourceItem.dataset.type;
+            
+            // Auto-detect query type based on datasource
+            const queryType = datasourceItem.dataset.type === 'prometheus' ? 'promql' : 'influxql';
+            this.setQueryType(tabId, queryType);
+        } else {
+            tabData.datasourceId = null;
+            tabData.datasourceName = null;
+            tabData.datasourceType = null;
+        }
+        
+        // Update the dropdown UI to show the selected datasource
+        const container = document.querySelector(`[data-tab-id="${tabId}"].editor-container`);
+        if (container) {
+            const datasourceSelect = container.querySelector('.tab-datasource-select');
+            if (datasourceSelect) {
+                datasourceSelect.value = datasourceId || '';
+            }
+        }
+        
+        // Update execute button with a small delay to ensure everything is set
+        setTimeout(() => {
+            this.updateExecuteButton(tabId);
+        }, 50);
+    },
+    
+    restoreTabDatasourceSelection(tabId) {
+        const tabData = this.tabs.get(tabId);
+        if (!tabData) return;
+        
+        const container = document.querySelector(`[data-tab-id="${tabId}"].editor-container`);
+        if (!container) return;
+        
+        const datasourceSelect = container.querySelector('.tab-datasource-select');
+        if (!datasourceSelect) return;
+        
+        // Only restore if datasource select has options (datasources are loaded)
+        if (datasourceSelect.options.length > 1 && tabData.datasourceId) {
+            datasourceSelect.value = tabData.datasourceId;
+        }
+    },
+    
+    populateTabDatasourceSelect(tabId) {
+        console.log('populateTabDatasourceSelect called for tab:', tabId);
+        const container = document.querySelector(`[data-tab-id="${tabId}"].editor-container`);
+        if (!container) {
+            console.log('No container found for tab:', tabId);
+            return;
+        }
+        
+        const datasourceSelect = container.querySelector('.tab-datasource-select');
+        if (!datasourceSelect) {
+            console.log('No datasource select found for tab:', tabId);
+            return;
+        }
+        
+        // Clear existing options
+        datasourceSelect.innerHTML = '<option value="">Select data source</option>';
+        
+        // Add datasources from the datasource list (only from the sidebar)
+        const datasourceList = document.getElementById('datasourceList');
+        if (datasourceList) {
+            const datasourceItems = datasourceList.querySelectorAll('.datasource-item');
+            console.log('Found datasource items:', datasourceItems.length);
+            datasourceItems.forEach(item => {
+                if (item.dataset.uid && item.dataset.name) {
+                    const option = document.createElement('option');
+                    option.value = item.dataset.uid;
+                    option.textContent = item.dataset.name;
+                    datasourceSelect.appendChild(option);
+                    console.log('Added datasource option:', item.dataset.name);
+                }
+            });
+        }
+    },
+    
+    populateAllTabDatasourceSelects() {
+        console.log('populateAllTabDatasourceSelects called');
+        this.tabs.forEach((_, tabId) => {
+            this.populateTabDatasourceSelect(tabId);
+            // Restore any saved selection for this tab
+            this.restoreTabDatasourceSelection(tabId);
+        });
     },
 
     markTabUnsaved(tabId) {
@@ -677,9 +815,9 @@ const Interface = {
         // Switch to results panel
         this.switchPanel('results');
         
-        // Check if we have a datasource selected
-        if (!GrafanaConfig.selectedDatasourceUid) {
-            this.showToast('Please select a data source first', 'error');
+        // Check if we have a datasource selected for this tab
+        if (!tabData.datasourceId) {
+            this.showToast('Please select a data source for this tab', 'error');
             return;
         }
         
@@ -692,7 +830,7 @@ const Interface = {
             // Create temporary select element for compatibility with old Queries module
             const tempSelect = document.createElement('select');
             tempSelect.id = 'datasource';
-            tempSelect.innerHTML = `<option value="${GrafanaConfig.selectedDatasourceUid}" data-type="${GrafanaConfig.selectedDatasourceType}" data-id="${GrafanaConfig.selectedDatasourceId}" selected></option>`;
+            tempSelect.innerHTML = `<option value="${tabData.datasourceId}" data-type="${tabData.datasourceType}" data-id="${tabData.datasourceId}" selected></option>`;
             
             // Create temporary time inputs
             const tempTimeFrom = document.createElement('input');
@@ -747,19 +885,34 @@ const Interface = {
     },
 
     updateExecuteButton(tabId) {
+        console.log('updateExecuteButton called with tabId:', tabId);
         // Update per-tab execute button in new interface
         if (tabId) {
-            const tabContainer = document.querySelector(`[data-tab-id="${tabId}"]`);
-            if (tabContainer) {
+            const tabContainer = document.querySelector(`[data-tab-id="${tabId}"].editor-container`);
+            const tabData = this.tabs.get(tabId);
+            console.log('updateExecuteButton - tabContainer found:', !!tabContainer, 'tabData found:', !!tabData);
+            if (tabContainer && tabData) {
                 const executeBtn = tabContainer.querySelector('.execute-button');
+                console.log('updateExecuteButton - executeBtn found:', !!executeBtn);
+                console.log('updateExecuteButton - tabContainer innerHTML length:', tabContainer.innerHTML.length);
+                console.log('updateExecuteButton - tabContainer has execute-button class:', tabContainer.innerHTML.includes('execute-button'));
                 if (executeBtn) {
-                    if (GrafanaConfig.connected && (GrafanaConfig.selectedDatasourceId || GrafanaConfig.selectedDatasourceUid)) {
+                    console.log('updateExecuteButton for tab:', tabId, 'connected:', GrafanaConfig.connected, 'datasourceId:', tabData.datasourceId);
+                    if (GrafanaConfig.connected && tabData.datasourceId) {
                         executeBtn.disabled = false;
+                        console.log('Execute button enabled for tab:', tabId);
                     } else {
                         executeBtn.disabled = true;
+                        console.log('Execute button disabled for tab:', tabId);
                     }
+                } else {
+                    console.log('updateExecuteButton - no execute button found for tab:', tabId);
                 }
+            } else {
+                console.log('updateExecuteButton - missing tabContainer or tabData for tab:', tabId);
             }
+        } else {
+            console.log('updateExecuteButton - no tabId provided');
         }
         
         // Also update global execute button for backward compatibility
@@ -823,7 +976,7 @@ const Interface = {
         
         console.log('refreshSchemaExplorer called with:', {
             connected: GrafanaConfig.connected,
-            selectedDatasourceUid: GrafanaConfig.selectedDatasourceUid,
+            selectedDatasourceUid: GrafanaConfig.currentDatasourceId,
             selectedDatasourceType: GrafanaConfig.selectedDatasourceType
         });
         
@@ -832,7 +985,7 @@ const Interface = {
             return;
         }
         
-        if (!GrafanaConfig.selectedDatasourceUid) {
+        if (!GrafanaConfig.currentDatasourceId) {
             container.innerHTML = '<div class="empty-state">Select a data source to explore schema</div>';
             return;
         }
@@ -852,14 +1005,98 @@ const Interface = {
         // Load and render schema
         Schema.loadSchema();
     },
+    
+    populateSchemaDatasourceSelect() {
+        const select = document.getElementById('schemaDatasourceSelect');
+        if (!select) return;
+        
+        // Clear current options
+        select.innerHTML = '<option value="">Select a data source</option>';
+        
+        // Get datasource items from the connections panel
+        const datasourceItems = document.querySelectorAll('.datasource-item');
+        
+        datasourceItems.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.dataset.uid;
+            option.textContent = item.dataset.name || item.querySelector('div[style*="font-weight: 500"]')?.textContent || 'Unknown';
+            
+            // Select current datasource if it matches
+            if (item.dataset.uid === GrafanaConfig.currentDatasourceId) {
+                option.selected = true;
+            }
+            
+            select.appendChild(option);
+        });
+        
+        // If no datasources but we're connected, we might need to load them
+        if (datasourceItems.length === 0 && GrafanaConfig.connected) {
+            this.loadDataSourcesForSchema();
+        }
+    },
+    
+    async loadDataSourcesForSchema() {
+        if (!GrafanaConfig.connected) return;
+        
+        try {
+            const response = await API.makeApiRequest('/api/datasources', {
+                method: 'GET'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const datasources = await response.json();
+            const select = document.getElementById('schemaDatasourceSelect');
+            if (!select) return;
+            
+            datasources.forEach(ds => {
+                const option = document.createElement('option');
+                option.value = ds.uid;
+                option.textContent = ds.name;
+                
+                if (ds.uid === GrafanaConfig.currentDatasourceId) {
+                    option.selected = true;
+                }
+                
+                select.appendChild(option);
+            });
+            
+        } catch (error) {
+            console.error('Error loading data sources for schema:', error);
+        }
+    },
 
     refreshDashboards() {
         console.log('Interface.refreshDashboards called');
+        console.log('Dashboard available:', typeof Dashboard !== 'undefined');
+        console.log('Dashboard object:', Dashboard);
+        
         // Initialize dashboard module if needed
-        if (typeof Dashboard !== 'undefined') {
+        if (typeof Dashboard !== 'undefined' && Dashboard) {
+            console.log('Initializing Dashboard module...');
             Dashboard.initialize();
         } else {
             console.error('Dashboard module not available');
+            console.log('Window.Dashboard:', window.Dashboard);
+            console.log('Global Dashboard:', globalThis.Dashboard);
+            
+            // Try to initialize Dashboard after a short delay in case it's a timing issue
+            setTimeout(() => {
+                console.log('Checking Dashboard availability after delay...');
+                if (typeof Dashboard !== 'undefined' && Dashboard) {
+                    console.log('Dashboard module found after delay, initializing...');
+                    Dashboard.initialize();
+                } else {
+                    console.error('Dashboard module still not available after delay');
+                    // Try to access it through window object
+                    if (window.Dashboard) {
+                        console.log('Found Dashboard on window object, initializing...');
+                        window.Dashboard.initialize();
+                    }
+                }
+            }, 100);
         }
     },
     

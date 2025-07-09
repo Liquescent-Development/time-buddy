@@ -260,10 +260,30 @@ const History = {
                 Editor.setQueryType(item.queryType);
             }
             
-            // Select datasource
-            const datasourceSelect = document.getElementById('datasource');
-            if (datasourceSelect.querySelector('option[value="' + item.datasourceId + '"]')) {
-                datasourceSelect.value = item.datasourceId;
+            // Select datasource (new interface)
+            if (item.datasourceId) {
+                // Find the datasource item in the new interface
+                const datasourceItem = document.querySelector(`[data-uid="${item.datasourceId}"]`);
+                if (datasourceItem) {
+                    // Remove selection from all datasource items
+                    document.querySelectorAll('.datasource-item').forEach(dsItem => {
+                        dsItem.classList.remove('selected');
+                    });
+                    
+                    // Select the matching datasource
+                    datasourceItem.classList.add('selected');
+                    
+                    // Update global config
+                    GrafanaConfig.currentDatasourceId = datasourceItem.dataset.uid;
+                    GrafanaConfig.selectedDatasourceType = datasourceItem.dataset.type;
+                    GrafanaConfig.selectedDatasourceNumericId = datasourceItem.dataset.id;
+                    GrafanaConfig.selectedDatasourceName = datasourceItem.dataset.name;
+                    
+                    // Trigger change event
+                    if (typeof onDataSourceChange === 'function') {
+                        onDataSourceChange();
+                    }
+                }
             }
         }
     },
