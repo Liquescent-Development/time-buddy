@@ -151,10 +151,29 @@
                             </div>
                             <div class="sidebar-content">
                                 <div class="search-container">
-                                    <input type="text" id="dashboardSearch" placeholder="Search dashboards..." class="search-input">
+                                    <input type="text" id="dashboardSearch" placeholder="Search dashboards..." class="search-input" onkeyup="searchDashboards()">
                                 </div>
                                 <div id="dashboardResults" class="dashboard-results">
                                     <div class="empty-state">Search for dashboards to explore</div>
+                                </div>
+                                <!-- Dashboard Queries Section -->
+                                <div id="dashboardQueries" class="dashboard-queries hidden">
+                                    <div class="dashboard-info">
+                                        <h4 id="selectedDashboardTitle"></h4>
+                                        <p id="selectedDashboardDescription"></p>
+                                    </div>
+                                    <div class="dashboard-query-list">
+                                        <div class="dashboard-queries-header">
+                                            <span>Queries</span>
+                                        </div>
+                                        <div id="dashboardQueryList" class="query-list"></div>
+                                    </div>
+                                    <div id="dashboardQueryPreview" class="query-preview hidden">
+                                        <div class="query-preview-header">
+                                            <span>Query Preview</span>
+                                        </div>
+                                        <div id="queryPreviewContent" class="query-preview-content"></div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

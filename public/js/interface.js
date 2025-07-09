@@ -854,7 +854,22 @@ const Interface = {
     },
 
     refreshDashboards() {
-        // Dashboard refresh logic
+        console.log('Interface.refreshDashboards called');
+        // Initialize dashboard module if needed
+        if (typeof Dashboard !== 'undefined') {
+            Dashboard.initialize();
+        } else {
+            console.error('Dashboard module not available');
+        }
+    },
+    
+    handleDashboardSearch(event) {
+        console.log('handleDashboardSearch called');
+        if (typeof searchDashboards === 'function') {
+            searchDashboards();
+        } else {
+            console.error('searchDashboards function not available');
+        }
     },
 
     loadHistory() {

@@ -1,7 +1,8 @@
 const Queries = {
     // Execute query
     async executeQuery() {
-        const datasourceId = document.getElementById('datasource').value;
+        // Get datasource ID from global config (new interface)
+        const datasourceId = GrafanaConfig.currentDatasourceId;
         const rawQuery = Editor.getQueryValue();
         
         if (!datasourceId) {
@@ -17,9 +18,9 @@ const Queries = {
         // Substitute variables in the query
         const query = Variables.substituteVariables(rawQuery);
         
-        const selectedOption = document.getElementById('datasource').selectedOptions[0];
-        const datasourceType = selectedOption.dataset.type;
-        const datasourceNumericId = selectedOption.dataset.id;
+        // Get datasource info from global config (new interface)
+        const datasourceType = GrafanaConfig.selectedDatasourceType || 'prometheus';
+        const datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId;
         
         const timeFromHours = parseFloat(document.getElementById('timeFrom').value) || 1;
         const timeToHours = parseFloat(document.getElementById('timeTo').value) || 0;
@@ -110,7 +111,7 @@ const Queries = {
             GrafanaConfig.currentResults = data;
             this.displayResults(data);
             
-            Storage.saveToHistory(rawQuery, datasourceId, selectedOption.textContent);
+            Storage.saveToHistory(rawQuery, datasourceId, GrafanaConfig.selectedDatasourceName || 'Unknown Datasource');
             History.loadHistory();
             
         } catch (error) {

@@ -251,7 +251,7 @@ function populateDataSourceList(datasources) {
     datasources.forEach(ds => {
         const isSelected = GrafanaConfig.currentDatasourceId === ds.uid;
         html += `
-            <div class="datasource-item ${isSelected ? 'selected' : ''}" data-uid="${ds.uid}" data-type="${ds.type}">
+            <div class="datasource-item ${isSelected ? 'selected' : ''}" data-uid="${ds.uid}" data-type="${ds.type}" data-id="${ds.id}" data-name="${Utils.escapeHtml(ds.name)}">
                 <div>
                     <div style="font-weight: 500;">${Utils.escapeHtml(ds.name)}</div>
                     <div style="font-size: 11px; color: #858585;">${Utils.escapeHtml(ds.type)}</div>
@@ -273,6 +273,9 @@ function populateDataSourceList(datasources) {
             
             // Update global state
             GrafanaConfig.currentDatasourceId = item.dataset.uid;
+            GrafanaConfig.selectedDatasourceType = item.dataset.type;
+            GrafanaConfig.selectedDatasourceNumericId = item.dataset.id;
+            GrafanaConfig.selectedDatasourceName = item.dataset.name;
             
             // Trigger change event
             onDataSourceChange();
@@ -332,12 +335,7 @@ function importConnections() {
     input.click();
 }
 
-// Dashboard search functions
-function searchDashboards() {
-    if (typeof Dashboard !== 'undefined' && Dashboard.searchDashboards) {
-        Dashboard.searchDashboards();
-    }
-}
+// Dashboard search functions are now handled in dashboard.js
 
 function clearDashboardSearch() {
     const searchInput = document.getElementById('dashboardSearch');
