@@ -1,6 +1,6 @@
 # Grafana Query IDE
 
-A powerful web-based IDE for executing InfluxQL and PromQL queries through the Grafana API. Features an advanced code editor with syntax highlighting, intelligent auto-completion, real-time validation, persistent connection management, dashboard exploration, guided workflow, and a built-in proxy to handle CORS issues.
+A powerful cross-platform desktop IDE for executing InfluxQL and PromQL queries through the Grafana API. Built with Electron for native desktop experience with advanced code editor, syntax highlighting, intelligent auto-completion, real-time validation, persistent connection management, dashboard exploration, and file system integration.
 
 ## ✨ Key Features
 
@@ -91,30 +91,40 @@ A powerful web-based IDE for executing InfluxQL and PromQL queries through the G
 
 ### 🚀 **Performance & Reliability**
 - **Built-in CORS proxy** with automatic SSL certificate handling
-- **Docker support** for easy deployment and containerization
+- **Cross-platform desktop app** built with Electron (Windows, macOS, Linux)
+- **Native file system integration** for saving and loading query files
 - **Optimized API handling** with proper error reporting and timeout management
-- **Responsive design** that works on desktop, tablet, and mobile
+- **Native desktop experience** with menu shortcuts and OS integration
 - **Guided User Experience**: Smart section management with auto-expand/collapse workflow
 - **Resizable Query Editor**: Adjustable editor height for complex queries
 
-## Quick Start with Docker
+## Quick Start
 
-The easiest way to run Grafana Query IDE is with Docker:
+Download and run the desktop application:
 
+### Option 1: Pre-built Releases (Recommended)
+1. Go to [Releases](https://github.com/yourusername/grafana-query-ide/releases)
+2. Download the appropriate version for your platform:
+   - **Windows**: `.exe` installer
+   - **macOS**: `.dmg` disk image
+   - **Linux**: `.AppImage` executable
+3. Install and run the application
+
+### Option 2: Build from Source
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/grafana-query-ide.git
 cd grafana-query-ide
 
-# Start with Docker Compose
-docker-compose up -d
+# Install dependencies
+npm install
 
-# Or build and run manually
-docker build -t grafana-query-ide .
-docker run -d -p 3000:3000 --name grafana-query-ide grafana-query-ide
+# Run in development mode
+npm run electron-dev
+
+# Or build for production
+npm run build
 ```
-
-Open http://localhost:3000 in your browser.
 
 ## Usage Guide
 
@@ -316,18 +326,21 @@ Result: Display="Production", Value="Environment_prod01"
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Web Browser   │────▶│  Express Server │────▶│ Grafana Instance│
-│ (Enhanced IDE)  │     │ (CORS Proxy)    │     │   (Your API)    │
+│ Electron Desktop│────▶│  Express Server │────▶│ Grafana Instance│
+│   Application   │     │ (CORS Proxy)    │     │   (Your API)    │
 │                 │     │                 │     │                 │
 │ • Code Editor   │     │ • CORS Handling │     │ • Data Sources  │
 │ • Syntax Check  │     │ • SSL Support   │     │ • Authentication│
 │ • Auto-complete │     │ • Error Handling│     │ • Query API     │
+│ • File System   │     │                 │     │                 │
 │ • Connections   │     │                 │     │                 │
 │ • Variables     │     │                 │     │                 │
 │ • Schema Explor │     │                 │     │                 │
 │ • History Mgmt  │     │                 │     │                 │
+│ • Menu Shortcuts│     │                 │     │                 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-         Port 3000              │
+    Native Desktop             Internal
+     Application                Port 3000
                                │
                         Handles CORS,
                         SSL certificates,
@@ -377,30 +390,37 @@ Result: Display="Production", Value="Environment_prod01"
 
 ```
 grafana-query-ide/
-├── Dockerfile
-├── docker-compose.yml
-├── package.json
-├── server.js
+├── main.js                     # Electron main process
+├── preload.js                  # Electron preload script
+├── electron-start.js           # Development helper
+├── build.js                    # Cross-platform build script
+├── package.json               # Dependencies and build config
+├── server.js                  # Internal Express server
 ├── README.md
-├── CLAUDE.md                   # AI assistant instructions
+├── CLAUDE.md                  # AI assistant instructions
+├── ELECTRON.md                # Electron-specific documentation
+├── assets/                    # App icons for different platforms
+│   └── README.md
 └── public/
-    ├── index.html              # Clean HTML structure
+    ├── index.html             # Main application UI
     ├── css/
-    │   └── main.css            # All styles in one organized file
+    │   └── main.css           # All styles in one organized file
     └── js/
-        ├── config.js           # Global configuration and constants
-        ├── utils.js            # Utility functions
-        ├── storage.js          # localStorage management
-        ├── api.js              # API communication
-        ├── editor.js           # CodeMirror editor functionality
-        ├── connections.js      # Connection management
-        ├── variables.js        # Query variables management
-        ├── schema.js           # Schema explorer functionality
-        ├── dashboard.js        # Dashboard explorer and query extraction
-        ├── queries.js          # Query execution and results
-        ├── charts.js           # Chart visualization
-        ├── history.js          # Query history management
-        └── app.js              # Main app initialization
+        ├── config.js          # Global configuration and constants
+        ├── utils.js           # Utility functions
+        ├── storage.js         # localStorage management
+        ├── api.js             # API communication
+        ├── editor.js          # CodeMirror editor functionality
+        ├── connections.js     # Connection management
+        ├── variables.js       # Query variables management
+        ├── schema.js          # Schema explorer functionality
+        ├── dashboard.js       # Dashboard explorer and query extraction
+        ├── queries.js         # Query execution and results
+        ├── charts.js          # Chart visualization
+        ├── history.js         # Query history management
+        ├── fileExplorer.js    # File system integration
+        ├── interface.js       # VS Code-like interface management
+        └── app.js             # Main app initialization
 ```
 
 ## Troubleshooting
@@ -408,7 +428,7 @@ grafana-query-ide/
 ### Connection Issues
 - **401 Unauthorized**: Verify username and password are correct
 - **404 Not Found**: Check Grafana URL format (include https://)
-- **CORS Errors**: Ensure using Docker container with integrated proxy
+- **CORS Errors**: Desktop app handles CORS automatically via integrated proxy
 - **SSL Certificate**: Proxy handles self-signed certificates automatically
 
 ### Query Issues
@@ -441,16 +461,31 @@ grafana-query-ide/
 
 ## Development
 
-To modify the application:
+To develop the application:
 
-1. **UI Changes**: Edit `public/index.html` for interface modifications
-2. **Server Changes**: Edit `server.js` for proxy and API handling
-3. **Dependencies**: Update `package.json` for new NPM packages
-4. **Rebuild**: 
+1. **Clone and Setup**:
    ```bash
-   docker-compose build
-   docker-compose up -d
+   git clone https://github.com/yourusername/grafana-query-ide.git
+   cd grafana-query-ide
+   npm install
    ```
+
+2. **Development Mode**:
+   ```bash
+   npm run electron-dev        # Start Electron with hot reload
+   ```
+
+3. **Build for Production**:
+   ```bash
+   npm run build              # Build for current platform
+   npm run build-all          # Build for all platforms
+   ```
+
+4. **File Organization**:
+   - **UI Changes**: Edit `public/` files for interface modifications
+   - **Electron Changes**: Edit `main.js` and `preload.js` for desktop functionality
+   - **Server Changes**: Edit `server.js` for proxy and API handling
+   - **Dependencies**: Update `package.json` for new packages
 
 ## Contributing
 

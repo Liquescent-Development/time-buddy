@@ -1,7 +1,7 @@
 {
     "name": "grafana-query-ide",
     "version": "0.0.1",
-    "description": "Web-based IDE for executing InfluxQL and PromQL queries via Grafana API",
+    "description": "Desktop IDE for executing InfluxQL and PromQL queries via Grafana API",
     "main": "main.js",
     "homepage": "./",
     "scripts": {
