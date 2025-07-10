@@ -5,7 +5,13 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
     // File operations
     saveFile: (content, filename) => ipcRenderer.invoke('save-file', content, filename),
+    writeFile: (filePath, content) => ipcRenderer.invoke('write-file', filePath, content),
     loadFile: (filePath) => ipcRenderer.invoke('load-file', filePath),
+    
+    // Directory operations
+    selectDirectory: () => ipcRenderer.invoke('select-directory'),
+    readDirectory: (dirPath) => ipcRenderer.invoke('read-directory', dirPath),
+    readFileContent: (filePath) => ipcRenderer.invoke('read-file-content', filePath),
     
     // Menu event listeners
     onMenuAction: (callback) => {

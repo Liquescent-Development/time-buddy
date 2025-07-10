@@ -411,12 +411,35 @@ app.on('web-contents-created', (event, contents) => {
 
 // IPC handlers for file operations
 ipcMain.handle('save-file', async (event, content, filename) => {
-    const result = await dialog.showSaveDialog(mainWindow, {
-        defaultPath: filename,
-        filters: [
+    // Determine file type from filename extension
+    const ext = filename.toLowerCase().split('.').pop();
+    
+    let filters = [];
+    if (ext === 'isql') {
+        filters = [
+            { name: 'InfluxQL Query Files', extensions: ['isql'] },
+            { name: 'All Files', extensions: ['*'] }
+        ];
+    } else if (ext === 'promql') {
+        filters = [
+            { name: 'PromQL Query Files', extensions: ['promql'] },
+            { name: 'All Files', extensions: ['*'] }
+        ];
+    } else if (ext === 'json') {
+        filters = [
             { name: 'JSON Files', extensions: ['json'] },
             { name: 'All Files', extensions: ['*'] }
-        ]
+        ];
+    } else {
+        filters = [
+            { name: 'Query Files', extensions: ['isql', 'promql'] },
+            { name: 'All Files', extensions: ['*'] }
+        ];
+    }
+    
+    const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: filename,
+        filters: filters
     });
     
     if (!result.canceled) {
@@ -427,8 +450,66 @@ ipcMain.handle('save-file', async (event, content, filename) => {
     return null;
 });
 
+// Write file directly to a specific path (no dialog)
+ipcMain.handle('write-file', async (event, filePath, content) => {
+    const fs = require('fs').promises;
+    try {
+        await fs.writeFile(filePath, content);
+        return true;
+    } catch (error) {
+        throw new Error(`Failed to write file: ${error.message}`);
+    }
+});
+
 ipcMain.handle('load-file', async (event, filePath) => {
     const fs = require('fs').promises;
     const content = await fs.readFile(filePath, 'utf8');
     return content;
+});
+
+ipcMain.handle('select-directory', async (event) => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openDirectory']
+    });
+    
+    if (!result.canceled && result.filePaths.length > 0) {
+        return { filePaths: result.filePaths, canceled: false };
+    }
+    return { canceled: true };
+});
+
+ipcMain.handle('read-directory', async (event, dirPath) => {
+    const fs = require('fs').promises;
+    try {
+        const entries = await fs.readdir(dirPath, { withFileTypes: true });
+        const files = [];
+        
+        for (const entry of entries) {
+            if (entry.isFile() && (
+                entry.name.endsWith('.isql') || 
+                entry.name.endsWith('.promql') || 
+                entry.name.endsWith('.sql')
+            )) {
+                files.push({
+                    name: entry.name,
+                    path: require('path').join(dirPath, entry.name),
+                    isFile: true
+                });
+            }
+        }
+        
+        return files;
+    } catch (error) {
+        throw new Error(`Failed to read directory: ${error.message}`);
+    }
+});
+
+ipcMain.handle('read-file-content', async (event, filePath) => {
+    const fs = require('fs').promises;
+    try {
+        const content = await fs.readFile(filePath, 'utf8');
+        return content;
+    } catch (error) {
+        throw new Error(`Failed to read file: ${error.message}`);
+    }
 });
