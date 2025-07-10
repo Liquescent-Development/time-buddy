@@ -1,118 +1,80 @@
 # Grafana Query IDE
 
-A powerful cross-platform desktop IDE for executing InfluxQL and PromQL queries through the Grafana API. Built with Electron for native desktop experience with advanced code editor, syntax highlighting, intelligent auto-completion, real-time validation, persistent connection management, dashboard exploration, and file system integration.
+A powerful cross-platform desktop application for executing InfluxQL and PromQL queries through the Grafana API. Built with Electron, featuring an advanced VS Code-like interface with syntax highlighting, intelligent auto-completion, file system integration, and native desktop experience.
 
 ## ✨ Key Features
 
-### 🔐 **Advanced Authentication & Connection Management**
-- **Persistent Connections**: Save and manage multiple Grafana server connections
-- **Smart Connection Storage**: Store server details (name, URL, username) without passwords for security
-- **Quick Connection Switching**: Dropdown selection between saved connections
-- **Connection CRUD**: Create, edit, and delete saved connections with ease
-- **Guided Workflow**: Auto-expanding sections guide users through connection → datasource → schema flow
-- **Smart Section Management**: Collapsible sections with status indicators and automatic state transitions
-- **Basic authentication support** for Grafana instances
+### 🖥️ **Native Desktop Experience**
+- **Cross-platform**: Windows, macOS, and Linux support
+- **Native file system**: Save and load query files (.promql, .isql, .sql)
+- **Menu shortcuts**: Keyboard shortcuts for all major operations (Ctrl+S, Ctrl+Enter, etc.)
+- **VS Code-like interface**: Familiar tabbed editor with sidebar panels
+- **Native dialogs**: OS-native file open/save dialogs
 
+### 🔐 **Advanced Connection Management**
+- **Multiple connections**: Save and manage multiple Grafana server connections
+- **Secure storage**: Connection details saved locally (passwords never stored)
+- **Quick switching**: Select between saved connections
+- **Connection preferences**: Remember default data source per connection
+- **Proxy support**: Built-in SOCKS5 proxy support for secure connections
 
-## Demo
+### 📝 **Professional Code Editor**
+- **Syntax highlighting**: Custom PromQL and InfluxQL syntax highlighting
+- **Intelligent autocomplete**: 
+  - **PromQL**: 40+ functions including `rate()`, `histogram_quantile()`, `topk()`
+  - **InfluxQL**: 30+ SQL keywords and InfluxDB-specific functions
+- **Real-time validation**: Immediate syntax error detection and feedback
+- **Auto-detection**: Query language automatically selected based on data source
+- **Multi-tab support**: Work with multiple queries simultaneously
+- **Resizable editor**: Adjustable height for complex queries
 
-<img src="content/grafana_query_ide_demo.gif" style="max-height: 500px; width: auto;" alt="Demo">
+### 🔍 **Schema Explorer**
+- **Interactive discovery**: Browse database schema with click-to-insert
+- **Prometheus**: Explore metrics and labels with search functionality
+- **InfluxDB**: Browse retention policies, measurements, fields, and tags
+- **Smart caching**: Avoid expensive reloads with intelligent caching
+- **Field-tag filtering**: See only tags associated with selected fields
 
-### 📝 **Code Editor**
-- **Syntax Highlighting**: 
-  - Custom PromQL mode with comprehensive keyword and function highlighting
-  - Full InfluxQL/SQL syntax highlighting with database-specific terms
-  - Dark theme optimized for readability
-- **Auto-completion**:
-  - **PromQL**: 40+ functions including `rate()`, `histogram_quantile()`, `topk()`, aggregators, and operators
-  - **InfluxQL**: 30+ SQL keywords, functions, and InfluxDB-specific commands
-  - **Smart triggering**: Auto-suggestions as you type + manual trigger (Ctrl+Space)
-- **Real-time Syntax Validation**:
-  - **PromQL**: Bracket matching, time range syntax, query structure validation
-  - **InfluxQL**: SQL structure validation, quote/parentheses matching
-  - **Live error display**: Immediate feedback with clear error messages
-- **Smart Editor Features**:
-  - Line numbers and bracket matching
-  - Auto-closing brackets and smart indentation
-  - Code folding and line wrapping options
+### 📊 **Query Variables System**
+- **Dynamic queries**: Define reusable variables with query results
+- **Multi-value support**: Select multiple values for regex patterns
+- **Regex filtering**: Transform variable values with regex patterns
+- **Connection-scoped**: Variables automatically filtered by current connection
+- **Substitution**: Use `$variable` or `${variable}` syntax in queries
 
-### 🤖 **Intelligent Query Management**
-- **Auto Query Type Selection**: Automatically switches between InfluxQL/PromQL based on selected data source
-- **Query Variables**: Define reusable variables with queries (like Grafana dashboards)
-  - Create variables that populate with query results
-  - Use `$variableName` or `${variableName}` in queries for dynamic substitution
-  - Support for both PromQL and InfluxQL variable queries
-  - **Connection-Scoped**: Variables are associated with specific connections for better organization
-  - **Regex Filtering**: Apply regex patterns to extract parts of values
-  - **Named Capture Groups**: Use `(?P<text>...)` and `(?P<value>...)` for display/value separation
-  - **Multi-Value Variables**: Select multiple values for use in regex patterns or IN clauses
-  - **Sidebar Integration**: Always-visible variables panel in organized sidebar layout
-- **Dashboard Explorer**: Discover and analyze existing Grafana dashboards
-  - **Search Dashboards**: Find dashboards by name across your Grafana instance
-  - **Query Extraction**: Automatically extract all queries from dashboard panels
-  - **Tabbed Interface**: Organize and view multiple queries per dashboard with dedicated tabs
-  - **Query Analysis**: View query details including datasource, expression, and panel context
-  - **Copy to Editor**: One-click copying of dashboard queries to the query editor
-  - **Execute Dashboard Queries**: Direct execution of extracted queries for analysis
-  - **Recursive Panel Support**: Handles nested panels and row panels automatically
-- **Schema Explorer**: Interactive database schema discovery
-  - **Prometheus**: Browse all available metrics and labels with search
-  - **InfluxDB**: 
-    - Dropdown selectors for retention policies and measurements
-    - **Field-Based Tag Filtering**: Select a field to see only associated tags
-    - **Smart Tag Discovery**: Intelligent queries to find tag-field relationships
-    - Searchable fields and tags lists with preserved scroll positions
-    - **Optimized Loading**: Partial UI updates preserve user context
-    - Loading indicators for async schema discovery
-  - Click-to-insert functionality for faster query building
-  - **Bottom-Right Refresh**: Unobtrusive refresh button positioned for optimal workflow
-  - **Auto-Expand**: Automatically expands when datasource is selected
-- **Enhanced Query History**:
-  - **Sidebar Layout**: Dedicated sidebar section for easy access alongside variables
-  - **Smart Duplicate Prevention**: Identical queries move to top without duplication
-  - **Auto-Generated Titles**: Intelligent titles based on query content (e.g., "Rate of http_requests", "Sum from cpu_usage")
-  - **Editable Titles**: Customize auto-generated titles manually
-  - **Search**: Full-text search across queries, labels, and tags
-  - **Favorites**: Star important queries for quick access
-  - **Labels & Tags**: Organize queries with custom labels and tags
-  - **Advanced Filtering**: Filter by favorites, tags, or search terms
-  - **Edit & Delete**: Manage individual history items
-  - **Equal Height Distribution**: 50/50 height split with variables in sidebar
-  - Persistent storage with increased capacity (100 items)
-- **Smart data source discovery** for InfluxDB and Prometheus
-- **Visual notifications** for auto-selections and important actions
+### 🗂️ **Dashboard Explorer**
+- **Search dashboards**: Find dashboards across your Grafana instance
+- **Query extraction**: Automatically extract all queries from dashboard panels
+- **Copy to editor**: One-click copying of dashboard queries for analysis
+- **Tabbed interface**: Organize multiple dashboard queries
 
-### 📊 **Data Visualization**
-- **Dual View Modes**: Clean table view and interactive chart visualization
-- **Multi-series Support**: Handle GROUP BY results with series selection
-- **Smart Pagination**: Configurable page sizes (25-500 rows) with navigation
-- **Interactive Charts**: Line, bar, and scatter plots with Chart.js integration
-- **Statistical Summaries**: Automatic group statistics and data insights
+### 📈 **Data Visualization**
+- **Dual view modes**: Clean table view and interactive charts
+- **Multiple chart types**: Line, bar, and scatter plots
+- **Series management**: Handle GROUP BY results with easy series selection
+- **Smart pagination**: Configurable page sizes with navigation
+- **Export options**: Access raw JSON data for external analysis
 
-### 🚀 **Performance & Reliability**
-- **Built-in CORS proxy** with automatic SSL certificate handling
-- **Cross-platform desktop app** built with Electron (Windows, macOS, Linux)
-- **Native file system integration** for saving and loading query files
-- **Optimized API handling** with proper error reporting and timeout management
-- **Native desktop experience** with menu shortcuts and OS integration
-- **Guided User Experience**: Smart section management with auto-expand/collapse workflow
-- **Resizable Query Editor**: Adjustable editor height for complex queries
+### 💾 **Query History & Management**
+- **Persistent history**: 100+ queries saved with intelligent titles
+- **Search & filter**: Full-text search across queries and tags
+- **Favorites system**: Star important queries for quick access
+- **Smart duplicates**: Identical queries move to top without duplication
+- **Organization**: Tag and label queries for better management
 
-## Quick Start
+## 🚀 Quick Start
 
-Download and run the desktop application:
-
-### Option 1: Pre-built Releases (Recommended)
+### Option 1: Download Pre-built App (Recommended)
 1. Go to [Releases](https://github.com/yourusername/grafana-query-ide/releases)
-2. Download the appropriate version for your platform:
+2. Download for your platform:
    - **Windows**: `.exe` installer
-   - **macOS**: `.dmg` disk image
+   - **macOS**: `.dmg` disk image  
    - **Linux**: `.AppImage` executable
-3. Install and run the application
+3. Install and launch the application
 
 ### Option 2: Build from Source
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/yourusername/grafana-query-ide.git
 cd grafana-query-ide
 
@@ -122,131 +84,61 @@ npm install
 # Run in development mode
 npm run electron-dev
 
-# Or build for production
+# Build for production
 npm run build
 ```
 
-## Usage Guide
+## 🎯 Getting Started
 
-### 1. **Guided Workflow Experience**
-   The application features a guided workflow that automatically expands relevant sections as you progress:
-   - **On Page Load**: Authentication section is expanded and ready for connection
-   - **After Connection**: Authentication collapses, Data Source section expands for selection
-   - **After Data Source Selection**: Data Source collapses, Schema Explorer expands for browsing
-   - **Dashboard Explorer**: Available as a separate collapsible section for dashboard analysis
+### 1. **Create Your First Connection**
+- Click the "+" button in the Connections panel
+- Enter your Grafana server details:
+  - **Name**: Friendly name (e.g., "Production Grafana")
+  - **URL**: Full Grafana URL (e.g., "https://grafana.company.com")
+  - **Username**: Your Grafana username
+  - **Password**: Enter when connecting (never saved)
+- Click "Save & Connect"
 
-### 2. **Connection Management**
-   - **First Time**: Click "New Connection" to add your first Grafana server
-   - **Save Details**: Enter connection name, URL, and default username (password never saved)
-   - **Quick Access**: Use the dropdown to switch between saved connections
-   - **Management**: Edit or delete connections as needed
+### 2. **Select a Data Source**
+- After connecting, available data sources appear in the sidebar
+- Click a data source to select it as your default
+- Query language switches automatically (PromQL for Prometheus, InfluxQL for InfluxDB)
 
-### 3. **Connect to Grafana**
-   - Select a saved connection or enter details manually
-   - Enter your password (required each time for security)
-   - Click "Connect" - the system will verify credentials and load data sources
-   - **Auto-Flow**: Authentication section auto-collapses and shows connection status
+### 3. **Explore Your Schema**
+- Schema Explorer automatically loads when you select a data source
+- **Prometheus**: Browse metrics and labels, click to insert
+- **InfluxDB**: Select retention policy → measurement → explore fields and tags
 
-### 4. **Dashboard Explorer (Optional)**
-   - **Expand Section**: Click "Show" to expand the Dashboard Explorer section
-   - **Search Dashboards**: Type dashboard names to search across your Grafana instance
-   - **Select Dashboard**: Click on a dashboard from search results to load its queries
-   - **Tabbed Query View**: Each dashboard query appears in its own tab with:
-     - Panel title and query reference ID
-     - Data source information
-     - Complete query expression
-     - Copy to editor and execute actions
-   - **Query Analysis**: Understand how existing dashboards structure their queries
-   - **Learning Tool**: Study complex queries from production dashboards
+### 4. **Write and Execute Queries**
+- Type your query in the editor with syntax highlighting and autocomplete
+- Press **Ctrl+Enter** (or Cmd+Enter on macOS) to execute
+- View results in table or chart format
+- Save queries with **Ctrl+S** for future use
 
-### 5. **Query Variables (Optional)**
-   - **Sidebar Location**: Variables are now located in the right sidebar alongside query history
-   - **Connection-Scoped**: Variables are automatically filtered by the current connection
-   - **Always Visible**: Variables section is always expanded for easy access
-   - **Create Variables**: Define reusable query variables for dynamic queries
-     - Click "Add Variable" to create a new variable
-     - Name your variable and write a query that returns values
-     - Apply optional regex to filter/transform values
-     - Enable multi-select for variables used in regex or IN clauses
-   - **Use Variables**: Reference variables in queries with `$variableName` or `${variableName}` syntax
-   - **Advanced Features**:
-     - **Regex Filtering**: Extract parts of values using regex patterns
-     - **Named Groups**: Use `(?P<text>Display)_(?P<value>ActualValue)` for separate display/value
-     - **Multi-Select**: Enable for variables that need multiple values
-   - **Examples**:
-     - Create `$region` variable with query `label_values(region)`
-     - Use in queries: `cpu_usage{region="$region"}`
-     - Multi-value usage: `host =~ /${hosts}/` expands to `host =~ /(host1|host2|host3)/`
+### 5. **Advanced Features**
+- **Variables**: Create reusable query variables in the sidebar
+- **Dashboard Explorer**: Search and analyze existing Grafana dashboards
+- **File Management**: Save/load query files from your file system
+- **History**: Access your query history with search and favorites
 
-### 6. **Schema Explorer**
-   - **Auto-Expand**: Automatically expands when you select a data source (guided workflow)
-   - **Automatic Discovery**: Schema loads automatically when you select a data source
-   - **Prometheus Mode**:
-     - Browse all available metrics with search functionality
-     - View common labels across your metrics
-     - Click any metric or label to insert into query editor
-   - **InfluxDB Mode**:
-     - Select retention policy from dropdown
-     - Select measurement from dropdown to load fields and tags
-     - **Field-Based Filtering**: Click a field to filter tags to only those associated with that field
-     - **Smart Tag Discovery**: Uses `GROUP BY *` queries to find field-tag relationships
-     - **Preserved Context**: Scroll positions maintained during updates
-     - Search through fields and tags with real-time filtering
-     - Loading indicators show when schema is being fetched
-   - **Refresh Button**: Unobtrusive refresh button positioned at bottom-right of container
-   - **Workspace Management**: Collapse schema explorer to save screen space
+## 📖 Example Queries
 
-### 7. **Smart Query Writing**
-   - **Auto-Selection**: Query type automatically switches based on selected data source
-     - Prometheus data sources → PromQL mode
-     - InfluxDB data sources → InfluxQL mode
-   - **Code Assistance**: 
-     - Syntax highlighting shows keywords, functions, and operators in color
-     - Auto-completion appears as you type (or press Ctrl+Space)
-     - Real-time validation shows syntax errors immediately
-   - **Variable Substitution**:
-     - Single values: `$variable` or `${variable}`
-     - Multi-values in regex: `=~ /${hosts}/` → `=~ /(host1|host2|host3)/`
-     - Multi-values in IN: `IN (${regions})` → `IN ('us-east', 'us-west')`
-   - **Advanced Features**:
-     - Bracket matching and auto-closing
-     - Smart indentation and line numbers
-     - Professional dark theme for extended coding sessions
+### PromQL (Prometheus)
+```promql
+# Basic metric query
+up{job="prometheus"}
 
-### 8. **Execute and Analyze**
-   - Click "Execute Query" to run your query
-   - **Resizable Editor**: Drag the bottom edge of the query editor to adjust height for complex queries
-   - **View Options**:
-     - **Table View**: Paginated results with configurable page sizes
-     - **Chart View**: Interactive visualizations with multiple chart types
-   - **Multi-Series**: Handle GROUP BY results with easy series switching
-   - **Export Options**: View raw JSON response for debugging
+# Rate calculation over time
+rate(http_requests_total[5m])
 
-### 9. **Enhanced Query History**
-   - **Sidebar Layout**: Located in the right sidebar with 50/50 height split with variables
-   - **Smart Duplicate Handling**: Identical queries automatically move to top without creating duplicates
-   - **Auto-Generated Titles**: Intelligent titles based on query content:
-     - PromQL: "Rate of http_requests_total", "Sum of cpu_usage", "Average memory_usage"
-     - InfluxQL: "Query temperature_data", "Count from cpu", "Mean from disk_usage"
-     - Fallback to first few words for complex queries
-   - **Search & Filter**:
-     - Full-text search across queries, auto-generated titles, and tags
-     - Filter to show only favorite queries
-     - Click tags to filter by specific tags
-   - **Organization**:
-     - Star queries to mark as favorites
-     - Edit auto-generated titles with custom labels
-     - Tag queries with multiple tags for categorization
-   - **Management**:
-     - Edit labels and tags on existing queries
-     - Delete individual queries from history
-     - Clear all history when needed
-   - Query type and data source information preserved
-   - Increased storage capacity (100 queries)
+# Aggregation with grouping
+sum(rate(container_cpu_usage_seconds_total[5m])) by (container_name)
 
-## Example Queries
+# Using variables
+cpu_usage{instance="$instance", job="$job"}
+```
 
-### InfluxQL (Auto-selected for InfluxDB data sources)
+### InfluxQL (InfluxDB)
 ```sql
 -- Time series aggregation
 SELECT mean("value") FROM "temperature" WHERE time > now() - 1h GROUP BY time(5m)
@@ -254,270 +146,139 @@ SELECT mean("value") FROM "temperature" WHERE time > now() - 1h GROUP BY time(5m
 -- Multi-measurement query
 SELECT * FROM "cpu", "memory" WHERE host = 'server1' AND time > now() - 24h
 
--- Advanced aggregation with grouping
-SELECT max("usage_percent") FROM "cpu" WHERE time > now() - 6h GROUP BY "host", time(10m)
-
--- Using variables in InfluxQL
+-- Using variables
 SELECT mean("value") FROM "$measurement" WHERE "host" = '$host' AND time > now() - 1h
-
--- Using multi-value variables with regex
-SELECT * FROM "metrics" WHERE host =~ /${hosts}/ AND time > now() - 1h
-
--- Using multi-value variables with IN clause
-SELECT mean("value") FROM "temperature" WHERE region IN (${regions}) GROUP BY region
 ```
 
-### PromQL (Auto-selected for Prometheus data sources)
-```promql
-# Basic metric query
-up{job="prometheus"}
+## 🏗️ Architecture
 
-# Rate calculation with time range
-rate(http_requests_total[5m])
-
-# Advanced aggregation with grouping
-sum(rate(container_cpu_usage_seconds_total[5m])) by (container_name)
-
-# Histogram quantile calculation
-histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))
-
-# Using variables in PromQL
-cpu_usage{instance="$instance", job="$job"}
-rate(http_requests_total{region="$region"}[5m])
-
-# Using multi-value variables with regex
-cpu_usage{host=~"${hosts}"}  # Expands to host=~"host1|host2|host3"
-```
-
-### Variable Query Examples
-```promql
-# PromQL variable queries (for populating variable dropdowns)
-label_values(instance)              # Get all instance values
-label_values(cpu_usage, job)        # Get all job values from cpu_usage metric
-query_result(up)                    # Get results from up metric
-```
-
-```sql
--- InfluxQL variable queries (for populating variable dropdowns)
-SHOW MEASUREMENTS                   -- Get all measurements
-SHOW TAG VALUES FROM "cpu" WITH KEY = "host"  -- Get all host values
-SHOW FIELD KEYS FROM "cpu"          -- Get all field names
-```
-
-### Variable Regex Examples
-```
-# Extract region from hostname
-Regex: (?P<text>[\w-]+)-(?P<value>[\w-]+)-\d+
-Input: us-east-1-server-001
-Result: Display="us-east", Value="1"
-
-# Simple extraction (first capture group)
-Regex: ^([^-]+)
-Input: prod-server-01
-Result: "prod"
-
-# Named groups for display/value separation
-Regex: (?P<text>[^_]+)_(?P<value>.+)
-Input: Production_Environment_prod01
-Result: Display="Production", Value="Environment_prod01"
-```
-
-## Architecture
+The application consists of three main components:
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │ Electron Desktop│────▶│  Express Server │────▶│ Grafana Instance│
 │   Application   │     │ (CORS Proxy)    │     │   (Your API)    │
 │                 │     │                 │     │                 │
-│ • Code Editor   │     │ • CORS Handling │     │ • Data Sources  │
-│ • Syntax Check  │     │ • SSL Support   │     │ • Authentication│
-│ • Auto-complete │     │ • Error Handling│     │ • Query API     │
-│ • File System   │     │                 │     │                 │
-│ • Connections   │     │                 │     │                 │
-│ • Variables     │     │                 │     │                 │
-│ • Schema Explor │     │                 │     │                 │
-│ • History Mgmt  │     │                 │     │                 │
-│ • Menu Shortcuts│     │                 │     │                 │
+│ • VS Code UI    │     │ • CORS Handling │     │ • Data Sources  │
+│ • File System   │     │ • SSL Support   │     │ • Authentication│
+│ • Native Menus  │     │ • Proxy Support │     │ • Query API     │
+│ • Local Storage │     │ • Error Handling│     │                 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-    Native Desktop             Internal
-     Application                Port 3000
-                               │
-                        Handles CORS,
-                        SSL certificates,
-                        Authentication,
-                        Request proxying
 ```
 
-## Advanced Features
+- **Electron App**: Native desktop interface with file system access
+- **Express Server**: Internal proxy server handles CORS and SSL certificates
+- **Grafana API**: Your Grafana instance providing data and authentication
 
-### Connection Security
-- **No Password Storage**: Passwords are never saved to browser storage
-- **Secure Transmission**: Credentials transmitted over HTTPS when available
-- **Connection Validation**: Real-time connection testing with detailed error reporting
+## ⌨️ Keyboard Shortcuts
 
-### Code Editor Capabilities
-- **Multi-language Support**: Dedicated modes for PromQL and InfluxQL
-- **Real-time Validation**: Syntax checking with immediate error feedback
-- **Smart Assistance**: Context-aware auto-completion and suggestions
-- **Professional Features**: Line numbers, bracket matching, code folding
+| Action | Windows/Linux | macOS |
+|--------|---------------|-------|
+| Execute Query | `Ctrl+Enter` | `Cmd+Enter` |
+| Save Query | `Ctrl+S` | `Cmd+S` |
+| New Query Tab | `Ctrl+N` | `Cmd+N` |
+| Find in Editor | `Ctrl+F` | `Cmd+F` |
+| Auto-complete | `Ctrl+Space` | `Ctrl+Space` |
+| Developer Tools | `Ctrl+Shift+I` | `Cmd+Option+I` |
 
-### Query Management
-- **Auto-Detection**: Query language automatically selected based on data source type
-- **History Persistence**: Query history preserved across browser sessions with enhanced features
-- **Smart Defaults**: Reasonable default values for time ranges and query options
-- **Variable System**: Advanced variable management with regex and multi-value support
+## 🔧 Configuration
 
-### Data Visualization
-- **Responsive Charts**: Interactive charts that adapt to screen size
-- **Multiple Chart Types**: Line, bar, and scatter plot visualizations
-- **Series Management**: Easy handling of multi-series data from GROUP BY queries
-- **Export Options**: Raw data access for external analysis
+### Connection Settings
+- **SOCKS5 Proxy**: Configure proxy settings in connection dialog
+- **SSL Certificates**: Self-signed certificates handled automatically
+- **Timeouts**: 30-second default timeout for all requests
 
-## Environment Variables
+### Application Settings
+- **File Locations**: Query files saved to user-selected directories
+- **Theme**: Dark theme optimized for extended coding sessions
+- **Cache**: Schema and connection data cached for performance
 
-- `PORT` - Server port (default: 3000)
-- `NODE_ENV` - Node environment (default: production)
-
-## Security Notes
-
-- **Authentication**: Basic auth credentials transmitted securely over HTTPS
-- **No Password Persistence**: Passwords never stored in browser or server
-- **SSL Handling**: Proxy accepts self-signed certificates (use caution in production)
-- **CORS Protection**: All API requests proxied through server to handle CORS
-- **Input Validation**: Query syntax validation helps prevent malformed requests
-
-## File Structure
-
-```
-grafana-query-ide/
-├── main.js                     # Electron main process
-├── preload.js                  # Electron preload script
-├── electron-start.js           # Development helper
-├── build.js                    # Cross-platform build script
-├── package.json               # Dependencies and build config
-├── server.js                  # Internal Express server
-├── README.md
-├── CLAUDE.md                  # AI assistant instructions
-├── ELECTRON.md                # Electron-specific documentation
-├── assets/                    # App icons for different platforms
-│   └── README.md
-└── public/
-    ├── index.html             # Main application UI
-    ├── css/
-    │   └── main.css           # All styles in one organized file
-    └── js/
-        ├── config.js          # Global configuration and constants
-        ├── utils.js           # Utility functions
-        ├── storage.js         # localStorage management
-        ├── api.js             # API communication
-        ├── editor.js          # CodeMirror editor functionality
-        ├── connections.js     # Connection management
-        ├── variables.js       # Query variables management
-        ├── schema.js          # Schema explorer functionality
-        ├── dashboard.js       # Dashboard explorer and query extraction
-        ├── queries.js         # Query execution and results
-        ├── charts.js          # Chart visualization
-        ├── history.js         # Query history management
-        ├── fileExplorer.js    # File system integration
-        ├── interface.js       # VS Code-like interface management
-        └── app.js             # Main app initialization
-```
-
-## Troubleshooting
+## 🐛 Troubleshooting
 
 ### Connection Issues
-- **401 Unauthorized**: Verify username and password are correct
+- **401 Unauthorized**: Verify username and password
 - **404 Not Found**: Check Grafana URL format (include https://)
-- **CORS Errors**: Desktop app handles CORS automatically via integrated proxy
-- **SSL Certificate**: Proxy handles self-signed certificates automatically
+- **SSL Errors**: App handles self-signed certificates automatically
+- **Proxy Issues**: Verify SOCKS5 proxy settings if using
 
 ### Query Issues
-- **Syntax Errors**: Check real-time validation messages below editor
+- **Syntax Errors**: Check real-time validation messages in editor
 - **No Data**: Verify data source permissions and query time range
-- **Performance**: Adjust max data points and interval for large datasets
-- **Auto-completion**: Press Ctrl+Space if suggestions don't appear automatically
-- **Variable Substitution**: Ensure variables are defined and have selected values
-- **Multi-Value Variables**: Enable multi-select checkbox for regex or IN clause usage
-- **Schema Not Loading**: Check data source connection and permissions
+- **Variables Not Working**: Ensure variables are defined and have values selected
+- **Performance**: Adjust time ranges for large datasets
 
-### Editor Issues
-- **Syntax Highlighting**: Refresh page if highlighting appears incorrect
-- **Auto-completion**: Verify correct query type is selected (auto-selected by data source)
-- **Validation Errors**: Check bracket matching and query structure
+### File System Issues
+- **Save Errors**: Ensure write permissions to selected directory
+- **File Loading**: Verify file format (.promql, .isql, .sql supported)
+- **Directory Access**: Grant file system permissions if prompted
 
-### Schema Explorer Issues
-- **InfluxDB Schema**: Select retention policy and measurement to load fields/tags
-- **Field-Tag Filtering**: Click a field to see only tags associated with that field
-- **Loading Delays**: Schema discovery may take time for large databases
-- **Scroll Position Lost**: Fixed - scroll positions are now preserved during updates
-- **Search Not Working**: Ensure JavaScript is enabled and no console errors
+## 🛠️ Development
 
-## Browser Compatibility
+### Requirements
+- Node.js 14+
+- npm or yarn
 
-- **Modern Browsers**: Chrome 80+, Firefox 75+, Safari 13+, Edge 80+
-- **Features**: ES6+ support required for advanced editor features
-- **Storage**: LocalStorage used for connections, variables, and query history
-- **Performance**: Optimized for desktop use, mobile-friendly interface
+### Development Setup
+```bash
+# Clone repository
+git clone https://github.com/yourusername/grafana-query-ide.git
+cd grafana-query-ide
 
-## Development
+# Install dependencies
+npm install
 
-To develop the application:
+# Start development mode (with hot reload)
+npm run electron-dev
+```
 
-1. **Clone and Setup**:
-   ```bash
-   git clone https://github.com/yourusername/grafana-query-ide.git
-   cd grafana-query-ide
-   npm install
-   ```
+### Building
+```bash
+# Build for current platform
+npm run build
 
-2. **Development Mode**:
-   ```bash
-   npm run electron-dev        # Start Electron with hot reload
-   ```
+# Build for all platforms
+npm run build-all
 
-3. **Build for Production**:
-   ```bash
-   npm run build              # Build for current platform
-   npm run build-all          # Build for all platforms
-   ```
+# Build for specific platform
+npm run build-mac
+npm run build-win
+npm run build-linux
+```
 
-4. **File Organization**:
-   - **UI Changes**: Edit `public/` files for interface modifications
-   - **Electron Changes**: Edit `main.js` and `preload.js` for desktop functionality
-   - **Server Changes**: Edit `server.js` for proxy and API handling
-   - **Dependencies**: Update `package.json` for new packages
+### Project Structure
+```
+grafana-query-ide/
+├── main.js              # Electron main process
+├── preload.js           # Electron preload script
+├── server.js            # Internal Express proxy server
+├── build.js             # Cross-platform build script
+└── public/              # Frontend application
+    ├── index.html       # VS Code-like interface
+    ├── css/main.css     # Application styles
+    └── js/              # Modular JavaScript
+        ├── app.js       # Application bootstrap
+        ├── interface.js # VS Code-like interface management
+        ├── connections.js # Connection management
+        ├── editor.js    # CodeMirror integration
+        ├── fileExplorer.js # File system integration
+        └── ...          # Other feature modules
+```
 
-## Contributing
+## 🤝 Contributing
 
 We welcome contributions! Areas for enhancement:
-- Additional query language support (LogQL, etc.)
-- Advanced query optimization suggestions
-- Query performance monitoring
+- Additional query language support (LogQL, SQL, etc.)
+- Advanced query optimization and performance monitoring
 - Additional chart types and visualizations
-- Keyboard shortcuts and productivity features
-- Export/import functionality for queries and variables
+- Plugin system for custom data source types
+- Query sharing and collaboration features
 
-Please feel free to submit a Pull Request with your improvements.
+Please submit Pull Requests with your improvements!
 
-## License
+## 📄 License
 
 MIT License - feel free to use this in your own projects!
 
 ---
 
-**Latest Updates:**
-- 🎯 **Smart Query History**: Auto-generated titles and duplicate prevention
-- 🔍 **Field-Based Tag Filtering**: InfluxDB schema explorer now filters tags by selected field
-- 📍 **Preserved Scroll Positions**: UI updates maintain user context and scroll positions
-- 🎯 **Dashboard Explorer**: Search dashboards and extract all queries with tabbed interface
-- 🧭 **Guided Workflow**: Auto-expanding sections guide users through connection → datasource → schema flow
-- 📱 **Sidebar Reorganization**: History and variables moved to dedicated sidebar with 50/50 height split
-- 🔗 **Connection-Scoped Variables**: Variables automatically filtered by current connection
-- 📏 **Resizable Query Editor**: Drag to adjust editor height for complex queries
-- 🔄 **Smart Section Management**: Auto-collapse/expand with status indicators
-- 🎨 **UI Polish**: Refresh button repositioned, improved spacing and section flow
-- 🏷️ **Enhanced Query History**: Search, tag, label, and favorite your queries in sidebar
-- 🔍 **Improved Schema Explorer**: Better UI with dropdowns and bottom-right refresh button
-- 🎯 **Multi-Value Variables**: Support for regex patterns and IN clauses with sidebar integration
-- 🔧 **Regex Variable Filtering**: Extract and transform variable values with regex
-- 📊 **Better Organization**: Always-visible variables and history with increased capacity
+**Desktop IDE for Modern Query Development** • Built with ❤️ using Electron
