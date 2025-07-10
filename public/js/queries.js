@@ -18,6 +18,13 @@ const Queries = {
         // Substitute variables in the query
         const query = Variables.substituteVariables(rawQuery);
         
+        // Log variable substitution for debugging
+        if (query !== rawQuery) {
+            console.log('Variable substitution applied:');
+            console.log('Original query:', rawQuery);
+            console.log('Substituted query:', query);
+        }
+        
         // Get datasource info from global config (new interface)
         const datasourceType = GrafanaConfig.selectedDatasourceType || 'prometheus';
         const datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId;

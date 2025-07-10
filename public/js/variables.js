@@ -24,7 +24,8 @@ const Variables = {
             selectedValues: [], // For multi-select support
             multiSelect: false, // Whether this variable supports multiple values
             lastUpdated: new Date().toISOString(),
-            error: null
+            error: null,
+            loading: false // Will be set to true when updateVariable is called
         };
         
         this.variables.push(variable);
@@ -43,10 +44,18 @@ const Variables = {
     // Update variable values by executing its query
     async updateVariable(variableId) {
         const variable = this.variables.find(v => v.id === variableId);
-        if (!variable) return;
+        if (!variable) {
+            console.warn('Variable not found:', variableId);
+            return false;
+        }
         
         try {
+            // Set loading state
+            variable.loading = true;
             variable.error = null;
+            this.saveVariablesToStorage();
+            this.renderVariablesUI();
+            
             const values = await this.executeVariableQuery(variable);
             variable.values = values;
             variable.lastUpdated = new Date().toISOString();
@@ -56,11 +65,14 @@ const Variables = {
                 variable.selectedValue = values[0];
             }
             
+            // Clear loading state
+            variable.loading = false;
             this.saveVariablesToStorage();
             this.renderVariablesUI();
             return true;
         } catch (error) {
             variable.error = error.message;
+            variable.loading = false;
             this.saveVariablesToStorage();
             this.renderVariablesUI();
             return false;
@@ -69,15 +81,15 @@ const Variables = {
     
     // Execute variable query to get values
     async executeVariableQuery(variable) {
-        const selectedOption = Array.from(document.getElementById('datasource').options)
-            .find(option => option.value === variable.datasourceId);
+        // Find datasource from the connections panel datasource list
+        const datasourceItem = document.querySelector(`#datasourceList .datasource-item[data-uid="${variable.datasourceId}"]`);
         
-        if (!selectedOption) {
-            throw new Error('Datasource not found');
+        if (!datasourceItem) {
+            throw new Error('Datasource not found or not connected');
         }
         
-        const datasourceType = selectedOption.dataset.type;
-        const datasourceNumericId = selectedOption.dataset.id;
+        const datasourceType = datasourceItem.dataset.type;
+        const datasourceNumericId = datasourceItem.dataset.id;
         
         // Build request based on datasource type
         let requestBody;
@@ -279,6 +291,10 @@ const Variables = {
             ? this.variables.filter(v => v.connectionId === currentConnectionId)
             : [];
         
+        if (filteredVariables.length > 0) {
+            console.log('Found variables for substitution:', filteredVariables.map(v => ({ name: v.name, selectedValue: v.selectedValue, selectedValues: v.selectedValues })));
+        }
+        
         for (const variable of filteredVariables) {
             // Handle multi-select variables
             if (variable.multiSelect && variable.selectedValues && variable.selectedValues.length > 0) {
@@ -391,7 +407,14 @@ const Variables = {
                 html += '<div class="variable-content">';
                 
                 // Value selector
-                if (variable.values.length > 0) {
+                if (variable.loading) {
+                    html += '<div class="variable-loading">';
+                    html += '<div class="loading-indicator">';
+                    html += '<span class="loading-spinner">⟳</span>';
+                    html += '<span class="loading-text">Loading values...</span>';
+                    html += '</div>';
+                    html += '</div>';
+                } else if (variable.values.length > 0) {
                     html += '<div class="variable-selector">';
                     
                     // Multi-select toggle
@@ -497,16 +520,21 @@ const Variables = {
             <div class="variable-form-overlay" id="variableFormOverlay">
                 <div class="variable-form">
                     <h3>Add Query Variable</h3>
-                    <form onsubmit="saveVariable(event)">
+                    <form onsubmit="return saveVariable(event)">
                         <div class="form-group">
                             <label for="variableName">Variable Name</label>
-                            <input type="text" id="variableName" placeholder="region" required>
-                            <small>Use $region in your queries to reference this variable</small>
+                            <input type="text" id="variableName" placeholder="region" required oninput="updateVariableHelpText()">
+                            <small>Use $<span id="variableNamePreview">region</span> in your queries to reference this variable</small>
                         </div>
                         <div class="form-group">
                             <label for="variableQuery">Query</label>
                             <textarea id="variableQuery" placeholder="label_values(instance)" required></textarea>
                             <small>Query that returns the variable values</small>
+                            <button type="button" class="secondary-button" onclick="testVariableQuery()" style="margin-top: 8px; width: auto;">Test Query</button>
+                        </div>
+                        <div class="form-group" id="variablePreviewSection" style="display: none;">
+                            <label>Preview Results</label>
+                            <div id="variablePreviewContent" style="background-color: #1e1e1e; border: 1px solid #454545; border-radius: 3px; padding: 8px; min-height: 60px; max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 11px; color: #cccccc;"></div>
                         </div>
                         <div class="form-group">
                             <label for="variableRegex">Regex Filter (Optional)</label>
@@ -532,20 +560,169 @@ const Variables = {
         
         // Populate datasource dropdown
         const datasourceSelect = document.getElementById('variableDatasource');
-        const datasourceOptions = document.getElementById('datasource').options;
         
-        for (let i = 1; i < datasourceOptions.length; i++) { // Skip first "Connect to Grafana first" option
-            const option = datasourceOptions[i];
-            datasourceSelect.innerHTML += `<option value="${option.value}" data-name="${option.textContent}">${option.textContent}</option>`;
+        // Get datasources from the current datasource list in the interface
+        if (GrafanaConfig.connected) {
+            // Use the datasource list from the connections panel
+            const datasourceItems = document.querySelectorAll('#datasourceList .datasource-item');
+            datasourceItems.forEach(item => {
+                const uid = item.dataset.uid;
+                const name = item.dataset.name;
+                const type = item.dataset.type;
+                if (uid && name) {
+                    datasourceSelect.innerHTML += `<option value="${uid}" data-name="${name}" data-type="${type}">${name}</option>`;
+                }
+            });
+        } else {
+            datasourceSelect.innerHTML += '<option value="">Connect to Grafana first</option>';
         }
     },
     
     // Hide add variable form
     hideAddVariableForm() {
+        // Remove by ID
         const overlay = document.getElementById('variableFormOverlay');
         if (overlay) {
             overlay.remove();
         }
+        
+        // Remove any duplicates by class (safety check)
+        const overlays = document.querySelectorAll('.variable-form-overlay');
+        overlays.forEach(el => el.remove());
+    },
+    
+    // Show edit variable form
+    showEditVariableForm(variableId) {
+        const variable = this.variables.find(v => v.id === variableId);
+        if (!variable) {
+            alert('Variable not found');
+            return;
+        }
+        
+        const formHtml = `
+            <div class="variable-form-overlay" id="variableFormOverlay">
+                <div class="variable-form">
+                    <h3>Edit Query Variable</h3>
+                    <form onsubmit="updateExistingVariable(event, ${variableId})">
+                        <div class="form-group">
+                            <label for="variableName">Variable Name</label>
+                            <input type="text" id="variableName" value="${Utils.escapeHtml(variable.name)}" required oninput="updateVariableHelpText()">
+                            <small>Use $<span id="variableNamePreview">${Utils.escapeHtml(variable.name)}</span> in your queries to reference this variable</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="variableQuery">Query</label>
+                            <textarea id="variableQuery" required>${Utils.escapeHtml(variable.query)}</textarea>
+                            <small>Query that returns the variable values</small>
+                            <button type="button" class="secondary-button" onclick="testVariableQuery()" style="margin-top: 8px; width: auto;">Test Query</button>
+                        </div>
+                        <div class="form-group" id="variablePreviewSection" style="display: none;">
+                            <label>Preview Results</label>
+                            <div id="variablePreviewContent" style="background-color: #1e1e1e; border: 1px solid #454545; border-radius: 3px; padding: 8px; min-height: 60px; max-height: 150px; overflow-y: auto; font-family: monospace; font-size: 11px; color: #cccccc;"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="variableRegex">Regex Filter (Optional)</label>
+                            <input type="text" id="variableRegex" value="${Utils.escapeHtml(variable.regex || '')}" placeholder="(?P<text>.+)_(?P<value>.+)">
+                            <small>Extract parts of values. Use named groups 'text' and 'value' for display/value separation</small>
+                        </div>
+                        <div class="form-group">
+                            <label for="variableDatasource">Data Source</label>
+                            <select id="variableDatasource" required>
+                                <option value="">Select data source...</option>
+                            </select>
+                        </div>
+                        <div class="form-buttons">
+                            <button type="submit">Update Variable</button>
+                            <button type="button" class="secondary-button" onclick="hideAddVariableForm()">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        `;
+        
+        document.body.insertAdjacentHTML('beforeend', formHtml);
+        
+        // Populate datasource dropdown and select current datasource
+        const datasourceSelect = document.getElementById('variableDatasource');
+        
+        if (GrafanaConfig.connected) {
+            const datasourceItems = document.querySelectorAll('#datasourceList .datasource-item');
+            datasourceItems.forEach(item => {
+                const uid = item.dataset.uid;
+                const name = item.dataset.name;
+                const type = item.dataset.type;
+                if (uid && name) {
+                    const selected = uid === variable.datasourceId ? 'selected' : '';
+                    datasourceSelect.innerHTML += `<option value="${uid}" data-name="${name}" data-type="${type}" ${selected}>${name}</option>`;
+                }
+            });
+        } else {
+            datasourceSelect.innerHTML += '<option value="">Connect to Grafana first</option>';
+        }
+    },
+    
+    // Update existing variable
+    async updateExistingVariable(event, variableId) {
+        event.preventDefault();
+        
+        const variable = this.variables.find(v => v.id === variableId);
+        if (!variable) {
+            alert('Variable not found');
+            return;
+        }
+        
+        const name = document.getElementById('variableName').value.trim();
+        const query = document.getElementById('variableQuery').value.trim();
+        const regex = document.getElementById('variableRegex').value.trim();
+        const datasourceSelect = document.getElementById('variableDatasource');
+        const datasourceId = datasourceSelect.value;
+        const datasourceName = datasourceSelect.selectedOptions[0].dataset.name;
+        
+        // Validate name
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name)) {
+            alert('Variable name must start with a letter or underscore and contain only letters, numbers, and underscores.');
+            return;
+        }
+        
+        // Check for duplicate names (excluding current variable)
+        const currentConnectionId = GrafanaConfig.currentConnectionId;
+        if (this.variables.some(v => v.name === name && v.connectionId === currentConnectionId && v.id !== variableId)) {
+            alert('A variable with this name already exists for this connection.');
+            return;
+        }
+        
+        // Update variable properties
+        variable.name = name;
+        variable.query = query;
+        variable.regex = regex;
+        variable.datasourceId = datasourceId;
+        variable.datasourceName = datasourceName;
+        
+        // Clear existing values and error
+        variable.values = [];
+        variable.selectedValue = null;
+        variable.selectedValues = [];
+        variable.error = null;
+        variable.loading = false;
+        
+        // Save to storage
+        this.saveVariablesToStorage();
+        
+        // Close dialog immediately
+        this.hideAddVariableForm();
+        
+        // Update variable values in the background
+        this.updateVariable(variable.id).then(success => {
+            if (success) {
+                console.log('Variable updated successfully');
+            } else {
+                console.warn('Variable updated but failed to load new values');
+            }
+        }).catch(error => {
+            console.error('Error updating variable values:', error);
+        });
+        
+        // Refresh the UI
+        this.renderVariablesUI();
     },
     
     // Save variable from form
@@ -574,10 +751,19 @@ const Variables = {
         
         const variable = this.addVariable(name, query, datasourceId, datasourceName, regex);
         
-        // Try to update the variable immediately
-        await this.updateVariable(variable.id);
-        
+        // Close dialog immediately for better UX
         this.hideAddVariableForm();
+        
+        // Update variable values in the background (non-blocking)
+        this.updateVariable(variable.id).then(success => {
+            if (success) {
+                console.log('Variable values loaded successfully');
+            } else {
+                console.warn('Failed to load variable values');
+            }
+        }).catch(error => {
+            console.error('Error updating variable:', error);
+        });
     },
     
     // Storage methods
@@ -588,6 +774,13 @@ const Variables = {
     loadVariablesFromStorage() {
         const stored = localStorage.getItem('queryVariables');
         this.variables = stored ? JSON.parse(stored) : [];
+        
+        // Ensure backward compatibility - add missing loading property
+        this.variables.forEach(variable => {
+            if (variable.loading === undefined) {
+                variable.loading = false;
+            }
+        });
     }
 };
 
@@ -600,8 +793,28 @@ function hideAddVariableForm() {
     Variables.hideAddVariableForm();
 }
 
-function saveVariable(event) {
-    Variables.saveVariable(event);
+async function saveVariable(event) {
+    event.preventDefault();
+    try {
+        await Variables.saveVariable(event);
+    } catch (error) {
+        console.error('Error in saveVariable:', error);
+        // Close dialog on error too
+        Variables.hideAddVariableForm();
+    }
+    return false; // Prevent form submission
+}
+
+async function updateExistingVariable(event, variableId) {
+    event.preventDefault();
+    try {
+        await Variables.updateExistingVariable(event, variableId);
+    } catch (error) {
+        console.error('Error in updateExistingVariable:', error);
+        // Close dialog on error too
+        Variables.hideAddVariableForm();
+    }
+    return false; // Prevent form submission
 }
 
 function refreshVariable(variableId) {
@@ -609,8 +822,7 @@ function refreshVariable(variableId) {
 }
 
 function editVariable(variableId) {
-    // TODO: Implement edit functionality
-    alert('Edit functionality coming soon!');
+    Variables.showEditVariableForm(variableId);
 }
 
 function deleteVariable(variableId) {
@@ -689,5 +901,76 @@ function toggleVariablesSection() {
     } else {
         variablesSection.classList.add('collapsed');
         toggleButton.textContent = 'Show';
+    }
+}
+
+// Update variable help text dynamically
+function updateVariableHelpText() {
+    const nameInput = document.getElementById('variableName');
+    const previewSpan = document.getElementById('variableNamePreview');
+    
+    if (nameInput && previewSpan) {
+        const name = nameInput.value.trim() || 'region';
+        previewSpan.textContent = name;
+    }
+}
+
+// Test variable query and show preview
+async function testVariableQuery() {
+    const queryInput = document.getElementById('variableQuery');
+    const regexInput = document.getElementById('variableRegex');
+    const datasourceSelect = document.getElementById('variableDatasource');
+    const previewSection = document.getElementById('variablePreviewSection');
+    const previewContent = document.getElementById('variablePreviewContent');
+    
+    if (!queryInput.value.trim()) {
+        alert('Please enter a query to test');
+        return;
+    }
+    
+    if (!datasourceSelect.value) {
+        alert('Please select a data source');
+        return;
+    }
+    
+    try {
+        previewContent.innerHTML = '<div style="color: #f46800;">Testing query...</div>';
+        previewSection.style.display = 'block';
+        
+        // Create a temporary variable object for testing
+        const testVariable = {
+            query: queryInput.value.trim(),
+            regex: regexInput.value.trim(),
+            datasourceId: datasourceSelect.value,
+            datasourceName: datasourceSelect.selectedOptions[0].dataset.name
+        };
+        
+        // Execute the variable query
+        const values = await Variables.executeVariableQuery(testVariable);
+        
+        if (values.length === 0) {
+            previewContent.innerHTML = '<div style="color: #858585;">No values returned from query</div>';
+        } else {
+            let html = '<div style="color: #4fc1ff; margin-bottom: 8px;">Found ' + values.length + ' values:</div>';
+            html += '<div style="display: flex; flex-wrap: wrap; gap: 4px;">';
+            
+            // Show first 20 values to avoid overwhelming the UI
+            const displayValues = values.slice(0, 20);
+            displayValues.forEach(value => {
+                const displayText = typeof value === 'object' ? value.text : value;
+                html += '<span style="background-color: #37373d; padding: 2px 6px; border-radius: 3px; font-size: 10px;">' + Utils.escapeHtml(displayText) + '</span>';
+            });
+            
+            if (values.length > 20) {
+                html += '<span style="color: #858585; font-size: 10px;">... and ' + (values.length - 20) + ' more</span>';
+            }
+            
+            html += '</div>';
+            previewContent.innerHTML = html;
+        }
+        
+    } catch (error) {
+        previewContent.innerHTML = '<div style="color: #f44747;">Error: ' + Utils.escapeHtml(error.message) + '</div>';
+        console.error('Variable query test error:', error);
     }
 }

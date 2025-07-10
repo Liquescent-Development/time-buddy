@@ -282,17 +282,157 @@ const Editor = {
 
     // Enable/disable query editor
     enableQueryEditor() {
-        document.getElementById('executeBtn').disabled = false;
+        const executeBtn = document.getElementById('executeBtn');
+        if (executeBtn) {
+            executeBtn.disabled = false;
+        }
+        
         if (GrafanaConfig.queryEditor) {
             GrafanaConfig.queryEditor.setOption('readOnly', false);
         } else {
-            document.getElementById('query').disabled = false;
+            const queryElement = document.getElementById('query');
+            if (queryElement) {
+                queryElement.disabled = false;
+            }
         }
     },
 
-    // Get query value
+    // Get query value - supports multiple queries and selection
     getQueryValue() {
         return GrafanaConfig.queryEditor ? GrafanaConfig.queryEditor.getValue().trim() : document.getElementById('query').value.trim();
+    },
+    
+    // Get the query that should be executed (selected text or individual query from multi-query)
+    getExecutableQuery(editor) {
+        if (!editor) {
+            editor = GrafanaConfig.queryEditor;
+        }
+        
+        if (!editor) {
+            return this.getQueryValue();
+        }
+        
+        // Check if there's selected text
+        const selectedText = editor.getSelection();
+        if (selectedText && selectedText.trim()) {
+            console.log('Executing selected query:', selectedText.trim());
+            return selectedText.trim();
+        }
+        
+        // Get all text and split into individual queries
+        const allText = editor.getValue();
+        const queries = this.splitIntoQueries(allText);
+        
+        // If only one query, return it
+        if (queries.length <= 1) {
+            return allText.trim();
+        }
+        
+        // Multiple queries found - determine which one to execute based on cursor position
+        const cursor = editor.getCursor();
+        const currentLine = cursor.line;
+        
+        // Find which query the cursor is in
+        let lineCount = 0;
+        for (let i = 0; i < queries.length; i++) {
+            const query = queries[i];
+            const queryLines = query.split('\n').length;
+            
+            if (currentLine >= lineCount && currentLine < lineCount + queryLines) {
+                console.log(`Executing query ${i + 1} of ${queries.length}:`, query.trim());
+                return query.trim();
+            }
+            
+            lineCount += queryLines;
+        }
+        
+        // Fallback to first query
+        console.log('Executing first query from multiple queries:', queries[0].trim());
+        return queries[0].trim();
+    },
+    
+    // Get all executable queries (for executing all queries in sequence)
+    getAllExecutableQueries(editor) {
+        if (!editor) {
+            editor = GrafanaConfig.queryEditor;
+        }
+        
+        if (!editor) {
+            return [this.getQueryValue()];
+        }
+        
+        // Check if there's selected text
+        const selectedText = editor.getSelection();
+        if (selectedText && selectedText.trim()) {
+            console.log('Executing selected query:', selectedText.trim());
+            return [selectedText.trim()];
+        }
+        
+        // Get all text and split into individual queries
+        const allText = editor.getValue();
+        const queries = this.splitIntoQueries(allText);
+        
+        return queries.filter(q => q.trim().length > 0);
+    },
+    
+    // Split text into individual queries
+    splitIntoQueries(text) {
+        if (!text || !text.trim()) {
+            return [];
+        }
+        
+        // Split on semicolons that are not inside quotes
+        const queries = [];
+        let currentQuery = '';
+        let inSingleQuote = false;
+        let inDoubleQuote = false;
+        let escaped = false;
+        
+        for (let i = 0; i < text.length; i++) {
+            const char = text[i];
+            
+            if (escaped) {
+                currentQuery += char;
+                escaped = false;
+                continue;
+            }
+            
+            if (char === '\\') {
+                escaped = true;
+                currentQuery += char;
+                continue;
+            }
+            
+            if (char === "'" && !inDoubleQuote) {
+                inSingleQuote = !inSingleQuote;
+            } else if (char === '"' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+            }
+            
+            if (char === ';' && !inSingleQuote && !inDoubleQuote) {
+                // Found a query separator
+                const query = currentQuery.trim();
+                if (query) {
+                    queries.push(query);
+                }
+                currentQuery = '';
+            } else {
+                currentQuery += char;
+            }
+        }
+        
+        // Add the last query if it exists
+        const lastQuery = currentQuery.trim();
+        if (lastQuery) {
+            queries.push(lastQuery);
+        }
+        
+        // If no semicolons found, treat as single query
+        if (queries.length === 0 && text.trim()) {
+            queries.push(text.trim());
+        }
+        
+        return queries.filter(q => q.length > 0);
     },
 
     // Set query value
@@ -317,15 +457,6 @@ const Editor = {
     // Set query type
     setQueryType(type) {
         GrafanaConfig.currentQueryType = type;
-        document.querySelectorAll('.query-type-button').forEach(function(btn) {
-            btn.classList.remove('active');
-        });
-        
-        document.querySelectorAll('.query-type-button').forEach(function(btn) {
-            if (btn.textContent.toLowerCase().includes(type.toLowerCase())) {
-                btn.classList.add('active');
-            }
-        });
         
         const promqlOptions = document.getElementById('promqlOptions');
         if (promqlOptions) {

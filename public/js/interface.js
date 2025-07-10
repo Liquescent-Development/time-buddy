@@ -97,6 +97,9 @@ const Interface = {
             case 'dashboards':
                 this.refreshDashboards();
                 break;
+            case 'files':
+                this.loadFileExplorer();
+                break;
             case 'history':
                 this.loadHistory();
                 break;
@@ -151,17 +154,35 @@ const Interface = {
         this.tabCounter++;
         const tabId = `untitled-${this.tabCounter}`;
         
+        // Use the selected data source as default for new tabs
+        let defaultQueryType = 'influxql';
+        let defaultDatasourceId = null;
+        let defaultDatasourceName = null;
+        let defaultDatasourceType = null;
+        
+        if (GrafanaConfig.selectedDatasourceUid) {
+            defaultDatasourceId = GrafanaConfig.selectedDatasourceUid;
+            defaultDatasourceType = GrafanaConfig.selectedDatasourceType;
+            defaultQueryType = defaultDatasourceType === 'prometheus' ? 'promql' : 'influxql';
+            
+            // Find the datasource name
+            const selectedDs = GrafanaConfig.datasources.find(ds => ds.uid === defaultDatasourceId);
+            if (selectedDs) {
+                defaultDatasourceName = selectedDs.name;
+            }
+        }
+        
         // Create tab data
         this.tabs.set(tabId, {
             id: tabId,
             label: `Untitled-${this.tabCounter}`,
             content: '',
-            queryType: 'influxql',
+            queryType: defaultQueryType,
             saved: false,
             filePath: null,
-            datasourceId: null,
-            datasourceName: null,
-            datasourceType: null
+            datasourceId: defaultDatasourceId,
+            datasourceName: defaultDatasourceName,
+            datasourceType: defaultDatasourceType
         });
 
         // Create tab DOM element
@@ -212,9 +233,12 @@ const Interface = {
         
         container.innerHTML = `
             <div class="editor-toolbar">
-                <div class="query-type-selector">
-                    <button class="query-type-button active" data-type="influxql">InfluxQL</button>
-                    <button class="query-type-button" data-type="promql">PromQL</button>
+                <div class="file-actions">
+                    <button class="icon-button" onclick="saveQuery()" title="Save (Cmd/Ctrl+S)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                        </svg>
+                    </button>
                 </div>
                 <div class="editor-options">
                     <div class="option-group">
@@ -247,13 +271,6 @@ const Interface = {
         `;
         
         tabContent.appendChild(container);
-        
-        // Initialize query type buttons
-        container.querySelectorAll('.query-type-button').forEach(btn => {
-            btn.addEventListener('click', () => {
-                this.setQueryType(tabId, btn.dataset.type);
-            });
-        });
         
         // Initialize datasource select
         const datasourceSelect = container.querySelector('.tab-datasource-select');
@@ -311,7 +328,9 @@ const Interface = {
             extraKeys: {
                 'Ctrl-Space': 'autocomplete',
                 'Ctrl-Enter': () => this.executeQuery(tabId),
-                'Cmd-Enter': () => this.executeQuery(tabId)
+                'Cmd-Enter': () => this.executeQuery(tabId),
+                'Ctrl-Shift-Enter': () => this.executeAllQueries(tabId),
+                'Cmd-Shift-Enter': () => this.executeAllQueries(tabId)
             }
         });
 
@@ -387,6 +406,19 @@ const Interface = {
             setTimeout(() => tabData.editor.refresh(), 1);
         }
         
+        // Update global query type and title bar indicator
+        if (tabData && tabData.queryType) {
+            GrafanaConfig.currentQueryType = tabData.queryType;
+            // Only show indicator if connected and have a data source
+            if (GrafanaConfig.connected && GrafanaConfig.selectedDatasourceUid) {
+                this.updateQueryLanguageIndicator(tabData.queryType);
+            } else {
+                this.updateQueryLanguageIndicator(null);
+            }
+        } else {
+            this.updateQueryLanguageIndicator(null);
+        }
+        
         // Restore datasource selection for this tab only if connected
         if (GrafanaConfig.connected) {
             this.restoreTabDatasourceSelection(tabId);
@@ -426,24 +458,7 @@ const Interface = {
     },
 
     setQueryType(tabId, type) {
-        const container = document.querySelector(`[data-tab-id="${tabId}"].editor-container`);
-        if (!container) {
-            console.warn('Container not found for tab:', tabId);
-            return;
-        }
-        
-        // Update button states
-        const queryTypeButtons = container.querySelectorAll('.query-type-button');
-        queryTypeButtons.forEach(btn => {
-            btn.classList.remove('active');
-        });
-        
-        const targetButton = container.querySelector(`[data-type="${type}"]`);
-        if (targetButton) {
-            targetButton.classList.add('active');
-        } else {
-            console.warn('Query type button not found for type:', type);
-        }
+        console.log('Setting query type for tab', tabId, 'to', type);
         
         // Update tab data
         const tabData = this.tabs.get(tabId);
@@ -455,12 +470,43 @@ const Interface = {
                 const mode = type === 'promql' ? 'promql' : 'sql';
                 tabData.editor.setOption('mode', mode);
             }
+            
+            // Set global config and update title bar for active tab
+            if (tabId === this.activeTab) {
+                GrafanaConfig.currentQueryType = type;
+                this.updateQueryLanguageIndicator(type);
+            }
         }
         
         // Update global query type for compatibility
         GrafanaConfig.currentQueryType = type;
         
         this.updateExecuteButton(tabId);
+    },
+    
+    // Update query language indicator in title bar
+    updateQueryLanguageIndicator(language) {
+        const titleBarControls = document.querySelector('.title-bar-controls');
+        if (!titleBarControls) return;
+        
+        // Remove existing query language indicator
+        const existingIndicator = titleBarControls.querySelector('.query-language-indicator');
+        if (existingIndicator) {
+            existingIndicator.remove();
+        }
+        
+        // Only show indicator if we have a valid language and are connected with a data source
+        if (language && (language === 'promql' || language === 'influxql') && 
+            GrafanaConfig.connected && GrafanaConfig.selectedDatasourceUid) {
+            
+            const indicator = document.createElement('span');
+            indicator.className = 'query-language-indicator';
+            indicator.id = 'titleBarQueryLanguage';
+            indicator.textContent = language.toUpperCase();
+            
+            // Append to the end of title bar controls (after all other indicators)
+            titleBarControls.appendChild(indicator);
+        }
     },
     
     setTabDatasource(tabId, datasourceId) {
@@ -546,6 +592,9 @@ const Interface = {
                 }
             });
         }
+        
+        // After populating, restore the tab's saved selection
+        this.restoreTabDatasourceSelection(tabId);
     },
     
     populateAllTabDatasourceSelects() {
@@ -803,10 +852,24 @@ const Interface = {
             return;
         }
         
-        const query = tabData.editor.getValue();
-        if (!query.trim()) {
+        // Get the executable query (handles selected text and multiple queries)
+        const executableQuery = Editor.getExecutableQuery(tabData.editor);
+        if (!executableQuery) {
             this.showToast('Please enter a query', 'error');
             return;
+        }
+        
+        // Show which query is being executed if there are multiple
+        const allText = tabData.editor.getValue();
+        const allQueries = Editor.splitIntoQueries(allText);
+        if (allQueries.length > 1) {
+            const selectedText = tabData.editor.getSelection();
+            if (selectedText && selectedText.trim()) {
+                this.showToast('Executing selected query...', 'info');
+            } else {
+                const queryIndex = allQueries.findIndex(q => q.trim() === executableQuery) + 1;
+                this.showToast(`Executing query ${queryIndex} of ${allQueries.length}... (Use Cmd+Shift+Return to execute all)`, 'info');
+            }
         }
         
         // Update global state for compatibility with existing code
@@ -823,9 +886,9 @@ const Interface = {
         
         // Call existing query execution logic
         if (typeof Queries !== 'undefined' && Queries.executeQuery) {
-            // Temporarily set the global query editor value
+            // Temporarily set the global query editor value to the executable query
             const originalGetQueryValue = Editor.getQueryValue;
-            Editor.getQueryValue = () => query;
+            Editor.getQueryValue = () => executableQuery;
             
             // Create temporary select element for compatibility with old Queries module
             const tempSelect = document.createElement('select');
@@ -882,6 +945,131 @@ const Interface = {
                 console.error('Query execution failed:', error);
             });
         }
+    },
+
+    // Execute All Queries in sequence
+    async executeAllQueries(tabId) {
+        console.log('executeAllQueries called with tabId:', tabId);
+        const tabData = this.tabs.get(tabId || this.activeTab);
+        if (!tabData || !tabData.editor) {
+            console.error('No tab data or editor found');
+            return;
+        }
+        
+        // Get all executable queries
+        const allQueries = Editor.getAllExecutableQueries(tabData.editor);
+        if (!allQueries || allQueries.length === 0) {
+            this.showToast('No queries to execute', 'error');
+            return;
+        }
+        
+        // Check if we have a datasource selected for this tab
+        if (!tabData.datasourceId) {
+            this.showToast('Please select a data source for this tab', 'error');
+            return;
+        }
+        
+        this.showToast(`Executing ${allQueries.length} queries sequentially...`, 'info');
+        
+        // Update global state for compatibility with existing code
+        GrafanaConfig.currentQueryType = tabData.queryType;
+        
+        // Switch to results panel
+        this.switchPanel('results');
+        
+        // Execute queries one by one
+        for (let i = 0; i < allQueries.length; i++) {
+            const query = allQueries[i];
+            console.log(`Executing query ${i + 1} of ${allQueries.length}:`, query);
+            
+            try {
+                await this.executeSingleQuery(query, tabData, tabId, i + 1, allQueries.length);
+                
+                // Add a small delay between queries to avoid overwhelming the server
+                if (i < allQueries.length - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+            } catch (error) {
+                console.error(`Error executing query ${i + 1}:`, error);
+                this.showToast(`Error in query ${i + 1}: ${error.message}`, 'error');
+                // Continue with next query instead of stopping
+            }
+        }
+        
+        this.showToast(`Completed executing ${allQueries.length} queries`, 'success');
+    },
+
+    // Execute a single query (helper method)
+    async executeSingleQuery(query, tabData, tabId, queryIndex, totalQueries) {
+        return new Promise((resolve, reject) => {
+            // Call existing query execution logic
+            if (typeof Queries !== 'undefined' && Queries.executeQuery) {
+                // Temporarily set the global query editor value to the current query
+                const originalGetQueryValue = Editor.getQueryValue;
+                Editor.getQueryValue = () => query;
+                
+                // Create temporary DOM elements for compatibility
+                const tempSelect = document.createElement('select');
+                tempSelect.id = 'datasource';
+                tempSelect.innerHTML = `<option value="${tabData.datasourceId}" data-type="${tabData.datasourceType}" data-id="${tabData.datasourceId}" selected></option>`;
+                
+                const tempTimeFrom = document.createElement('input');
+                tempTimeFrom.id = 'timeFrom';
+                tempTimeFrom.value = document.querySelector(`[data-tab-id="${tabId}"] .time-from`)?.value || '1';
+                
+                const tempTimeTo = document.createElement('input');
+                tempTimeTo.id = 'timeTo';
+                tempTimeTo.value = document.querySelector(`[data-tab-id="${tabId}"] .time-to`)?.value || '0';
+                
+                const tempMaxDataPoints = document.createElement('input');
+                tempMaxDataPoints.id = 'maxDataPoints';
+                tempMaxDataPoints.value = '1000';
+                
+                const tempIntervalMs = document.createElement('input');
+                tempIntervalMs.id = 'intervalMs';
+                tempIntervalMs.value = '15000';
+                
+                const tempInstantQuery = document.createElement('input');
+                tempInstantQuery.id = 'instantQuery';
+                tempInstantQuery.type = 'checkbox';
+                tempInstantQuery.checked = tabData.queryType === 'promql';
+                
+                // Temporarily add elements to DOM
+                document.body.appendChild(tempSelect);
+                document.body.appendChild(tempTimeFrom);
+                document.body.appendChild(tempTimeTo);
+                document.body.appendChild(tempMaxDataPoints);
+                document.body.appendChild(tempIntervalMs);
+                document.body.appendChild(tempInstantQuery);
+                
+                // Show progress
+                this.showToast(`Executing query ${queryIndex} of ${totalQueries}...`, 'info');
+                
+                Queries.executeQuery().then(() => {
+                    // Clean up and restore
+                    Editor.getQueryValue = originalGetQueryValue;
+                    document.body.removeChild(tempSelect);
+                    document.body.removeChild(tempTimeFrom);
+                    document.body.removeChild(tempTimeTo);
+                    document.body.removeChild(tempMaxDataPoints);
+                    document.body.removeChild(tempIntervalMs);
+                    document.body.removeChild(tempInstantQuery);
+                    resolve();
+                }).catch((error) => {
+                    // Clean up and restore on error
+                    Editor.getQueryValue = originalGetQueryValue;
+                    document.body.removeChild(tempSelect);
+                    document.body.removeChild(tempTimeFrom);
+                    document.body.removeChild(tempTimeTo);
+                    document.body.removeChild(tempMaxDataPoints);
+                    document.body.removeChild(tempIntervalMs);
+                    document.body.removeChild(tempInstantQuery);
+                    reject(error);
+                });
+            } else {
+                reject(new Error('Queries module not available'));
+            }
+        });
     },
 
     updateExecuteButton(tabId) {
@@ -954,12 +1142,45 @@ const Interface = {
                         e.preventDefault();
                         this.createNewTab();
                         break;
+                    case 's':
+                        e.preventDefault();
+                        console.log('Keyboard shortcut Ctrl/Cmd+S detected, shiftKey:', e.shiftKey);
+                        console.log('FileExplorer available:', typeof FileExplorer !== 'undefined');
+                        
+                        if (e.shiftKey) {
+                            // Cmd/Ctrl+Shift+S for Save As
+                            console.log('Calling FileExplorer.saveAsCurrentTab()');
+                            if (typeof FileExplorer !== 'undefined') {
+                                FileExplorer.saveAsCurrentTab();
+                            } else {
+                                console.error('FileExplorer not available for Save As');
+                            }
+                        } else {
+                            // Cmd/Ctrl+S for Save
+                            console.log('Calling FileExplorer.saveCurrentTab()');
+                            if (typeof FileExplorer !== 'undefined') {
+                                FileExplorer.saveCurrentTab();
+                            } else {
+                                console.error('FileExplorer not available for Save');
+                            }
+                        }
+                        break;
+                    case 'Enter':
+                        if (e.shiftKey) {
+                            // Cmd/Ctrl+Shift+Enter for Execute All Queries
+                            e.preventDefault();
+                            console.log('Keyboard shortcut Ctrl/Cmd+Shift+Enter detected');
+                            this.executeAllQueries(this.activeTab);
+                        }
+                        // Note: Regular Cmd+Enter is handled by CodeMirror extraKeys
+                        break;
                     case '1':
                     case '2':
                     case '3':
                     case '4':
+                    case '5':
                         e.preventDefault();
-                        const views = ['connections', 'explorer', 'dashboards', 'history'];
+                        const views = ['connections', 'explorer', 'dashboards', 'files', 'history'];
                         const viewIndex = parseInt(e.key) - 1;
                         if (views[viewIndex]) {
                             this.switchSidebarView(views[viewIndex]);
@@ -1003,7 +1224,7 @@ const Interface = {
         });
         
         // Load and render schema
-        Schema.loadSchema();
+        Schema.loadSchemaIfNeeded();
     },
     
     populateSchemaDatasourceSelect() {
@@ -1021,8 +1242,9 @@ const Interface = {
             option.value = item.dataset.uid;
             option.textContent = item.dataset.name || item.querySelector('div[style*="font-weight: 500"]')?.textContent || 'Unknown';
             
-            // Select current datasource if it matches
-            if (item.dataset.uid === GrafanaConfig.currentDatasourceId) {
+            // Select current datasource if it matches (use selectedDatasourceUid as the default)
+            if (item.dataset.uid === GrafanaConfig.currentDatasourceId || 
+                item.dataset.uid === GrafanaConfig.selectedDatasourceUid) {
                 option.selected = true;
             }
             
@@ -1121,6 +1343,15 @@ const Interface = {
             History.loadHistory();
         } else {
             console.error('History module not available');
+        }
+    },
+    
+    loadFileExplorer() {
+        console.log('Interface.loadFileExplorer called');
+        if (typeof FileExplorer !== 'undefined') {
+            FileExplorer.initialize();
+        } else {
+            console.error('FileExplorer module not available');
         }
     },
 
@@ -1605,6 +1836,25 @@ async function connectToConnectionWithSpinner(connectionId) {
     } catch (error) {
         console.error('Connection failed:', error);
         hideConnectionSpinner(connectionId, false);
-        Interface.showToast('Connection failed: ' + error.message, 'error');
+        
+        // Show user-friendly error message
+        let errorMessage = 'Connection failed';
+        if (error.message) {
+            errorMessage = error.message;
+            // Clean up technical error messages
+            if (errorMessage.includes('Failed to fetch')) {
+                errorMessage = 'Unable to connect to server. Please check the URL and try again.';
+            } else if (errorMessage.includes('401') || errorMessage.includes('Unauthorized')) {
+                errorMessage = 'Authentication failed. Please check your credentials.';
+            } else if (errorMessage.includes('403') || errorMessage.includes('Forbidden')) {
+                errorMessage = 'Access denied. You may not have permission to access this server.';
+            } else if (errorMessage.includes('404')) {
+                errorMessage = 'Server not found. Please check the URL.';
+            } else if (errorMessage.includes('Network')) {
+                errorMessage = 'Network error. Please check your internet connection.';
+            }
+        }
+        
+        Interface.showToast(errorMessage, 'error');
     }
 }

@@ -464,6 +464,12 @@ window.onload = function() {
         document.body.classList.add('electron-app');
     }
     
+    // Initialize FileExplorer for save functionality
+    if (typeof FileExplorer !== 'undefined') {
+        console.log('Initializing FileExplorer during app startup');
+        FileExplorer.initialize();
+    }
+    
     // Expose debug functions to global scope for console access
     window.debugStorage = Storage.debugLocalStorage.bind(Storage);
     window.recoverConnections = Storage.recoverConnections.bind(Storage);

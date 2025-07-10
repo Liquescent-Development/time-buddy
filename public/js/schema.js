@@ -19,6 +19,11 @@ const Schema = {
     isLoadingFieldTags: false,
     isLoadingTagValues: false,
     
+    // Cache management
+    schemaCache: {}, // Cache schema data per datasource: { datasourceId: { type, data, timestamp } }
+    cacheExpiry: 5 * 60 * 1000, // 5 minutes cache expiry
+    lastDatasourceId: null, // Track last loaded datasource to avoid redundant loads
+    
     // Initialize schema explorer
     initialize() {
         this.renderSchemaUI();
@@ -51,23 +56,157 @@ const Schema = {
         this.currentDatasourceType = selectedOption.dataset.type;
         this.currentDatasourceId = selectedOption.value;
         
+        await this.loadSchemaIfNeeded();
+    },
+    
+    // Check if schema needs to be loaded (new datasource or cache expired)
+    shouldLoadSchema(datasourceId) {
+        if (!datasourceId) return false;
+        
+        // Check if this is a different datasource than last time
+        if (this.lastDatasourceId !== datasourceId) {
+            console.log('Schema load needed: different datasource', this.lastDatasourceId, '->', datasourceId);
+            return true;
+        }
+        
+        // Check if we have cached data for this datasource
+        const cached = this.schemaCache[datasourceId];
+        if (!cached) {
+            console.log('Schema load needed: no cached data for', datasourceId);
+            return true;
+        }
+        
+        // Check if cache is expired
+        const isExpired = Date.now() - cached.timestamp > this.cacheExpiry;
+        if (isExpired) {
+            console.log('Schema load needed: cache expired for', datasourceId);
+            return true;
+        }
+        
+        console.log('Schema load NOT needed: using cached data for', datasourceId);
+        return false;
+    },
+    
+    // Load schema from cache or fetch if needed
+    async loadSchemaIfNeeded(force = false) {
+        // Use global config datasource if available (new interface)
+        const datasourceId = this.currentDatasourceId || GrafanaConfig.selectedDatasourceUid;
+        const datasourceType = this.currentDatasourceType || GrafanaConfig.selectedDatasourceType;
+        
+        if (!datasourceId || !datasourceType) {
+            console.log('No datasource selected, clearing schema');
+            this.clearSchema();
+            this.renderSchemaUI();
+            return;
+        }
+        
+        // Check if we need to load schema
+        if (!force && !this.shouldLoadSchema(datasourceId)) {
+            // Load from cache
+            this.loadFromCache(datasourceId);
+            this.renderSchemaUI();
+            return;
+        }
+        
+        // Load fresh data
+        console.log('Loading fresh schema data for:', datasourceId, datasourceType);
         await this.loadSchema();
+    },
+    
+    // Load schema from cache
+    loadFromCache(datasourceId) {
+        const cached = this.schemaCache[datasourceId];
+        if (!cached) return;
+        
+        console.log('Loading schema from cache for:', datasourceId);
+        
+        // Set current state
+        this.currentDatasourceId = datasourceId;
+        this.currentDatasourceType = cached.type;
+        this.lastDatasourceId = datasourceId;
+        
+        // Load cached data
+        if (cached.type === 'prometheus') {
+            this.prometheusMetrics = cached.data.metrics || [];
+            this.prometheusLabels = cached.data.labels || {};
+        } else if (cached.type === 'influxdb') {
+            this.influxMeasurements = cached.data.measurements || [];
+            this.influxRetentionPolicies = cached.data.retentionPolicies || [];
+            this.influxFields = cached.data.fields || {};
+            this.influxTags = cached.data.tags || {};
+            this.influxTagValues = cached.data.tagValues || {};
+        }
+    },
+    
+    // Save schema to cache
+    saveToCache(datasourceId, datasourceType) {
+        console.log('Saving schema to cache for:', datasourceId, datasourceType);
+        
+        const data = {};
+        if (datasourceType === 'prometheus') {
+            data.metrics = this.prometheusMetrics;
+            data.labels = this.prometheusLabels;
+        } else if (datasourceType === 'influxdb') {
+            data.measurements = this.influxMeasurements;
+            data.retentionPolicies = this.influxRetentionPolicies;
+            data.fields = this.influxFields;
+            data.tags = this.influxTags;
+            data.tagValues = this.influxTagValues;
+        }
+        
+        this.schemaCache[datasourceId] = {
+            type: datasourceType,
+            data: data,
+            timestamp: Date.now()
+        };
+        
+        this.lastDatasourceId = datasourceId;
+    },
+    
+    // Clear current schema data
+    clearSchema() {
+        this.currentDatasourceType = null;
+        this.currentDatasourceId = null;
+        this.prometheusMetrics = [];
+        this.prometheusLabels = {};
+        this.influxMeasurements = [];
+        this.influxRetentionPolicies = [];
+        this.influxFields = {};
+        this.influxTags = {};
+        this.influxTagValues = {};
+        this.selectedMeasurement = null;
+        this.selectedRetentionPolicy = null;
+        this.selectedField = null;
+        this.selectedTag = null;
+        this.fieldAssociatedTags = {};
     },
     
     // Load schema based on datasource type
     async loadSchema() {
-        if (!this.currentDatasourceType || !this.currentDatasourceId) return;
+        // Use global config if current values not set (new interface)
+        const datasourceId = this.currentDatasourceId || GrafanaConfig.selectedDatasourceUid;
+        const datasourceType = this.currentDatasourceType || GrafanaConfig.selectedDatasourceType;
+        
+        if (!datasourceType || !datasourceId) return;
+        
+        // Update current state
+        this.currentDatasourceId = datasourceId;
+        this.currentDatasourceType = datasourceType;
         
         this.isLoading = true;
         this.renderSchemaUI();
         
         try {
-            console.log('Loading schema for:', this.currentDatasourceType);
-            if (this.currentDatasourceType === 'prometheus') {
+            console.log('Loading schema for:', datasourceType, datasourceId);
+            if (datasourceType === 'prometheus') {
                 await this.loadPrometheusSchema();
-            } else if (this.currentDatasourceType === 'influxdb') {
+            } else if (datasourceType === 'influxdb') {
                 await this.loadInfluxDBSchema();
             }
+            
+            // Save to cache after successful load
+            this.saveToCache(datasourceId, datasourceType);
+            
         } catch (error) {
             console.error('Error loading schema:', error);
             this.showError('Failed to load schema: ' + error.message);
@@ -1155,11 +1294,10 @@ const Schema = {
         }
     },
     
-    // Refresh schema
+    // Refresh schema (force reload)
     async refreshSchema() {
-        if (this.currentDatasourceType && this.currentDatasourceId) {
-            await this.loadSchema();
-        }
+        console.log('Manual schema refresh requested');
+        await this.loadSchemaIfNeeded(true); // Force reload
     }
 };
 

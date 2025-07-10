@@ -54,6 +54,11 @@
                         <path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/>
                     </svg>
                 </div>
+                <div class="activity-item" data-view="files" title="File Explorer">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                    </svg>
+                </div>
                 <div class="activity-item" data-view="history" title="Query History">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
@@ -183,6 +188,25 @@
                             </div>
                         </div>
 
+                        <!-- File Explorer Panel -->
+                        <div class="sidebar-panel" id="filesPanel">
+                            <div class="sidebar-header">
+                                <h3>File Explorer</h3>
+                                <button class="icon-button" onclick="selectQueryDirectory()" title="Open Folder">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M10 4H4c-1.11 0-2 .89-2 2v12c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2h-8l-2-2z"/>
+                                    </svg>
+                                </button>
+                            </div>
+                            <div class="sidebar-content">
+                                <div class="file-explorer-container">
+                                    <div id="fileExplorerTree" class="file-tree">
+                                        <div class="empty-state">Select a folder to explore query files</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- History Panel -->
                         <div class="sidebar-panel" id="historyPanel">
                             <div class="sidebar-header">
@@ -214,18 +238,14 @@
                                     <span class="tab-label">Untitled-1</span>
                                     <button class="tab-close" onclick="closeTab('untitled-1')">×</button>
                                 </div>
-                                <button class="new-tab-button" onclick="createNewTab()" title="New Query">+</button>
+                                <button class="new-tab-button" title="New Query">+</button>
                             </div>
 
                             <!-- Tab Content -->
                             <div class="tab-content">
                                 <div class="editor-container active" data-tab-id="untitled-1">
-                                    <!-- Query Type and Options Bar -->
+                                    <!-- Query Options Bar -->
                                     <div class="editor-toolbar">
-                                        <div class="query-type-selector">
-                                            <button class="query-type-button active" data-type="influxql">InfluxQL</button>
-                                            <button class="query-type-button" data-type="promql">PromQL</button>
-                                        </div>
                                         <div class="editor-options">
                                             <div class="option-group">
                                                 <label>Data Source:</label>
@@ -280,14 +300,6 @@
 
                         <!-- Variables Panel -->
                         <div class="panel-section" id="variablesPanel">
-                            <div class="panel-toolbar">
-                                <button class="icon-button" onclick="addNewVariable()" title="Add Variable">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                                    </svg>
-                                    Add Variable
-                                </button>
-                            </div>
                             <div id="variablesContainer">
                                 <div class="empty-state">No variables defined</div>
                             </div>
@@ -394,6 +406,7 @@
     <script src="js/queries.js"></script>
     <script src="js/charts.js"></script>
     <script src="js/history.js"></script>
+    <script src="js/fileExplorer.js"></script>
     <script src="js/interface.js"></script>
     <script src="js/app.js"></script>
 </body>

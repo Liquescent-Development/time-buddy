@@ -15,16 +15,67 @@ const Dashboard = {
         console.log('Initializing Dashboard module');
         this.initialized = true;
         this.renderDashboardUI();
+        
+        // Load all dashboards when connected
+        if (GrafanaConfig.connected) {
+            this.loadAllDashboards();
+        }
+    },
+    
+    // Load all dashboards
+    async loadAllDashboards() {
+        // Check if connected to Grafana
+        if (!GrafanaConfig.connected) {
+            this.showError('Please connect to Grafana first');
+            return;
+        }
+        
+        try {
+            console.log('Loading all dashboards');
+            
+            // Get all dashboards without a search query
+            const searchUrl = `/api/search?type=dash-db`;
+            
+            const response = await API.makeApiRequest(searchUrl, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Dashboard loading failed: ' + response.statusText);
+            }
+            
+            const results = await response.json();
+            console.log('All dashboard results:', results.length);
+            
+            // Filter to ensure we only have dashboards
+            const dashboards = results.filter(item => item.type === 'dash-db');
+            
+            // Store all dashboards
+            this.allDashboards = dashboards;
+            this.currentDashboards = dashboards;
+            
+            this.renderDashboardResults();
+            
+        } catch (error) {
+            console.error('Error loading all dashboards:', error);
+            this.showError('Failed to load dashboards: ' + error.message);
+        }
     },
     
     // Search for dashboards
     async searchDashboards(query) {
         console.log('Dashboard.searchDashboards called with query:', query);
-        console.log('Called from:', new Error().stack);
         
-        if (!query || query.trim().length < 2) {
-            console.log('Query too short, clearing results');
-            this.currentDashboards = [];
+        if (!query || query.trim().length === 0) {
+            // No search query - show all dashboards
+            if (this.allDashboards) {
+                this.currentDashboards = this.allDashboards;
+            } else {
+                await this.loadAllDashboards();
+            }
             this.renderDashboardResults();
             return;
         }
@@ -35,14 +86,27 @@ const Dashboard = {
             return;
         }
         
+        // Filter from all dashboards if we have them loaded
+        if (this.allDashboards && this.allDashboards.length > 0) {
+            // Client-side filtering from loaded dashboards
+            const filteredResults = this.allDashboards.filter(item => {
+                const searchTerm = query.toLowerCase();
+                return item.title.toLowerCase().includes(searchTerm) ||
+                       (item.tags && item.tags.some(tag => tag.toLowerCase().includes(searchTerm))) ||
+                       (item.description && item.description.toLowerCase().includes(searchTerm));
+            });
+            
+            console.log('Filtered dashboard results (client-side):', filteredResults.length, 'out of', this.allDashboards.length);
+            this.currentDashboards = filteredResults;
+            this.renderDashboardResults();
+            return;
+        }
+        
+        // Fallback to server-side search if we don't have all dashboards loaded
         try {
-            console.log('Searching dashboards for:', query);
+            console.log('Searching dashboards server-side for:', query);
             
-            // Try different search approaches
-            let searchUrl;
-            
-            // First try the standard search API with query
-            searchUrl = `/api/search?q=${encodeURIComponent(query)}&type=dash-db`;
+            const searchUrl = `/api/search?q=${encodeURIComponent(query)}&type=dash-db`;
             
             const response = await API.makeApiRequest(searchUrl, {
                 method: 'GET',
@@ -56,7 +120,7 @@ const Dashboard = {
             }
             
             const results = await response.json();
-            console.log('Dashboard search results:', results);
+            console.log('Dashboard search results (server-side):', results);
             
             // Filter results client-side if Grafana API didn't filter properly
             const filteredResults = results.filter(item => {
@@ -68,7 +132,7 @@ const Dashboard = {
                 return isMatch;
             });
             
-            console.log('Filtered dashboard results:', filteredResults.length, 'out of', results.length);
+            console.log('Filtered dashboard results (server-side):', filteredResults.length, 'out of', results.length);
             
             // Store the filtered results
             this.currentDashboards = filteredResults;
@@ -171,12 +235,17 @@ const Dashboard = {
     // Render dashboard UI
     renderDashboardUI() {
         // Initial render - results container is already in HTML
-        // Don't trigger search on initialization
         console.log('Rendering dashboard UI');
-        // Just render the initial empty state without calling search
         const container = document.getElementById('dashboardResults');
         if (container) {
-            container.innerHTML = '<div class="empty-state">Search for dashboards to explore</div>';
+            if (GrafanaConfig.connected) {
+                // If connected, load all dashboards
+                container.innerHTML = '<div class="loading">Loading dashboards...</div>';
+                this.loadAllDashboards();
+            } else {
+                // If not connected, show connect message
+                container.innerHTML = '<div class="empty-state">Connect to Grafana to explore dashboards</div>';
+            }
         }
     },
     
@@ -191,16 +260,27 @@ const Dashboard = {
         let html = '';
         
         if (this.currentDashboards.length === 0) {
-            // Show different message based on whether user has searched
+            // Show different message based on connection and search state
             const searchInput = document.getElementById('dashboardSearch');
-            const hasSearched = searchInput && searchInput.value.trim().length >= 2;
+            const hasSearched = searchInput && searchInput.value.trim().length > 0;
             
-            if (hasSearched) {
+            if (!GrafanaConfig.connected) {
+                html = '<div class="dashboard-empty">Connect to Grafana to explore dashboards</div>';
+            } else if (hasSearched) {
                 html = '<div class="dashboard-empty">No dashboards found matching your search</div>';
             } else {
-                html = '<div class="dashboard-empty">Search for dashboards to explore their queries</div>';
+                html = '<div class="dashboard-empty">No dashboards available</div>';
             }
         } else {
+            // Show count of dashboards
+            const searchInput = document.getElementById('dashboardSearch');
+            const hasSearched = searchInput && searchInput.value.trim().length > 0;
+            const countLabel = hasSearched ? 
+                `${this.currentDashboards.length} dashboard${this.currentDashboards.length === 1 ? '' : 's'} found` :
+                `${this.currentDashboards.length} dashboard${this.currentDashboards.length === 1 ? '' : 's'}`;
+            
+            html += `<div class="dashboard-count">${countLabel}</div>`;
+            
             for (const dashboard of this.currentDashboards) {
                 html += `<div class="dashboard-item" data-dashboard-uid="${dashboard.uid}" onclick="selectDashboard('${dashboard.uid}')">`;
                 html += `<div class="dashboard-item-title">${Utils.escapeHtml(dashboard.title)}</div>`;
@@ -367,7 +447,7 @@ function searchDashboards() {
         } else {
             console.error('Dashboard.searchDashboards not available');
         }
-    }, 500);
+    }, 300);
 }
 
 function clearDashboardSearch() {

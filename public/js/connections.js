@@ -42,33 +42,17 @@ const Connections = {
             // Update title bar with selected data source if available
             updateTitleBarDataSource();
             
-            // Add disconnect button to title bar controls if not already present
-            const titleBarControls = document.querySelector('.title-bar-controls');
-            if (titleBarControls && !titleBarControls.querySelector('.title-bar-disconnect')) {
-                const disconnectBtn = document.createElement('button');
-                disconnectBtn.className = 'disconnect-btn title-bar-disconnect';
-                disconnectBtn.textContent = 'Disconnect';
-                disconnectBtn.title = 'Disconnect from Grafana';
-                disconnectBtn.addEventListener('click', () => {
-                    if (confirm('Are you sure you want to disconnect?')) {
-                        Connections.disconnect();
-                        
-                        // Update the UI after disconnection
-                        if (typeof Interface !== 'undefined') {
-                            Interface.loadConnections();
-                            Interface.loadDataSources();
-                        }
-                        
-                        Interface.showToast('Disconnected successfully', 'success');
-                    }
-                });
-                titleBarControls.appendChild(disconnectBtn);
-            }
+            // Disconnect button removed - users can disconnect from connections panel
         }
         
         // Update variables UI for the connected state
         if (typeof Variables !== 'undefined') {
             Variables.renderVariablesUI();
+        }
+        
+        // Load dashboards for dashboard explorer
+        if (typeof Dashboard !== 'undefined') {
+            Dashboard.renderDashboardUI();
         }
         
         // Auto-collapse auth section on connection
@@ -152,6 +136,12 @@ const Connections = {
         const titleBarDataSource = document.querySelector('.title-bar-datasource');
         if (titleBarDataSource) {
             titleBarDataSource.remove();
+        }
+        
+        // Remove query language indicator from title bar
+        const titleBarQueryLanguage = document.querySelector('.query-language-indicator');
+        if (titleBarQueryLanguage) {
+            titleBarQueryLanguage.remove();
         }
         
         // Update variables UI for the disconnected state
@@ -245,7 +235,13 @@ const Connections = {
             this.showConnectedState(connection);
             
             this.populateDatasources();
-            Editor.enableQueryEditor();
+            
+            // Try to enable query editor, but don't fail if elements don't exist
+            try {
+                Editor.enableQueryEditor();
+            } catch (e) {
+                console.log('Note: Could not enable query editor (likely using new interface)');
+            }
             
             // Update connection status in new interface
             if (typeof Interface !== 'undefined' && Interface.loadConnections) {
@@ -258,6 +254,7 @@ const Connections = {
         } catch (error) {
             Utils.showStatus('authStatus', 'Connection failed: ' + error.message, 'error');
             console.error('Connection error:', error);
+            throw error;
         }
     },
 
@@ -313,6 +310,79 @@ const Connections = {
             
             datasourceList.innerHTML = html;
             
+            // Auto-select default data source for this connection if available
+            if (GrafanaConfig.currentConnectionId) {
+                const connections = Storage.getSavedConnections();
+                const currentConnection = connections[GrafanaConfig.currentConnectionId];
+                if (currentConnection && currentConnection.defaultDataSource) {
+                    const defaultDataSource = currentConnection.defaultDataSource;
+                    // Check if the default data source still exists in the current list
+                    const defaultItem = datasourceList.querySelector(`[data-uid="${defaultDataSource.uid}"]`);
+                    if (defaultItem) {
+                        // Set global config to the saved default
+                        GrafanaConfig.selectedDatasourceUid = defaultDataSource.uid;
+                        GrafanaConfig.selectedDatasourceType = defaultDataSource.type;
+                        GrafanaConfig.selectedDatasourceId = defaultDataSource.id;
+                        GrafanaConfig.currentDatasourceId = defaultDataSource.uid;
+                        
+                        // Visually select the item
+                        defaultItem.classList.add('selected');
+                        
+                        // Update title bar
+                        updateTitleBarDataSource();
+                        
+                        // Update schema explorer
+                        if (typeof Interface !== 'undefined' && Interface.refreshSchemaExplorer) {
+                            Interface.refreshSchemaExplorer();
+                        }
+                        
+                        // Auto-select appropriate query type
+                        const queryType = defaultDataSource.type === 'prometheus' ? 'promql' : 'influxql';
+                        if (typeof Interface !== 'undefined' && Interface.setQueryType) {
+                            // Add small delay to ensure tab DOM is ready
+                            setTimeout(() => {
+                                Interface.setQueryType(Interface.activeTab, queryType);
+                            }, 100);
+                        } else if (typeof Editor !== 'undefined' && Editor.setQueryType) {
+                            Editor.setQueryType(queryType);
+                        }
+                        
+                        // Update execute button
+                        if (typeof Interface !== 'undefined' && Interface.updateExecuteButton) {
+                            Interface.updateExecuteButton(Interface.activeTab);
+                        }
+                        
+                        // Update current tab's data source if it doesn't have one selected
+                        if (typeof Interface !== 'undefined' && Interface.activeTab) {
+                            const tabData = Interface.tabs.get(Interface.activeTab);
+                            if (tabData && !tabData.datasourceId) {
+                                // Update tab data
+                                tabData.datasourceId = defaultDataSource.uid;
+                                tabData.datasourceName = defaultDataSource.name;
+                                tabData.datasourceType = defaultDataSource.type;
+                                tabData.queryType = queryType;
+                                
+                                // Update the tab's datasource select dropdown
+                                const container = document.querySelector(`[data-tab-id="${Interface.activeTab}"].editor-container`);
+                                if (container) {
+                                    const datasourceSelect = container.querySelector('.tab-datasource-select');
+                                    if (datasourceSelect) {
+                                        datasourceSelect.value = defaultDataSource.uid;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Update all tab datasource selects
+                        if (typeof Interface !== 'undefined' && Interface.populateAllTabDatasourceSelects) {
+                            Interface.populateAllTabDatasourceSelects();
+                        }
+                        
+                        console.log('Auto-selected default data source for connection:', defaultDataSource.name);
+                    }
+                }
+            }
+            
             // Add click handlers for data source selection
             datasourceList.querySelectorAll('.datasource-item').forEach(item => {
                 // Check if this item should be selected (restore selection)
@@ -359,9 +429,49 @@ const Connections = {
                     // Update title bar with selected data source
                     updateTitleBarDataSource();
                     
+                    // Save data source preference for current connection
+                    if (GrafanaConfig.currentConnectionId) {
+                        const connections = Storage.getSavedConnections();
+                        const currentConnection = connections[GrafanaConfig.currentConnectionId];
+                        if (currentConnection) {
+                            currentConnection.defaultDataSource = {
+                                uid: item.dataset.uid,
+                                name: item.dataset.name,
+                                type: item.dataset.type,
+                                id: item.dataset.id
+                            };
+                            Storage.saveConnectionToStorage(currentConnection);
+                            console.log('Saved default data source for connection:', currentConnection.name);
+                        }
+                    }
+                    
                     // Update execute button
                     if (typeof Interface !== 'undefined' && Interface.updateExecuteButton) {
                         Interface.updateExecuteButton(Interface.activeTab);
+                    }
+                    
+                    // Update current tab's data source if it doesn't have one selected
+                    if (typeof Interface !== 'undefined' && Interface.activeTab) {
+                        const tabData = Interface.tabs.get(Interface.activeTab);
+                        if (tabData && !tabData.datasourceId) {
+                            // Update tab data
+                            tabData.datasourceId = item.dataset.uid;
+                            tabData.datasourceName = item.dataset.name;
+                            tabData.datasourceType = item.dataset.type;
+                            tabData.queryType = queryType;
+                            
+                            // Update the tab's datasource select dropdown
+                            const container = document.querySelector(`[data-tab-id="${Interface.activeTab}"].editor-container`);
+                            if (container) {
+                                const datasourceSelect = container.querySelector('.tab-datasource-select');
+                                if (datasourceSelect) {
+                                    datasourceSelect.value = item.dataset.uid;
+                                }
+                            }
+                            
+                            // Update query type (which also updates CodeMirror mode)
+                            Interface.setQueryType(Interface.activeTab, queryType);
+                        }
                     }
                 });
             });
@@ -482,7 +592,13 @@ const Connections = {
                     this.showConnectedState(connection);
                     
                     this.populateDatasources();
-                    Editor.enableQueryEditor();
+                    
+                    // Try to enable query editor, but don't fail if elements don't exist
+                    try {
+                        Editor.enableQueryEditor();
+                    } catch (e) {
+                        console.log('Note: Could not enable query editor (likely using new interface)');
+                    }
 
                 } else {
                     throw new Error('Failed to load datasources');
@@ -513,16 +629,18 @@ const Connections = {
         }
         
         if (!connectionId) {
-            Utils.showStatus('authStatus', 'Please select a connection first', 'error');
-            return;
+            const error = new Error('Please select a connection first');
+            Utils.showStatus('authStatus', error.message, 'error');
+            throw error;
         }
         
         const connections = Storage.getSavedConnections();
         const connection = connections[connectionId];
         
         if (!connection) {
-            Utils.showStatus('authStatus', 'Connection not found', 'error');
-            return;
+            const error = new Error('Connection not found');
+            Utils.showStatus('authStatus', error.message, 'error');
+            throw error;
         }
         
         // Check if we have a cached authentication token
@@ -536,8 +654,9 @@ const Connections = {
         // If no cached token, prompt for password
         const password = await this.promptForPassword(connection.name);
         if (!password) {
-            Utils.showStatus('authStatus', 'Password required for connection', 'error');
-            return;
+            const error = new Error('Password required for connection');
+            Utils.showStatus('authStatus', error.message, 'error');
+            throw error;
         }
         
         await this.connectToGrafana(connection.url, connection.username, password, connectionId);
@@ -827,26 +946,32 @@ function updateTitleBarDataSource() {
         if (selectedDataSource) {
             const dataSourceIndicator = document.createElement('span');
             dataSourceIndicator.className = 'title-bar-datasource';
-            dataSourceIndicator.textContent = `Data Source: ${selectedDataSource.name}`;
-            dataSourceIndicator.title = `Selected data source: ${selectedDataSource.name} (${selectedDataSource.type})`;
+            dataSourceIndicator.textContent = `Default Data Source: ${selectedDataSource.name}`;
+            dataSourceIndicator.title = `Default data source: ${selectedDataSource.name} (${selectedDataSource.type})`;
             dataSourceIndicator.style.cssText = `
                 font-size: 11px;
-                color: #ffffff;
-                background-color: #007acc;
-                padding: 3px 10px;
+                color: #ff8c00;
+                background-color: rgba(255, 140, 0, 0.15);
+                padding: 2px 8px;
                 border-radius: 3px;
                 margin-left: 8px;
                 font-weight: 500;
-                border: 1px solid #0066cc;
+                border: 1px solid rgba(255, 140, 0, 0.4);
             `;
             
-            // Insert before disconnect button
-            const disconnectBtn = titleBarControls.querySelector('.title-bar-disconnect');
-            if (disconnectBtn) {
-                titleBarControls.insertBefore(dataSourceIndicator, disconnectBtn);
-            } else {
-                titleBarControls.appendChild(dataSourceIndicator);
+            titleBarControls.appendChild(dataSourceIndicator);
+            
+            // Update query language indicator after data source indicator is added
+            if (typeof Interface !== 'undefined' && Interface.updateQueryLanguageIndicator) {
+                // Determine query language from datasource type
+                const queryType = selectedDataSource.type === 'prometheus' ? 'promql' : 'influxql';
+                Interface.updateQueryLanguageIndicator(queryType);
             }
+        }
+    } else {
+        // No data source selected, hide query language indicator
+        if (typeof Interface !== 'undefined' && Interface.updateQueryLanguageIndicator) {
+            Interface.updateQueryLanguageIndicator(null);
         }
     }
 }
