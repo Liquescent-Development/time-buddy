@@ -1,6 +1,9 @@
 const Utils = {
     // HTML escaping utility
     escapeHtml(text) {
+        if (text === null || text === undefined) {
+            return '';
+        }
         const map = {
             '&': '&amp;',
             '<': '&lt;',
@@ -8,7 +11,7 @@ const Utils = {
             '"': '&quot;',
             "'": '&#039;'
         };
-        return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
     },
 
     // Show status messages

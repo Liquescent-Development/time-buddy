@@ -11,6 +11,42 @@ const { SocksProxyAgent } = require('socks-proxy-agent');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const MOCK_SERVER_PORT = 3001;
+
+// Check if we should use mock server
+async function shouldUseMockServer(req) {
+    // Check for explicit demo mode header (most reliable)
+    if (req.headers['x-demo-mode'] === 'true') {
+        console.log('🎭 Demo mode detected from X-Demo-Mode header');
+        return true;
+    }
+    
+    // Check if demo mode is indicated by URL parameter
+    const isDemoRequest = req.originalUrl.includes('demo=true') || 
+                         req.query.demo === 'true' ||
+                         req.headers.referer?.includes('demo=true');
+    
+    if (isDemoRequest) {
+        console.log('🎭 Demo mode detected from URL/referer');
+        return true;
+    }
+    
+    // Check if Grafana URL points to localhost:3000 (indicating demo connection)
+    const grafanaUrl = req.headers['x-grafana-url'];
+    if (grafanaUrl && grafanaUrl.includes('localhost:3000')) {
+        console.log('🎭 Demo mode detected from Grafana URL pointing to localhost:3000');
+        return true;
+    }
+    
+    // Check if username indicates demo mode
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.includes('demo-')) {
+        console.log('🎭 Demo mode detected from demo username in auth header');
+        return true;
+    }
+    
+    return false;
+}
 
 // Security and performance middleware
 app.use(helmet({
@@ -139,6 +175,32 @@ const axiosInstance = axios.create({
 // Proxy all API requests to Grafana
 app.all('/api/*', async (req, res) => {
   try {
+      // Check if we should use mock server
+      const useMock = await shouldUseMockServer(req);
+      
+      if (useMock) {
+          // Proxy to mock server
+          const mockUrl = `http://localhost:${MOCK_SERVER_PORT}${req.path}`;
+          const queryString = req.url.includes("?") ? req.url.split("?")[1] : "";
+          const fullMockUrl = queryString ? `${mockUrl}?${queryString}` : mockUrl;
+          
+          console.log(`🎭 Proxying ${req.method} request to mock server: ${fullMockUrl}`);
+          
+          const mockResponse = await axios({
+              method: req.method.toLowerCase(),
+              url: fullMockUrl,
+              data: req.body,
+              headers: {
+                  'Content-Type': req.headers['content-type'] || 'application/json'
+              },
+              validateStatus: () => true,
+              timeout: 30000
+          });
+          
+          res.status(mockResponse.status).json(mockResponse.data);
+          return;
+      }
+
       const grafanaUrl = req.headers["x-grafana-url"];
       const authorization = req.headers["authorization"];
 

@@ -22,6 +22,11 @@ const App = {
         Variables.initialize();
         Dashboard.initialize();
         
+        // Initialize demo mode only if explicitly requested via URL parameter
+        if (typeof Demo !== 'undefined' && window.location.search.includes('demo=true')) {
+            Demo.initialize();
+        }
+        
         // Initialize connection and API systems
         Connections.ensureDisconnectedState();
         API.checkIfRunningInContainer();
@@ -470,9 +475,11 @@ window.onload = function() {
         FileExplorer.initialize();
     }
     
+    
     // Expose debug functions to global scope for console access
     window.debugStorage = Storage.debugLocalStorage.bind(Storage);
-    window.recoverConnections = Storage.recoverConnections.bind(Storage);
+    window.exportConnections = exportConnections;
+    
     
     // Log debug info on startup
     console.log('App initialized - you can use debugStorage() and recoverConnections() in console');

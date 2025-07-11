@@ -196,6 +196,24 @@ const FileExplorer = {
         
         try {
             console.log('Reading directory:', this.currentDirectory);
+            
+            // Check if we're in demo mode and should use mock files
+            const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
+            const demoMockFiles = localStorage.getItem('demoMockFiles');
+            
+            if (isDemoMode && demoMockFiles) {
+                console.log('🎭 Using mock files for demo mode');
+                const mockFiles = JSON.parse(demoMockFiles);
+                const files = Object.keys(mockFiles).map(fileName => ({
+                    name: fileName,
+                    path: `/Users/demo/queries/${fileName}`,
+                    isFile: true
+                }));
+                console.log('Mock files:', files);
+                this.renderFileTree(files);
+                return;
+            }
+            
             const files = await window.electronAPI.readDirectory(this.currentDirectory);
             console.log('Found files:', files);
             this.renderFileTree(files);
@@ -260,8 +278,22 @@ const FileExplorer = {
         
         try {
             console.log('Opening file:', filePath);
-            const content = await window.electronAPI.readFileContent(filePath);
-            console.log('File content loaded, length:', content.length);
+            
+            let content;
+            
+            // Check if we're in demo mode and should use mock content
+            const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
+            const demoMockFiles = localStorage.getItem('demoMockFiles');
+            
+            if (isDemoMode && demoMockFiles) {
+                console.log('🎭 Using mock file content for demo mode');
+                const mockFiles = JSON.parse(demoMockFiles);
+                content = mockFiles[fileName] || `-- Demo file: ${fileName}\n-- Mock content not found`;
+                console.log('Mock file content loaded, length:', content.length);
+            } else {
+                content = await window.electronAPI.readFileContent(filePath);
+                console.log('File content loaded, length:', content.length);
+            }
             
             // Create new tab with the file
             const tabId = Interface.createNewTab();

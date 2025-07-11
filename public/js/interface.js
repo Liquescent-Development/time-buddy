@@ -139,6 +139,15 @@ const Interface = {
 
     createInitialTab() {
         console.log('Creating initial tab...');
+        
+        // Check if we're in demo mode and have demo tabs to load
+        const demoTabs = localStorage.getItem('demoTabs');
+        if (demoTabs && (window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true')) {
+            console.log('🎭 Loading demo tabs...');
+            this.loadDemoTabs(JSON.parse(demoTabs));
+            return;
+        }
+        
         // Create the initial tab content if it doesn't exist
         const existingContainer = document.querySelector(`[data-tab-id="untitled-1"].editor-container`);
         console.log('Existing container found:', !!existingContainer);
@@ -148,6 +157,98 @@ const Interface = {
         }
         console.log('Switching to untitled-1 tab');
         this.switchTab('untitled-1');
+    },
+
+    loadDemoTabs(demoTabs) {
+        console.log('🎭 Loading demo tabs from localStorage...', demoTabs);
+        
+        // Clear any existing tabs first
+        this.tabs.clear();
+        document.querySelectorAll('.tab').forEach(tab => tab.remove());
+        document.querySelectorAll('.editor-container').forEach(container => container.remove());
+        
+        let firstTabId = null;
+        
+        // Create each demo tab
+        demoTabs.forEach((tabData, index) => {
+            const tabId = tabData.id;
+            if (index === 0) firstTabId = tabId;
+            
+            // Auto-select appropriate datasource based on query type
+            let selectedDatasourceId = null;
+            if (tabData.queryType === 'promql') {
+                // Find a Prometheus datasource
+                selectedDatasourceId = 'prometheus-prod'; // Default to first prometheus in demo data
+            } else if (tabData.queryType === 'influxql') {
+                // Find an InfluxDB datasource
+                selectedDatasourceId = 'influxdb-staging'; // Default to first influxdb in demo data
+            }
+            
+            // Store tab data
+            this.tabs.set(tabId, {
+                id: tabId,
+                label: tabData.label,
+                content: tabData.content,
+                queryType: tabData.queryType,
+                saved: tabData.saved,
+                filePath: tabData.filePath,
+                datasourceId: selectedDatasourceId,
+                editor: null
+            });
+            
+            // Create tab UI
+            this.createTabElement(tabId, tabData.label);
+            this.createTabContent(tabId);
+            
+            console.log(`🎭 Created demo tab: ${tabData.label} (${tabData.queryType})`);
+        });
+        
+        // Switch to first tab
+        if (firstTabId) {
+            this.activeTab = firstTabId;
+            this.switchTab(firstTabId);
+            
+            // Set content and datasource selection after a short delay to ensure editors are ready
+            setTimeout(() => {
+                demoTabs.forEach(tabData => {
+                    const tabInfo = this.tabs.get(tabData.id);
+                    if (tabInfo && tabInfo.editor) {
+                        tabInfo.editor.setValue(tabData.content);
+                        const mode = tabData.queryType === 'promql' ? 'promql' : 'sql';
+                        tabInfo.editor.setOption('mode', mode);
+                        
+                        // Set the datasource selection in the UI
+                        if (tabInfo.datasourceId) {
+                            this.setTabDatasource(tabData.id, tabInfo.datasourceId);
+                        }
+                        
+                        // Set the query type buttons
+                        this.setQueryType(tabData.id, tabData.queryType);
+                        
+                        console.log(`🎭 Set content and datasource for tab: ${tabData.label} (${tabData.queryType} -> ${tabInfo.datasourceId})`);
+                    }
+                });
+                
+                // Update all tab datasource selects to show available datasources
+                // Use a longer delay and retry mechanism to ensure datasources are loaded
+                setTimeout(() => {
+                    this.populateAllTabDatasourceSelects();
+                    
+                    // Apply the pre-selected datasources after population
+                    setTimeout(() => {
+                        demoTabs.forEach(tabData => {
+                            const tabInfo = this.tabs.get(tabData.id);
+                            if (tabInfo && tabInfo.datasourceId) {
+                                this.setTabDatasource(tabData.id, tabInfo.datasourceId);
+                                console.log(`🎭 Re-applied datasource selection: ${tabData.label} -> ${tabInfo.datasourceId}`);
+                            }
+                        });
+                    }, 300);
+                }, 800);
+            }, 500);
+        }
+        
+        console.log('🎭 Demo tabs loaded successfully');
     },
 
     createNewTab() {
@@ -317,22 +418,39 @@ const Interface = {
             console.log('Using mode:', mode);
             
             const editor = CodeMirror.fromTextArea(textarea, {
-            mode: mode,
-            theme: 'monokai',
-            lineNumbers: true,
-            matchBrackets: true,
-            autoCloseBrackets: true,
-            indentUnit: 2,
-            tabSize: 2,
-            lineWrapping: true,
-            extraKeys: {
-                'Ctrl-Space': 'autocomplete',
-                'Ctrl-Enter': () => this.executeQuery(tabId),
-                'Cmd-Enter': () => this.executeQuery(tabId),
-                'Ctrl-Shift-Enter': () => this.executeAllQueries(tabId),
-                'Cmd-Shift-Enter': () => this.executeAllQueries(tabId)
-            }
-        });
+                mode: mode,
+                theme: 'monokai',
+                lineNumbers: true,
+                matchBrackets: true,
+                autoCloseBrackets: true,
+                indentUnit: 2,
+                tabSize: 2,
+                lineWrapping: true,
+                smartIndent: true,
+                extraKeys: {
+                    'Ctrl-Space': 'autocomplete',
+                    'Ctrl-Enter': () => this.executeQuery(tabId),
+                    'Cmd-Enter': () => this.executeQuery(tabId),
+                    'Ctrl-Shift-Enter': () => this.executeAllQueries(tabId),
+                    'Cmd-Shift-Enter': () => this.executeAllQueries(tabId),
+                    'Tab': function(cm) {
+                        if (cm.getMode().name === 'null') {
+                            cm.execCommand('insertTab');
+                        } else {
+                            if (cm.somethingSelected()) {
+                                cm.execCommand('indentMore');
+                            } else {
+                                cm.execCommand('insertSoftTab');
+                            }
+                        }
+                    }
+                },
+                hintOptions: {
+                    completeSingle: false,
+                    alignWithWord: true,
+                    closeOnUnfocus: false
+                }
+            });
 
             // Store editor reference
             const tabData = this.tabs.get(tabId);
@@ -348,11 +466,42 @@ const Interface = {
                 this.markTabUnsaved(tabId);
             });
             
+            // Setup autocomplete and validation event handlers
+            this.setupEditorEventHandlers(editor, tabId);
+            
             console.log('CodeMirror successfully initialized for tab:', tabId);
             
         } catch (error) {
             console.error('Failed to initialize CodeMirror for tab:', tabId, error);
         }
+    },
+
+    // Setup editor event handlers for autocomplete and validation
+    setupEditorEventHandlers(editor, tabId) {
+        // Real-time syntax validation
+        editor.on('change', function(cm) {
+            clearTimeout(cm.validateTimeout);
+            cm.validateTimeout = setTimeout(function() {
+                // Only validate if we have the validateQuery function available
+                if (typeof Editor !== 'undefined' && Editor.validateQuery) {
+                    // Temporarily set global editor reference for validation
+                    const previousEditor = GrafanaConfig.queryEditor;
+                    GrafanaConfig.queryEditor = cm;
+                    Editor.validateQuery();
+                    GrafanaConfig.queryEditor = previousEditor;
+                }
+            }, 500);
+        });
+        
+        // Auto-complete on typing
+        editor.on('inputRead', function(cm, change) {
+            if (!cm.state.completionActive &&
+                change.text[0] && change.text[0].match(/[a-zA-Z]/)) {
+                CodeMirror.commands.autocomplete(cm, null, {completeSingle: false});
+            }
+        });
+        
+        console.log('Editor event handlers set up for tab:', tabId);
     },
     
     ensureCodeMirrorInitialized() {

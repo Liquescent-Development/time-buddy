@@ -518,6 +518,56 @@ const Schema = {
         }
     },
     
+    // Execute InfluxDB schema query using direct proxy endpoint
+    async executeInfluxSchemaQuery(query, datasourceNumericId) {
+        try {
+            console.log('Executing InfluxDB schema query:', query);
+            
+            const endpoint = `/api/datasources/proxy/${datasourceNumericId}/query?q=${encodeURIComponent(query)}`;
+            
+            const response = await API.makeApiRequest(endpoint, {
+                method: 'GET'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Schema query failed: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            console.log('InfluxDB schema query response:', data);
+            
+            // Convert InfluxDB response to the expected format
+            if (data.results && data.results[0] && data.results[0].series) {
+                const series = data.results[0].series[0];
+                const values = series.values || [];
+                
+                // Convert to frames format expected by the rest of the code
+                const frames = [{
+                    schema: {
+                        fields: series.columns.map(col => ({ name: col, type: 'string' }))
+                    },
+                    data: {
+                        values: series.columns.map((col, colIndex) => 
+                            values.map(row => row[colIndex])
+                        )
+                    }
+                }];
+                
+                return {
+                    results: {
+                        A: { frames }
+                    }
+                };
+            }
+            
+            return { results: { A: { frames: [] } } };
+            
+        } catch (error) {
+            console.error('InfluxDB schema query error:', error);
+            throw error;
+        }
+    },
+    
     // Execute schema discovery query
     async executeSchemaQuery(query, datasourceType) {
         // Try to get datasource info from old interface first, fallback to global config
@@ -527,12 +577,18 @@ const Schema = {
             datasourceNumericId = selectedOption.selectedOptions[0].dataset.id;
         } else {
             // Use global config for new interface
-            datasourceNumericId = GrafanaConfig.selectedDatasourceId;
+            datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId || GrafanaConfig.selectedDatasourceId;
         }
         
         if (!datasourceNumericId) {
             console.warn('No datasource ID available for schema query');
             return null;
+        }
+        
+        // Check if we're in demo mode - if so, use direct proxy endpoints for InfluxDB schema queries
+        const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
+        if (isDemoMode && datasourceType === 'influxdb') {
+            return this.executeInfluxSchemaQuery(query, datasourceNumericId);
         }
         
         let requestBody;

@@ -173,7 +173,6 @@ const Queries = {
             });
             
             html += '</select>';
-            html += '<div class="series-info">Showing group ' + (seriesIndex + 1) + ' of ' + result.frames.length + ' (each group represents one GROUP BY value)</div>';
             html += '</div>';
             
             // Add group summary statistics
@@ -183,12 +182,7 @@ const Queries = {
         const frameToDisplay = result.frames[seriesIndex] || result.frames[0];
         
         if (frameToDisplay && frameToDisplay.schema && frameToDisplay.schema.fields && frameToDisplay.data && frameToDisplay.data.values) {
-            if (hasMultipleSeries || hasGroupByData) {
-                const groupName = Utils.extractSeriesName(frameToDisplay, seriesIndex);
-                html += '<h3>Group: ' + Utils.escapeHtml(groupName) + '</h3>';
-            } else {
-                html += '<h3>Results</h3>';
-            }
+            html += '<h3>Results</h3>';
             
             // Removed redundant executed query display since it's visible in the editor
             

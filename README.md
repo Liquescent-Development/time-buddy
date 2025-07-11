@@ -2,6 +2,8 @@
 
 A powerful cross-platform desktop application for executing InfluxQL and PromQL queries through the Grafana API. Built with Electron, featuring an advanced VS Code-like interface with syntax highlighting, intelligent auto-completion, file system integration, and native desktop experience.
 
+<img src="content/grafana_query_ide_demo.gif" style="max-height: 500px; width: auto;" alt="Demo">
+
 ## ✨ Key Features
 
 ### 🖥️ **Native Desktop Experience**

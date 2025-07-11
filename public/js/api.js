@@ -10,6 +10,12 @@ const API = {
                 'Accept': 'application/json'
             };
             
+            // Add demo mode header if in demo mode
+            const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
+            if (isDemoMode) {
+                headers['X-Demo-Mode'] = 'true';
+            }
+            
             // Add proxy configuration if available
             if (GrafanaConfig.proxyConfig) {
                 headers['X-Proxy-Config'] = JSON.stringify(GrafanaConfig.proxyConfig);
@@ -52,6 +58,12 @@ const API = {
                 'X-Grafana-URL': config.url,
                 'Accept': 'application/json'
             };
+            
+            // Add demo mode header if in demo mode
+            const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
+            if (isDemoMode) {
+                headers['X-Demo-Mode'] = 'true';
+            }
             
             // Add proxy configuration if available in config
             if (config.proxyConfig) {

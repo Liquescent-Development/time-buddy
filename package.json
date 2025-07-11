@@ -1,6 +1,6 @@
 {
     "name": "grafana-query-ide",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "description": "Desktop IDE for executing InfluxQL and PromQL queries via Grafana API",
     "main": "main.js",
     "homepage": "./",
@@ -10,6 +10,8 @@
         "electron": "electron .",
         "electron-dev": "node electron-start.js",
         "electron-dev-alt": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
+        "demo": "electron . --demo",
+        "demo-dev": "NODE_ENV=development electron . --demo",
         "build": "electron-builder",
         "build-mac": "electron-builder --mac",
         "build-win": "electron-builder --win",

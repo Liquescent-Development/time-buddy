@@ -26,7 +26,12 @@ console.log('App name:', app.getName());
 // Keep a global reference of the window object
 let mainWindow;
 let serverProcess;
+let mockServerProcess;
 const SERVER_PORT = 3000;
+const MOCK_SERVER_PORT = 3001;
+
+// Check for demo mode command line argument
+const isDemoMode = process.argv.includes('--demo') || process.argv.includes('-d');
 
 // Enable live reload for development (optional)
 if (process.env.NODE_ENV === 'development') {
@@ -56,17 +61,31 @@ function isPortAvailable(port) {
     });
 }
 
-// Start the Express server
+// Start the Express server(s)
 async function startServer() {
+    if (isDemoMode) {
+        // In demo mode, start both the regular frontend server and mock Grafana server
+        await startFrontendServer();
+        await startMockServer();
+    } else {
+        // In normal mode, just start the frontend server
+        await startFrontendServer();
+    }
+}
+
+// Start the frontend server (serves the UI)
+async function startFrontendServer() {
     const portAvailable = await isPortAvailable(SERVER_PORT);
     
     if (!portAvailable) {
-        console.log(`Port ${SERVER_PORT} is already in use, assuming server is running`);
+        console.log(`Port ${SERVER_PORT} is already in use, assuming frontend server is running`);
         return Promise.resolve();
     }
 
     return new Promise((resolve, reject) => {
         const serverPath = path.join(__dirname, 'server.js');
+        console.log(`Starting frontend server: ${serverPath}`);
+        
         serverProcess = spawn('node', [serverPath], {
             stdio: 'pipe',
             env: { ...process.env, PORT: SERVER_PORT }
@@ -99,8 +118,58 @@ async function startServer() {
 
         // Timeout after 5 seconds
         setTimeout(() => {
-            console.log('Server startup timeout, assuming server is ready...');
+            console.log('Frontend server startup timeout, assuming server is ready...');
             resolve(); // Resolve anyway, the server might be starting
+        }, 5000);
+    });
+}
+
+// Start the mock Grafana server (for demo mode)
+async function startMockServer() {
+    const portAvailable = await isPortAvailable(MOCK_SERVER_PORT);
+    
+    if (!portAvailable) {
+        console.log(`Port ${MOCK_SERVER_PORT} is already in use, assuming mock server is running`);
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        const mockServerPath = path.join(__dirname, 'mock_server.js');
+        console.log(`Starting mock Grafana server: ${mockServerPath}`);
+        
+        mockServerProcess = spawn('node', [mockServerPath], {
+            stdio: 'pipe',
+            env: { ...process.env, PORT: MOCK_SERVER_PORT }
+        });
+
+        mockServerProcess.stdout.on('data', (data) => {
+            console.log('Mock Server:', data.toString());
+            if (data.toString().includes('Mock Grafana Server')) {
+                resolve();
+            }
+        });
+
+        mockServerProcess.stderr.on('data', (data) => {
+            const errorStr = data.toString();
+            console.error('Mock Server Error:', errorStr);
+            
+            // If port is already in use, resolve anyway
+            if (errorStr.includes('EADDRINUSE')) {
+                console.log('Mock server already running, continuing...');
+                resolve();
+            }
+        });
+
+        mockServerProcess.on('error', (error) => {
+            console.error('Failed to start mock server:', error);
+            console.log('Mock server start failed, but continuing anyway...');
+            resolve();
+        });
+
+        // Timeout after 5 seconds
+        setTimeout(() => {
+            console.log('Mock server startup timeout, assuming server is ready...');
+            resolve();
         }, 5000);
     });
 }
@@ -125,7 +194,14 @@ function createMainWindow() {
     });
 
     // Load the application
-    mainWindow.loadURL(`http://localhost:${SERVER_PORT}`);
+    const baseUrl = `http://localhost:${SERVER_PORT}`;
+    const url = isDemoMode ? `${baseUrl}?demo=true` : baseUrl;
+    mainWindow.loadURL(url);
+    
+    // Log demo mode status
+    if (isDemoMode) {
+        console.log('🎭 Starting in demo mode with mock data');
+    }
 
     // Show window when ready
     mainWindow.once('ready-to-show', () => {
@@ -317,6 +393,40 @@ function createMenu() {
             ]
         },
         {
+            label: 'Demo',
+            submenu: [
+                {
+                    label: 'Toggle Demo Mode',
+                    accelerator: 'CmdOrCtrl+Shift+D',
+                    click: () => {
+                        if (mainWindow) {
+                            mainWindow.webContents.executeJavaScript(`
+                                if (typeof Demo !== 'undefined') {
+                                    if (Demo.enabled) {
+                                        Demo.disable();
+                                    } else {
+                                        Demo.enable();
+                                    }
+                                }
+                            `);
+                        }
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: 'About Demo Mode',
+                    click: () => {
+                        dialog.showMessageBox(mainWindow, {
+                            type: 'info',
+                            title: 'Demo Mode',
+                            message: 'Demo Mode Information',
+                            detail: 'Demo mode provides mock data for:\n\n• Sample connections and data sources\n• Pre-built query examples\n• Mock schema data (metrics, measurements, fields, tags)\n• Sample dashboard queries\n• Query history and variables\n• File explorer with sample files\n\nPerfect for testing features or recording demos without exposing real data!'
+                        });
+                    }
+                }
+            ]
+        },
+        {
             label: 'Help',
             submenu: [
                 {
@@ -398,6 +508,9 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
     if (serverProcess) {
         serverProcess.kill();
+    }
+    if (mockServerProcess) {
+        mockServerProcess.kill();
     }
 });
 
