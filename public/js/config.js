@@ -44,8 +44,18 @@ const QueryKeywords = {
     ]
 };
 
-// Chart color palette
+// Chart color palette - VS Code theme compatible
 const ChartColors = [
-    '#f46800', '#4ade80', '#60a5fa', '#f87171', '#fbbf24',
-    '#a78bfa', '#fb7185', '#34d399', '#fcd34d', '#818cf8'
+    '#007acc', // VS Code blue (primary)
+    '#4fc3f7', // Light blue
+    '#66bb6a', // Green
+    '#ffb74d', // Orange
+    '#ba68c8', // Purple
+    '#f06292', // Pink
+    '#64b5f6', // Medium blue
+    '#81c784', // Light green
+    '#ffab40', // Amber
+    '#9575cd', // Deep purple
+    '#4dd0e1', // Cyan
+    '#aed581'  // Light lime
 ];

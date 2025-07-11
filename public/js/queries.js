@@ -1,7 +1,8 @@
 const Queries = {
     // Execute query
     async executeQuery() {
-        const datasourceId = document.getElementById('datasource').value;
+        // Get datasource ID from global config (new interface)
+        const datasourceId = GrafanaConfig.currentDatasourceId;
         const rawQuery = Editor.getQueryValue();
         
         if (!datasourceId) {
@@ -17,9 +18,16 @@ const Queries = {
         // Substitute variables in the query
         const query = Variables.substituteVariables(rawQuery);
         
-        const selectedOption = document.getElementById('datasource').selectedOptions[0];
-        const datasourceType = selectedOption.dataset.type;
-        const datasourceNumericId = selectedOption.dataset.id;
+        // Log variable substitution for debugging
+        if (query !== rawQuery) {
+            console.log('Variable substitution applied:');
+            console.log('Original query:', rawQuery);
+            console.log('Substituted query:', query);
+        }
+        
+        // Get datasource info from global config (new interface)
+        const datasourceType = GrafanaConfig.selectedDatasourceType || 'prometheus';
+        const datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId;
         
         const timeFromHours = parseFloat(document.getElementById('timeFrom').value) || 1;
         const timeToHours = parseFloat(document.getElementById('timeTo').value) || 0;
@@ -110,7 +118,7 @@ const Queries = {
             GrafanaConfig.currentResults = data;
             this.displayResults(data);
             
-            Storage.saveToHistory(rawQuery, datasourceId, selectedOption.textContent);
+            Storage.saveToHistory(rawQuery, datasourceId, GrafanaConfig.selectedDatasourceName || 'Unknown Datasource');
             History.loadHistory();
             
         } catch (error) {
@@ -140,9 +148,7 @@ const Queries = {
             return;
         }
         
-        let html = '<div class="status success">Query executed successfully</div>';
-        
-        html += '<div class="view-toggle">';
+        let html = '<div class="view-toggle">';
         html += '<button class="' + (GrafanaConfig.currentViewMode === 'table' ? 'active' : '') + '" onclick="setViewMode(\'table\')">Table View</button>';
         html += '<button class="' + (GrafanaConfig.currentViewMode === 'chart' ? 'active' : '') + '" onclick="setViewMode(\'chart\')">Chart View</button>';
         html += '</div>';
@@ -167,7 +173,6 @@ const Queries = {
             });
             
             html += '</select>';
-            html += '<div class="series-info">Showing group ' + (seriesIndex + 1) + ' of ' + result.frames.length + ' (each group represents one GROUP BY value)</div>';
             html += '</div>';
             
             // Add group summary statistics
@@ -177,16 +182,9 @@ const Queries = {
         const frameToDisplay = result.frames[seriesIndex] || result.frames[0];
         
         if (frameToDisplay && frameToDisplay.schema && frameToDisplay.schema.fields && frameToDisplay.data && frameToDisplay.data.values) {
-            if (hasMultipleSeries || hasGroupByData) {
-                const groupName = Utils.extractSeriesName(frameToDisplay, seriesIndex);
-                html += '<h3>Group: ' + Utils.escapeHtml(groupName) + '</h3>';
-            } else {
-                html += '<h3>Results</h3>';
-            }
+            html += '<h3>Results</h3>';
             
-            if (frameToDisplay.schema.meta && frameToDisplay.schema.meta.executedQueryString) {
-                html += '<p style="color: #888; margin-bottom: 10px; font-size: 12px;">Executed: ' + Utils.escapeHtml(frameToDisplay.schema.meta.executedQueryString) + '</p>';
-            }
+            // Removed redundant executed query display since it's visible in the editor
             
             if (GrafanaConfig.currentViewMode === 'chart') {
                 html += this.renderChartView(frameToDisplay, hasMultipleSeries ? result.frames : [frameToDisplay]);
@@ -216,7 +214,34 @@ const Queries = {
         // Initialize chart if in chart view mode
         if (GrafanaConfig.currentViewMode === 'chart') {
             setTimeout(function() {
-                Charts.initializeChart(hasMultipleSeries ? result.frames : [frameToDisplay]);
+                Charts.initializeChart(result.frames);
+                
+                // Attach event listeners after chart is initialized
+                const showAllSeriesEl = document.getElementById('showAllSeries');
+                const chartTypeEl = document.getElementById('chartType');
+                const smoothLinesEl = document.getElementById('smoothLines');
+                
+                if (showAllSeriesEl && !showAllSeriesEl.hasAttribute('data-listener-attached')) {
+                    showAllSeriesEl.setAttribute('data-listener-attached', 'true');
+                    showAllSeriesEl.addEventListener('change', function() {
+                        console.log('Show All Series changed to:', showAllSeriesEl.checked);
+                        updateChart();
+                    });
+                }
+                if (chartTypeEl && !chartTypeEl.hasAttribute('data-listener-attached')) {
+                    chartTypeEl.setAttribute('data-listener-attached', 'true');
+                    chartTypeEl.addEventListener('change', function() {
+                        console.log('Chart Type changed to:', chartTypeEl.value);
+                        updateChart();
+                    });
+                }
+                if (smoothLinesEl && !smoothLinesEl.hasAttribute('data-listener-attached')) {
+                    smoothLinesEl.setAttribute('data-listener-attached', 'true');
+                    smoothLinesEl.addEventListener('change', function() {
+                        console.log('Smooth Lines changed to:', smoothLinesEl.checked);
+                        updateChart();
+                    });
+                }
             }, 50);
         }
     },
@@ -229,7 +254,8 @@ const Queries = {
         const totalPages = Math.ceil(GrafanaConfig.totalRows / GrafanaConfig.pageSize);
         GrafanaConfig.currentPage = page;
         
-        let html = '<div class="table-wrapper"><table>';
+        let html = '<div class="table-container">';
+        html += '<div class="table-wrapper"><table>';
         
         // Table header
         html += '<thead><tr>';
@@ -265,14 +291,16 @@ const Queries = {
         }
         
         html += '</tbody></table></div>';
+        html += '</div>'; // Close table-container
         
-        // Pagination controls
+        // Pagination controls (outside the scrollable area)
         if (GrafanaConfig.totalRows > 0) {
             html += '<div class="pagination-controls">';
+            
             html += '<div class="pagination-info">Showing ' + (startRow + 1) + '-' + endRow + ' of ' + GrafanaConfig.totalRows + ' rows</div>';
             
             html += '<div class="page-size-selector">';
-            html += 'Rows per page: ';
+            html += '<span>Rows per page:</span>';
             html += '<select onchange="changePageSize(this.value)">';
             [25, 50, 100, 250, 500].forEach(function(size) {
                 const selected = size === GrafanaConfig.pageSize ? 'selected' : '';
@@ -284,10 +312,11 @@ const Queries = {
             html += '<div class="pagination-buttons">';
             html += '<button onclick="goToPage(1)" ' + (page === 1 ? 'disabled' : '') + '>First</button>';
             html += '<button onclick="goToPage(' + (page - 1) + ')" ' + (page === 1 ? 'disabled' : '') + '>Previous</button>';
-            html += '<span style="margin: 0 10px; color: #b0b0b0;">Page ' + page + ' of ' + totalPages + '</span>';
+            html += '<span style="margin: 0 8px; color: #b0b0b0; font-size: 11px;">Page ' + page + ' of ' + totalPages + '</span>';
             html += '<button onclick="goToPage(' + (page + 1) + ')" ' + (page === totalPages ? 'disabled' : '') + '>Next</button>';
             html += '<button onclick="goToPage(' + totalPages + ')" ' + (page === totalPages ? 'disabled' : '') + '>Last</button>';
             html += '</div>';
+            
             html += '</div>';
         }
         
@@ -299,19 +328,19 @@ const Queries = {
         let html = '<div class="chart-controls">';
         html += '<div class="chart-options">';
         html += '<div class="chart-option">';
-        html += '<input type="checkbox" id="showAllSeries" onchange="updateChart()" ' + (allFrames.length > 1 ? '' : 'disabled') + '>';
+        html += '<input type="checkbox" id="showAllSeries" ' + (allFrames.length > 1 ? '' : 'disabled') + '>';
         html += '<label for="showAllSeries">Show All Groups</label>';
         html += '</div>';
         html += '<div class="chart-option">';
-        html += '<label>Chart Type:</label>';
-        html += '<select id="chartType" onchange="updateChart()">';
-        html += '<option value="line">Line</option>';
+        html += '<label for="chartType">Chart Type:</label>';
+        html += '<select id="chartType">';
+        html += '<option value="line" selected>Line</option>';
         html += '<option value="bar">Bar</option>';
         html += '<option value="scatter">Scatter</option>';
         html += '</select>';
         html += '</div>';
         html += '<div class="chart-option">';
-        html += '<input type="checkbox" id="smoothLines" onchange="updateChart()" checked>';
+        html += '<input type="checkbox" id="smoothLines" checked>';
         html += '<label for="smoothLines">Smooth Lines</label>';
         html += '</div>';
         html += '</div>';
@@ -326,19 +355,9 @@ const Queries = {
         return html;
     },
 
-    // Generate group summary statistics
+    // Generate compact group summary statistics
     generateGroupSummary(frames) {
         if (!frames || frames.length <= 1) return '';
-        
-        let html = '<div class="series-stats">';
-        html += '<h4>Group Summary Statistics</h4>';
-        html += '<div class="stats-grid">';
-        
-        // Total groups
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Total Groups</div>';
-        html += '<div class="stat-value">' + frames.length + '</div>';
-        html += '</div>';
         
         // Total rows across all groups
         const totalRows = frames.reduce(function(sum, frame) {
@@ -346,37 +365,19 @@ const Queries = {
             return sum + rows;
         }, 0);
         
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Total Rows</div>';
-        html += '<div class="stat-value">' + totalRows.toLocaleString() + '</div>';
-        html += '</div>';
-        
-        // Average rows per group
-        const avgRows = frames.length > 0 ? Math.round(totalRows / frames.length) : 0;
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Avg Rows/Group</div>';
-        html += '<div class="stat-value">' + avgRows + '</div>';
-        html += '</div>';
-        
-        // Largest group
+        // Largest and smallest groups
         const maxRows = Math.max.apply(Math, frames.map(function(frame) {
             return frame.data && frame.data.values && frame.data.values[0] ? frame.data.values[0].length : 0;
         }));
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Largest Group</div>';
-        html += '<div class="stat-value">' + maxRows + '</div>';
-        html += '</div>';
-        
-        // Smallest group
         const minRows = Math.min.apply(Math, frames.map(function(frame) {
             return frame.data && frame.data.values && frame.data.values[0] ? frame.data.values[0].length : 0;
         }));
-        html += '<div class="stat-item">';
-        html += '<div class="stat-label">Smallest Group</div>';
-        html += '<div class="stat-value">' + minRows + '</div>';
-        html += '</div>';
         
-        html += '</div></div>';
+        let html = '<div class="series-stats-compact">';
+        html += '<span class="compact-stat"><strong>' + frames.length + '</strong> groups</span>';
+        html += '<span class="compact-stat"><strong>' + totalRows.toLocaleString() + '</strong> total rows</span>';
+        html += '<span class="compact-stat">Range: <strong>' + minRows + '</strong> - <strong>' + maxRows + '</strong> rows</span>';
+        html += '</div>';
         return html;
     },
 

@@ -19,6 +19,11 @@ const Schema = {
     isLoadingFieldTags: false,
     isLoadingTagValues: false,
     
+    // Cache management
+    schemaCache: {}, // Cache schema data per datasource: { datasourceId: { type, data, timestamp } }
+    cacheExpiry: 5 * 60 * 1000, // 5 minutes cache expiry
+    lastDatasourceId: null, // Track last loaded datasource to avoid redundant loads
+    
     // Initialize schema explorer
     initialize() {
         this.renderSchemaUI();
@@ -51,23 +56,157 @@ const Schema = {
         this.currentDatasourceType = selectedOption.dataset.type;
         this.currentDatasourceId = selectedOption.value;
         
+        await this.loadSchemaIfNeeded();
+    },
+    
+    // Check if schema needs to be loaded (new datasource or cache expired)
+    shouldLoadSchema(datasourceId) {
+        if (!datasourceId) return false;
+        
+        // Check if this is a different datasource than last time
+        if (this.lastDatasourceId !== datasourceId) {
+            console.log('Schema load needed: different datasource', this.lastDatasourceId, '->', datasourceId);
+            return true;
+        }
+        
+        // Check if we have cached data for this datasource
+        const cached = this.schemaCache[datasourceId];
+        if (!cached) {
+            console.log('Schema load needed: no cached data for', datasourceId);
+            return true;
+        }
+        
+        // Check if cache is expired
+        const isExpired = Date.now() - cached.timestamp > this.cacheExpiry;
+        if (isExpired) {
+            console.log('Schema load needed: cache expired for', datasourceId);
+            return true;
+        }
+        
+        console.log('Schema load NOT needed: using cached data for', datasourceId);
+        return false;
+    },
+    
+    // Load schema from cache or fetch if needed
+    async loadSchemaIfNeeded(force = false) {
+        // Use global config datasource if available (new interface)
+        const datasourceId = this.currentDatasourceId || GrafanaConfig.selectedDatasourceUid;
+        const datasourceType = this.currentDatasourceType || GrafanaConfig.selectedDatasourceType;
+        
+        if (!datasourceId || !datasourceType) {
+            console.log('No datasource selected, clearing schema');
+            this.clearSchema();
+            this.renderSchemaUI();
+            return;
+        }
+        
+        // Check if we need to load schema
+        if (!force && !this.shouldLoadSchema(datasourceId)) {
+            // Load from cache
+            this.loadFromCache(datasourceId);
+            this.renderSchemaUI();
+            return;
+        }
+        
+        // Load fresh data
+        console.log('Loading fresh schema data for:', datasourceId, datasourceType);
         await this.loadSchema();
+    },
+    
+    // Load schema from cache
+    loadFromCache(datasourceId) {
+        const cached = this.schemaCache[datasourceId];
+        if (!cached) return;
+        
+        console.log('Loading schema from cache for:', datasourceId);
+        
+        // Set current state
+        this.currentDatasourceId = datasourceId;
+        this.currentDatasourceType = cached.type;
+        this.lastDatasourceId = datasourceId;
+        
+        // Load cached data
+        if (cached.type === 'prometheus') {
+            this.prometheusMetrics = cached.data.metrics || [];
+            this.prometheusLabels = cached.data.labels || {};
+        } else if (cached.type === 'influxdb') {
+            this.influxMeasurements = cached.data.measurements || [];
+            this.influxRetentionPolicies = cached.data.retentionPolicies || [];
+            this.influxFields = cached.data.fields || {};
+            this.influxTags = cached.data.tags || {};
+            this.influxTagValues = cached.data.tagValues || {};
+        }
+    },
+    
+    // Save schema to cache
+    saveToCache(datasourceId, datasourceType) {
+        console.log('Saving schema to cache for:', datasourceId, datasourceType);
+        
+        const data = {};
+        if (datasourceType === 'prometheus') {
+            data.metrics = this.prometheusMetrics;
+            data.labels = this.prometheusLabels;
+        } else if (datasourceType === 'influxdb') {
+            data.measurements = this.influxMeasurements;
+            data.retentionPolicies = this.influxRetentionPolicies;
+            data.fields = this.influxFields;
+            data.tags = this.influxTags;
+            data.tagValues = this.influxTagValues;
+        }
+        
+        this.schemaCache[datasourceId] = {
+            type: datasourceType,
+            data: data,
+            timestamp: Date.now()
+        };
+        
+        this.lastDatasourceId = datasourceId;
+    },
+    
+    // Clear current schema data
+    clearSchema() {
+        this.currentDatasourceType = null;
+        this.currentDatasourceId = null;
+        this.prometheusMetrics = [];
+        this.prometheusLabels = {};
+        this.influxMeasurements = [];
+        this.influxRetentionPolicies = [];
+        this.influxFields = {};
+        this.influxTags = {};
+        this.influxTagValues = {};
+        this.selectedMeasurement = null;
+        this.selectedRetentionPolicy = null;
+        this.selectedField = null;
+        this.selectedTag = null;
+        this.fieldAssociatedTags = {};
     },
     
     // Load schema based on datasource type
     async loadSchema() {
-        if (!this.currentDatasourceType || !this.currentDatasourceId) return;
+        // Use global config if current values not set (new interface)
+        const datasourceId = this.currentDatasourceId || GrafanaConfig.selectedDatasourceUid;
+        const datasourceType = this.currentDatasourceType || GrafanaConfig.selectedDatasourceType;
+        
+        if (!datasourceType || !datasourceId) return;
+        
+        // Update current state
+        this.currentDatasourceId = datasourceId;
+        this.currentDatasourceType = datasourceType;
         
         this.isLoading = true;
         this.renderSchemaUI();
         
         try {
-            console.log('Loading schema for:', this.currentDatasourceType);
-            if (this.currentDatasourceType === 'prometheus') {
+            console.log('Loading schema for:', datasourceType, datasourceId);
+            if (datasourceType === 'prometheus') {
                 await this.loadPrometheusSchema();
-            } else if (this.currentDatasourceType === 'influxdb') {
+            } else if (datasourceType === 'influxdb') {
                 await this.loadInfluxDBSchema();
             }
+            
+            // Save to cache after successful load
+            this.saveToCache(datasourceId, datasourceType);
+            
         } catch (error) {
             console.error('Error loading schema:', error);
             this.showError('Failed to load schema: ' + error.message);
@@ -77,7 +216,7 @@ const Schema = {
         }
     },
     
-    // Load Prometheus schema (metrics and labels)
+    // Load Prometheus schema (metrics only, labels loaded per-metric)
     async loadPrometheusSchema() {
         try {
             // Method 1: Use a series query to get all metrics - this works universally
@@ -127,62 +266,62 @@ const Schema = {
                 console.log('Sample metrics:', this.prometheusMetrics.slice(0, 10));
             }
             
-            // Method 2: Try to get labels using group by query
-            try {
-                const labelsQuery = 'group by () ({__name__=~".+"})';
-                console.log('Executing labels discovery query:', labelsQuery);
-                const labelsResult = await this.executeSchemaQuery(labelsQuery, 'prometheus');
-                
-                console.log('Labels query result:', labelsResult);
-                
-                if (labelsResult && labelsResult.results && labelsResult.results.A && labelsResult.results.A.frames) {
-                    const labels = new Set(['__name__', 'job', 'instance']); // Common labels
-                    
-                    // Extract label names from frame schema
-                    for (const frame of labelsResult.results.A.frames) {
-                        if (frame.schema && frame.schema.fields) {
-                            frame.schema.fields.forEach(field => {
-                                if (field.labels) {
-                                    Object.keys(field.labels).forEach(labelName => {
-                                        labels.add(labelName);
-                                        console.log('Found label:', labelName);
-                                    });
-                                }
-                            });
-                        }
-                    }
-                    
-                    this.prometheusLabels = {};
-                    Array.from(labels).sort().forEach(label => {
-                        this.prometheusLabels[label] = [];
-                    });
-                    
-                    console.log('Extracted labels count:', Object.keys(this.prometheusLabels).length);
-                    console.log('Sample labels:', Object.keys(this.prometheusLabels).slice(0, 10));
-                }
-            } catch (labelsError) {
-                console.warn('Labels discovery failed, using defaults:', labelsError);
-                this.prometheusLabels = {
-                    '__name__': [],
-                    'job': [],
-                    'instance': []
-                };
-            }
+            // Initialize empty labels structure - labels will be loaded per metric
+            this.prometheusLabels = {};
             
             console.log('Final Prometheus schema:', {
-                metrics: this.prometheusMetrics.length,
-                labels: Object.keys(this.prometheusLabels).length
+                metrics: this.prometheusMetrics.length
             });
             
         } catch (error) {
             console.error('Error loading Prometheus schema:', error);
             // Set some default common metrics if discovery fails
             this.prometheusMetrics = ['up', 'prometheus_build_info', 'process_start_time_seconds'];
-            this.prometheusLabels = {
-                'job': [],
-                'instance': [],
-                '__name__': []
-            };
+            this.prometheusLabels = {};
+        }
+    },
+    
+    // Load labels for a specific Prometheus metric
+    async loadPrometheusMetricLabels(metric) {
+        try {
+            console.log('Loading labels for metric:', metric);
+            
+            // Query to get labels for this specific metric
+            const labelsQuery = `group by (__name__) ({__name__="${metric}"})`;
+            console.log('Executing metric labels query:', labelsQuery);
+            const labelsResult = await this.executeSchemaQuery(labelsQuery, 'prometheus');
+            
+            console.log('Metric labels result:', labelsResult);
+            
+            const metricLabels = new Set(['__name__']); // Always include __name__
+            
+            if (labelsResult && labelsResult.results && labelsResult.results.A && labelsResult.results.A.frames) {
+                // Extract label names from frame schema
+                for (const frame of labelsResult.results.A.frames) {
+                    if (frame.schema && frame.schema.fields) {
+                        frame.schema.fields.forEach(field => {
+                            if (field.labels) {
+                                Object.keys(field.labels).forEach(labelName => {
+                                    metricLabels.add(labelName);
+                                    console.log('Found label for metric:', labelName);
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+            
+            // Store labels for this metric
+            this.prometheusLabels[metric] = Array.from(metricLabels).sort();
+            console.log(`Found ${this.prometheusLabels[metric].length} labels for ${metric}:`, this.prometheusLabels[metric]);
+            
+            return this.prometheusLabels[metric];
+            
+        } catch (error) {
+            console.error('Error loading labels for metric:', metric, error);
+            // Set some default labels
+            this.prometheusLabels[metric] = ['__name__', 'job', 'instance'];
+            return this.prometheusLabels[metric];
         }
     },
     
@@ -238,8 +377,7 @@ const Schema = {
         this.selectedTag = null; // Clear selected tag when changing measurement
         this.isLoadingMeasurement = true;
         
-        // Render UI to show loading state
-        this.renderSchemaUI();
+        // Don't render entire UI, let the caller handle the loading state
         
         try {
             console.log(`Loading schema for measurement: ${measurement}, retention policy: ${retentionPolicy}`);
@@ -302,16 +440,156 @@ const Schema = {
             this.showError('Failed to load measurement schema: ' + error.message);
         } finally {
             this.isLoadingMeasurement = false;
-            this.renderSchemaUI();
+            // Don't render entire UI, let the caller handle the final state
+        }
+    },
+    
+    // Load just fields and tags for a measurement (for tree expansion)
+    async loadMeasurementFieldsAndTags(measurement, retentionPolicy = 'autogen') {
+        try {
+            console.log(`Loading fields and tags for measurement: ${measurement}, retention policy: ${retentionPolicy}`);
+            
+            // Get field keys - try without retention policy first
+            let fieldsQuery = `SHOW FIELD KEYS FROM "${measurement}"`;
+            console.log('Executing fields query:', fieldsQuery);
+            let fieldsResult = await this.executeSchemaQuery(fieldsQuery, 'influxdb');
+            console.log('Fields result:', fieldsResult);
+            
+            // Check if we got fields
+            let hasFields = false;
+            if (fieldsResult && fieldsResult.results && fieldsResult.results.A) {
+                const extractedFields = this.extractInfluxResults(fieldsResult.results.A);
+                if (extractedFields.length > 0) {
+                    this.influxFields[measurement] = extractedFields;
+                    console.log('Extracted fields:', this.influxFields[measurement]);
+                    hasFields = true;
+                }
+            }
+            
+            // If no fields found, try with retention policy
+            if (!hasFields) {
+                console.warn('No fields found with basic query, trying with retention policy:', retentionPolicy);
+                fieldsQuery = `SHOW FIELD KEYS FROM "${retentionPolicy}"."${measurement}"`;
+                console.log('Executing fields query with retention policy:', fieldsQuery);
+                fieldsResult = await this.executeSchemaQuery(fieldsQuery, 'influxdb');
+                console.log('Fields result with retention policy:', fieldsResult);
+                
+                if (fieldsResult && fieldsResult.results && fieldsResult.results.A) {
+                    this.influxFields[measurement] = this.extractInfluxResults(fieldsResult.results.A);
+                    console.log('Extracted fields with retention policy:', this.influxFields[measurement]);
+                } else {
+                    console.warn('No fields data found for measurement:', measurement);
+                    this.influxFields[measurement] = [];
+                }
+            }
+            
+            // Get tag keys
+            const tagsQuery = `SHOW TAG KEYS FROM "${retentionPolicy}"."${measurement}"`;
+            console.log('Executing tags query:', tagsQuery);
+            const tagsResult = await this.executeSchemaQuery(tagsQuery, 'influxdb');
+            console.log('Tags result:', tagsResult);
+            
+            if (tagsResult && tagsResult.results && tagsResult.results.A) {
+                this.influxTags[measurement] = this.extractInfluxResults(tagsResult.results.A);
+                console.log('Extracted tags:', this.influxTags[measurement]);
+            } else {
+                console.warn('No tags data found for measurement:', measurement);
+                this.influxTags[measurement] = [];
+            }
+            
+            console.log(`Fields and tags loaded for ${measurement}:`, {
+                fields: this.influxFields[measurement] ? this.influxFields[measurement].length : 0,
+                tags: this.influxTags[measurement] ? this.influxTags[measurement].length : 0
+            });
+            
+            return {
+                fields: this.influxFields[measurement] || [],
+                tags: this.influxTags[measurement] || []
+            };
+            
+        } catch (error) {
+            console.error('Error loading measurement fields and tags:', error);
+            this.influxFields[measurement] = [];
+            this.influxTags[measurement] = [];
+            return {
+                fields: [],
+                tags: []
+            };
+        }
+    },
+    
+    // Execute InfluxDB schema query using direct proxy endpoint
+    async executeInfluxSchemaQuery(query, datasourceNumericId) {
+        try {
+            console.log('Executing InfluxDB schema query:', query);
+            
+            const endpoint = `/api/datasources/proxy/${datasourceNumericId}/query?q=${encodeURIComponent(query)}`;
+            
+            const response = await API.makeApiRequest(endpoint, {
+                method: 'GET'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Schema query failed: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            console.log('InfluxDB schema query response:', data);
+            
+            // Convert InfluxDB response to the expected format
+            if (data.results && data.results[0] && data.results[0].series) {
+                const series = data.results[0].series[0];
+                const values = series.values || [];
+                
+                // Convert to frames format expected by the rest of the code
+                const frames = [{
+                    schema: {
+                        fields: series.columns.map(col => ({ name: col, type: 'string' }))
+                    },
+                    data: {
+                        values: series.columns.map((col, colIndex) => 
+                            values.map(row => row[colIndex])
+                        )
+                    }
+                }];
+                
+                return {
+                    results: {
+                        A: { frames }
+                    }
+                };
+            }
+            
+            return { results: { A: { frames: [] } } };
+            
+        } catch (error) {
+            console.error('InfluxDB schema query error:', error);
+            throw error;
         }
     },
     
     // Execute schema discovery query
     async executeSchemaQuery(query, datasourceType) {
-        const selectedOption = document.getElementById('datasource').selectedOptions[0];
-        if (!selectedOption) return null;
+        // Try to get datasource info from old interface first, fallback to global config
+        let datasourceNumericId;
+        const selectedOption = document.getElementById('datasource');
+        if (selectedOption && selectedOption.selectedOptions && selectedOption.selectedOptions[0]) {
+            datasourceNumericId = selectedOption.selectedOptions[0].dataset.id;
+        } else {
+            // Use global config for new interface
+            datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId || GrafanaConfig.selectedDatasourceId;
+        }
         
-        const datasourceNumericId = selectedOption.dataset.id;
+        if (!datasourceNumericId) {
+            console.warn('No datasource ID available for schema query');
+            return null;
+        }
+        
+        // Check if we're in demo mode - if so, use direct proxy endpoints for InfluxDB schema queries
+        const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
+        if (isDemoMode && datasourceType === 'influxdb') {
+            return this.executeInfluxSchemaQuery(query, datasourceNumericId);
+        }
         
         let requestBody;
         let urlParams = '';
@@ -512,6 +790,66 @@ const Schema = {
         }
     },
     
+    // Load tag values for tree expansion (with explicit measurement)
+    async loadTagValuesForMeasurement(tag, measurement) {
+        try {
+            console.log(`Loading values for tag: ${tag} in measurement: ${measurement}`);
+            
+            const key = `${measurement}:${tag}`;
+            
+            // Query for tag values from the specific measurement
+            const tagValuesQuery = `SHOW TAG VALUES FROM "${measurement}" WITH KEY = "${tag}"`;
+            console.log('Executing tag values query:', tagValuesQuery);
+            const tagValuesResult = await this.executeSchemaQuery(tagValuesQuery, 'influxdb');
+            console.log('Tag values result:', tagValuesResult);
+            
+            if (tagValuesResult && tagValuesResult.results && tagValuesResult.results.A) {
+                // Extract values from the result
+                const values = [];
+                const frames = tagValuesResult.results.A.frames || [];
+                
+                for (const frame of frames) {
+                    if (!frame.data || !frame.data.values) continue;
+                    
+                    // SHOW TAG VALUES returns results with the tag key in first column and value in second
+                    for (let i = 0; i < frame.data.values.length; i++) {
+                        const column = frame.data.values[i];
+                        if (Array.isArray(column)) {
+                            // Skip the first column if it contains the tag name
+                            if (i === 0 && column.length > 0 && column[0] === tag) {
+                                continue;
+                            }
+                            
+                            // Extract values from this column
+                            for (const value of column) {
+                                if (value !== null && value !== undefined && value !== tag) {
+                                    const stringValue = String(value);
+                                    if (!values.includes(stringValue)) {
+                                        values.push(stringValue);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                this.influxTagValues[key] = values.sort();
+                console.log(`Extracted ${values.length} values for tag ${tag} in ${measurement}:`, this.influxTagValues[key]);
+                return this.influxTagValues[key];
+            } else {
+                console.warn('No tag values found for:', tag, 'in measurement:', measurement);
+                this.influxTagValues[key] = [];
+                return [];
+            }
+            
+        } catch (error) {
+            console.error('Error loading tag values:', error);
+            const key = `${measurement}:${tag}`;
+            this.influxTagValues[key] = [];
+            return [];
+        }
+    },
+    
     // Load tag values for a specific tag
     async loadTagValues(tag) {
         if (!this.selectedMeasurement || !tag) return;
@@ -683,224 +1021,223 @@ const Schema = {
         container.innerHTML = html;
     },
     
-    // Render Prometheus schema
+    // Render Prometheus schema as a tree
     renderPrometheusSchema() {
-        let html = '<div class="schema-content">';
+        let html = '<div class="schema-tree">';
         
-        // Metrics section
-        html += '<div class="schema-subsection">';
-        html += '<h4>Metrics</h4>';
-        
-        // Search box
+        // Search box at the top
         html += '<div class="schema-search">';
         html += '<input type="text" id="metricsSearch" placeholder="Search metrics..." onkeyup="filterPrometheusMetrics(this.value)">';
         html += '</div>';
         
-        // Metrics list
-        html += '<div class="schema-list" id="metricsList">';
+        // Metrics tree node
+        html += '<div class="tree-node">';
+        html += '<div class="tree-node-header" onclick="toggleTreeNode(this)">';
+        html += '<span class="tree-node-icon">▼</span>';
+        html += '<span class="tree-node-label">Metrics</span>';
+        html += '<span class="tree-node-count">(' + this.prometheusMetrics.length + ')</span>';
+        html += '</div>';
+        html += '<div class="tree-node-content expanded" id="metricsList">';
         
         if (this.prometheusMetrics.length === 0) {
-            html += '<div class="schema-empty">No metrics found</div>';
+            html += '<div class="tree-item-empty">No metrics found</div>';
         } else {
-            for (const metric of this.prometheusMetrics) {
-                html += '<div class="schema-item" onclick="insertMetric(\'' + Utils.escapeHtml(metric) + '\')">';
-                html += '<span class="schema-item-name">' + Utils.escapeHtml(metric) + '</span>';
-                html += '<span class="schema-item-type metric">metric</span>';
-                html += '</div>';
+            // Group metrics by prefix for better organization
+            const groupedMetrics = this.groupMetricsByPrefix(this.prometheusMetrics);
+            
+            for (const [prefix, metrics] of Object.entries(groupedMetrics)) {
+                if (metrics.length > 1 && prefix !== 'other') {
+                    // Create a sub-group for metrics with common prefix
+                    html += '<div class="tree-subnode">';
+                    html += '<div class="tree-subnode-header" onclick="toggleTreeNode(this)">';
+                    html += '<span class="tree-node-icon">▼</span>';
+                    html += '<span class="tree-node-label">' + Utils.escapeHtml(prefix) + '</span>';
+                    html += '<span class="tree-node-count">(' + metrics.length + ')</span>';
+                    html += '</div>';
+                    html += '<div class="tree-subnode-content expanded">';
+                    
+                    for (const metric of metrics) {
+                        html += this.renderPrometheusMetricWithLabels(metric);
+                    }
+                    
+                    html += '</div>';
+                    html += '</div>';
+                } else {
+                    // Show individual metrics
+                    for (const metric of metrics) {
+                        html += this.renderPrometheusMetricWithLabels(metric);
+                    }
+                }
             }
         }
         
         html += '</div>';
         html += '</div>';
         
-        // Labels section
-        if (Object.keys(this.prometheusLabels).length > 0) {
-            html += '<div class="schema-subsection">';
-            html += '<h4>Common Labels</h4>';
-            html += '<div class="schema-list">';
-            
-            for (const labelName of Object.keys(this.prometheusLabels).sort()) {
-                html += '<div class="schema-item" onclick="insertLabel(\'' + Utils.escapeHtml(labelName) + '\')">';
-                html += '<span class="schema-item-name">' + Utils.escapeHtml(labelName) + '</span>';
-                html += '<span class="schema-item-type label">label</span>';
-                html += '</div>';
+        html += '</div>';
+        return html;
+    },
+    
+    // Render a single Prometheus metric with its labels as children
+    renderPrometheusMetricWithLabels(metric) {
+        let html = '';
+        
+        // Metric node with expandable labels
+        html += '<div class="tree-subnode">';
+        html += '<div class="tree-subnode-header metric-header">';
+        html += '<span class="tree-node-icon" onclick="togglePrometheusMetric(this.parentElement, \'' + Utils.escapeHtml(metric) + '\')">▶</span>';
+        html += '<span class="tree-item-icon">📊</span>';
+        html += '<span class="tree-item-name" onclick="insertMetric(\'' + Utils.escapeHtml(metric) + '\')" title="Click to insert metric">' + Utils.escapeHtml(metric) + '</span>';
+        html += '</div>';
+        html += '<div class="tree-subnode-content collapsed" id="labels-' + Utils.escapeHtml(metric).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        
+        // Labels will be loaded when expanded
+        html += '<div class="tree-item-empty">Click arrow to load labels...</div>';
+        
+        html += '</div>';
+        html += '</div>';
+        
+        return html;
+    },
+    
+    // Group metrics by common prefix for better tree organization
+    groupMetricsByPrefix(metrics) {
+        const groups = {};
+        const prefixCounts = {};
+        
+        // Count common prefixes
+        for (const metric of metrics) {
+            const parts = metric.split('_');
+            if (parts.length > 1) {
+                const prefix = parts[0];
+                prefixCounts[prefix] = (prefixCounts[prefix] || 0) + 1;
+            }
+        }
+        
+        // Group metrics by prefix if there are enough items
+        for (const metric of metrics) {
+            const parts = metric.split('_');
+            if (parts.length > 1) {
+                const prefix = parts[0];
+                if (prefixCounts[prefix] >= 3) { // Only group if 3+ metrics share prefix
+                    if (!groups[prefix]) groups[prefix] = [];
+                    groups[prefix].push(metric);
+                    continue;
+                }
             }
             
-            html += '</div>';
-            html += '</div>';
+            // Add to 'other' group
+            if (!groups.other) groups.other = [];
+            groups.other.push(metric);
+        }
+        
+        return groups;
+    },
+    
+    // Render InfluxDB schema as a tree with proper hierarchy
+    renderInfluxDBSchema() {
+        let html = '<div class="schema-tree">';
+        
+        // Search box for measurements at the top
+        html += '<div class="schema-search">';
+        html += '<input type="text" id="measurementsSearch" placeholder="Search measurements..." onkeyup="filterInfluxMeasurements(this.value)">';
+        html += '</div>';
+        
+        // Retention Policies as top level, with measurements as children
+        if (this.influxRetentionPolicies.length > 0) {
+            for (const policy of this.influxRetentionPolicies) {
+                html += this.renderRetentionPolicyWithMeasurements(policy);
+            }
+        } else {
+            html += '<div class="tree-item-empty">No retention policies found</div>';
         }
         
         html += '</div>';
         return html;
     },
     
-    // Render InfluxDB schema
-    renderInfluxDBSchema() {
-        let html = '<div class="schema-content">';
+    // Render a retention policy with its measurements as children
+    renderRetentionPolicyWithMeasurements(retentionPolicy) {
+        let html = '';
         
-        // Retention Policies Dropdown
-        if (this.influxRetentionPolicies.length > 0) {
-            html += '<div class="schema-subsection">';
-            html += '<h4>Retention Policy</h4>';
-            html += '<select id="retentionPolicySelect" onchange="selectRetentionPolicy(this.value)" class="schema-dropdown">';
-            html += '<option value="">Select retention policy...</option>';
-            
-            for (const policy of this.influxRetentionPolicies) {
-                const isSelected = policy === this.selectedRetentionPolicy;
-                html += '<option value="' + Utils.escapeHtml(policy) + '"' + (isSelected ? ' selected' : '') + '>';
-                html += Utils.escapeHtml(policy);
-                html += '</option>';
-            }
-            
-            html += '</select>';
-            html += '</div>';
-        }
+        html += '<div class="tree-node">';
+        html += '<div class="tree-node-header" onclick="toggleInfluxRetentionPolicy(this, \'' + Utils.escapeHtml(retentionPolicy) + '\')">';
+        html += '<span class="tree-node-icon">▶</span>';
+        html += '<span class="tree-item-icon">🗄️</span>';
+        html += '<span class="tree-node-label">' + Utils.escapeHtml(retentionPolicy) + '</span>';
+        html += '<span class="tree-node-count">(' + this.influxMeasurements.length + ' measurements)</span>';
+        html += '</div>';
+        html += '<div class="tree-node-content collapsed" id="measurements-' + Utils.escapeHtml(retentionPolicy).replace(/[^a-zA-Z0-9]/g, '_') + '">';
         
-        // Measurements Dropdown
-        html += '<div class="schema-subsection">';
-        html += '<h4>Measurement</h4>';
-        
-        if (this.influxMeasurements.length === 0) {
-            html += '<div class="schema-empty">No measurements found</div>';
-        } else {
-            html += '<select id="measurementSelect" onchange="selectMeasurement(this.value)" class="schema-dropdown">';
-            html += '<option value="">Select measurement...</option>';
-            
-            for (const measurement of this.influxMeasurements) {
-                const isSelected = measurement === this.selectedMeasurement;
-                html += '<option value="' + Utils.escapeHtml(measurement) + '"' + (isSelected ? ' selected' : '') + '>';
-                html += Utils.escapeHtml(measurement);
-                html += '</option>';
-            }
-            
-            html += '</select>';
-        }
+        // Measurements will be loaded when expanded
+        html += '<div class="tree-item-empty">Click to load measurements...</div>';
         
         html += '</div>';
+        html += '</div>';
         
-        // Fields and Tags (when measurement is selected)
-        if (this.selectedMeasurement) {
-            if (this.isLoadingMeasurement) {
-                // Show loading state for fields and tags
-                html += '<div class="schema-subsection">';
-                html += '<h4>Fields & Tags</h4>';
-                html += '<div class="schema-loading">Loading fields and tags...</div>';
-                html += '</div>';
-            } else {
-                const fields = this.influxFields[this.selectedMeasurement] || [];
-                const tags = this.influxTags[this.selectedMeasurement] || [];
-                
-                if (fields.length > 0) {
-                    html += '<div class="schema-subsection">';
-                    html += '<h4>Fields (' + Utils.escapeHtml(this.selectedMeasurement) + ')</h4>';
-                    
-                    // Search box for fields
-                    html += '<div class="schema-search">';
-                    html += '<input type="text" id="fieldsSearch" placeholder="Search fields..." onkeyup="filterInfluxFields(this.value)">';
-                    html += '</div>';
-                    
-                    html += '<div class="schema-list" id="fieldsList">';
-                    
-                    for (const field of fields) {
-                        const isSelected = this.selectedField === field;
-                        
-                        html += '<div class="schema-item' + (isSelected ? ' selected' : '') + '" onclick="selectField(\'' + Utils.escapeHtml(field) + '\')">';
-                        html += '<span class="schema-item-name">' + Utils.escapeHtml(field) + '</span>';
-                        html += '<span class="schema-item-type field">field</span>';
-                        html += '</div>';
-                    }
-                    
-                    html += '</div>';
-                    html += '</div>';
-                }
-                
-                if (tags.length > 0) {
-                    html += '<div class="schema-subsection">';
-                    html += '<h4>Tags & Values (' + Utils.escapeHtml(this.selectedMeasurement) + ')</h4>';
-                    
-                    // Container for side-by-side layout
-                    html += '<div class="schema-tags-container">';
-                    
-                    // Left panel - Tags
-                    html += '<div class="schema-tags-panel">';
-                    html += '<div class="schema-panel-header">';
-                    html += '<h5>Tag Keys' + (this.selectedField ? ' (for ' + Utils.escapeHtml(this.selectedField) + ')' : '') + '</h5>';
-                    html += '</div>';
-                    
-                    // Search box for tags
-                    html += '<div class="schema-search">';
-                    html += '<input type="text" id="tagsSearch" placeholder="Search tags..." onkeyup="filterInfluxTags(this.value)">';
-                    html += '</div>';
-                    
-                    html += '<div class="schema-list" id="tagsList">';
-                    
-                    // Filter tags based on selected field if available
-                    let displayTags = tags;
-                    if (this.selectedField) {
-                        const key = `${this.selectedMeasurement}:${this.selectedField}`;
-                        const associatedTags = this.fieldAssociatedTags[key];
-                        if (associatedTags !== null && associatedTags !== undefined) {
-                            displayTags = tags.filter(tag => associatedTags.includes(tag));
-                        }
-                    }
-                    
-                    for (const tag of displayTags) {
-                        const isSelected = this.selectedTag === tag;
-                        
-                        html += '<div class="schema-item' + (isSelected ? ' selected' : '') + '" onclick="selectTag(\'' + Utils.escapeHtml(tag) + '\')">';
-                        html += '<span class="schema-item-name">' + Utils.escapeHtml(tag) + '</span>';
-                        html += '<span class="schema-item-type tag">tag</span>';
-                        html += '</div>';
-                    }
-                    
-                    html += '</div>';
-                    html += '</div>'; // End tags panel
-                    
-                    // Right panel - Tag Values
-                    html += '<div class="schema-values-panel">';
-                    html += '<div class="schema-panel-header">';
-                    html += '<h5>Tag Values' + (this.selectedTag ? ' (' + Utils.escapeHtml(this.selectedTag) + ')' : '') + '</h5>';
-                    html += '</div>';
-                    
-                    if (this.selectedTag) {
-                        const key = `${this.selectedMeasurement}:${this.selectedTag}`;
-                        const tagValues = this.influxTagValues[key] || [];
-                        
-                        // Search box for tag values
-                        html += '<div class="schema-search">';
-                        html += '<input type="text" id="tagValuesSearch" placeholder="Search values..." onkeyup="filterTagValues(this.value)">';
-                        html += '</div>';
-                        
-                        html += '<div class="schema-list" id="tagValuesList">';
-                        
-                        if (this.isLoadingTagValues) {
-                            html += '<div class="schema-loading">Loading tag values...</div>';
-                        } else if (tagValues.length === 0) {
-                            html += '<div class="schema-empty">No values found</div>';
-                        } else {
-                            for (const value of tagValues) {
-                                html += '<div class="schema-value-item" onclick="insertTagValue(\'' + Utils.escapeHtml(this.selectedTag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
-                                html += '<span class="schema-value-name">' + Utils.escapeHtml(value) + '</span>';
-                                html += '</div>';
-                            }
-                        }
-                        
-                        html += '</div>';
-                    } else {
-                        html += '<div class="schema-list">';
-                        html += '<div class="schema-empty">Select a tag to view values</div>';
-                        html += '</div>';
-                    }
-                    
-                    html += '</div>'; // End values panel
-                    
-                    html += '</div>'; // End container
-                    html += '</div>';
-                }
-            }
-        }
+        return html;
+    },
+    
+    // Render a measurement with its fields as children
+    renderMeasurementWithFields(measurement, retentionPolicy) {
+        let html = '';
+        
+        html += '<div class="tree-subnode">';
+        html += '<div class="tree-subnode-header measurement-header">';
+        html += '<span class="tree-node-icon" onclick="toggleInfluxMeasurement(this.parentElement, \'' + Utils.escapeHtml(measurement) + '\', \'' + Utils.escapeHtml(retentionPolicy) + '\')">▶</span>';
+        html += '<span class="tree-item-icon">📋</span>';
+        html += '<span class="tree-item-name" onclick="insertMeasurement(\'' + Utils.escapeHtml(measurement) + '\')" title="Click to insert measurement">' + Utils.escapeHtml(measurement) + '</span>';
+        html += '</div>';
+        html += '<div class="tree-subnode-content collapsed" id="fields-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        
+        // Fields will be loaded when expanded
+        html += '<div class="tree-item-empty">Click arrow to load fields...</div>';
         
         html += '</div>';
+        html += '</div>';
+        
+        return html;
+    },
+    
+    // Render a field with its tag keys as children
+    renderFieldWithTags(field, measurement) {
+        let html = '';
+        
+        html += '<div class="tree-subnode">';
+        html += '<div class="tree-subnode-header field-header">';
+        html += '<span class="tree-node-icon" onclick="toggleInfluxField(this.parentElement, \'' + Utils.escapeHtml(field) + '\', \'' + Utils.escapeHtml(measurement) + '\')">▶</span>';
+        html += '<span class="tree-item-icon">🔢</span>';
+        html += '<span class="tree-item-name" onclick="insertField(\'' + Utils.escapeHtml(field) + '\')" title="Click to insert field">' + Utils.escapeHtml(field) + '</span>';
+        html += '</div>';
+        html += '<div class="tree-subnode-content collapsed" id="tags-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        
+        // Tag keys will be loaded when expanded
+        html += '<div class="tree-item-empty">Click arrow to load tag keys...</div>';
+        
+        html += '</div>';
+        html += '</div>';
+        
+        return html;
+    },
+    
+    // Render a tag key with its values as children
+    renderTagWithValues(tag, field, measurement) {
+        let html = '';
+        
+        html += '<div class="tree-subnode">';
+        html += '<div class="tree-subnode-header tag-header">';
+        html += '<span class="tree-node-icon" onclick="toggleInfluxTag(this.parentElement, \'' + Utils.escapeHtml(tag) + '\', \'' + Utils.escapeHtml(field) + '\', \'' + Utils.escapeHtml(measurement) + '\')">▶</span>';
+        html += '<span class="tree-item-icon">🏷️</span>';
+        html += '<span class="tree-item-name" onclick="insertTag(\'' + Utils.escapeHtml(tag) + '\')" title="Click to insert tag key">' + Utils.escapeHtml(tag) + '</span>';
+        html += '</div>';
+        html += '<div class="tree-subnode-content collapsed" id="values-' + Utils.escapeHtml(tag).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        
+        // Tag values will be loaded when expanded
+        html += '<div class="tree-item-empty">Click arrow to load tag values...</div>';
+        
+        html += '</div>';
+        html += '</div>';
+        
         return html;
     },
     
@@ -1013,15 +1350,259 @@ const Schema = {
         }
     },
     
-    // Refresh schema
+    // Refresh schema (force reload)
     async refreshSchema() {
-        if (this.currentDatasourceType && this.currentDatasourceId) {
-            await this.loadSchema();
-        }
+        console.log('Manual schema refresh requested');
+        await this.loadSchemaIfNeeded(true); // Force reload
     }
 };
 
 // Global functions for HTML onclick handlers
+function toggleTreeNode(header) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+    }
+}
+
+// Toggle Prometheus metric and load its labels
+async function togglePrometheusMetric(header, metric) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Check if labels are already loaded
+        if (!Schema.prometheusLabels[metric]) {
+            // Show loading state
+            content.innerHTML = '<div class="tree-item-empty">Loading labels...</div>';
+            
+            // Load labels for this metric
+            const labels = await Schema.loadPrometheusMetricLabels(metric);
+            
+            // Render the labels
+            let labelsHtml = '';
+            if (labels.length === 0) {
+                labelsHtml = '<div class="tree-item-empty">No labels found</div>';
+            } else {
+                for (const label of labels) {
+                    labelsHtml += '<div class="tree-item" onclick="insertLabel(\'' + Utils.escapeHtml(label) + '\')">';
+                    labelsHtml += '<span class="tree-item-icon">🏷️</span>';
+                    labelsHtml += '<span class="tree-item-name">' + Utils.escapeHtml(label) + '</span>';
+                    labelsHtml += '</div>';
+                }
+            }
+            
+            content.innerHTML = labelsHtml;
+        }
+    }
+}
+
+// Toggle InfluxDB retention policy and load its measurements
+async function toggleInfluxRetentionPolicy(header, retentionPolicy) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Check if measurements are already loaded
+        if (content.innerHTML.includes('Click to load measurements')) {
+            // Show loading state
+            content.innerHTML = '<div class="tree-item-empty">Loading measurements...</div>';
+            
+            // Load measurements (they should already be loaded)
+            let measurementsHtml = '';
+            if (Schema.influxMeasurements.length === 0) {
+                measurementsHtml = '<div class="tree-item-empty">No measurements found</div>';
+            } else {
+                // Apply any current filter from the measurements search box
+                const measurementsSearchInput = document.getElementById('measurementsSearch');
+                const searchTerm = measurementsSearchInput ? measurementsSearchInput.value : '';
+                const filteredMeasurements = searchTerm ? 
+                    Schema.influxMeasurements.filter(measurement => 
+                        measurement.toLowerCase().includes(searchTerm.toLowerCase())
+                    ) : Schema.influxMeasurements;
+                
+                for (const measurement of filteredMeasurements) {
+                    measurementsHtml += Schema.renderMeasurementWithFields(measurement, retentionPolicy);
+                }
+            }
+            
+            content.innerHTML = measurementsHtml;
+        }
+    }
+}
+
+// Toggle InfluxDB measurement and load its fields
+async function toggleInfluxMeasurement(header, measurement, retentionPolicy) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Check if fields are already loaded
+        if (!Schema.influxFields[measurement] || content.innerHTML.includes('Click to load fields')) {
+            // Show loading state
+            content.innerHTML = '<div class="tree-item-empty">Loading fields...</div>';
+            
+            // Load fields for this measurement
+            await Schema.loadMeasurementFieldsAndTags(measurement, retentionPolicy);
+            
+            // Render the fields with search functionality
+            const fields = Schema.influxFields[measurement] || [];
+            let fieldsHtml = '';
+            
+            // Add search box for fields
+            fieldsHtml += '<div class="schema-search" style="margin: 8px 0;">';
+            fieldsHtml += '<input type="text" id="fieldsSearch-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '" placeholder="Search fields..." onkeyup="filterMeasurementFields(this.value, \'' + Utils.escapeHtml(measurement) + '\')" style="width: 100%; padding: 4px; font-size: 11px; background: #2d2d30; color: #cccccc; border: 1px solid #454545; border-radius: 3px;">';
+            fieldsHtml += '</div>';
+            
+            fieldsHtml += '<div id="fieldsList-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+            if (fields.length === 0) {
+                fieldsHtml += '<div class="tree-item-empty">No fields found</div>';
+            } else {
+                for (const field of fields) {
+                    fieldsHtml += Schema.renderFieldWithTags(field, measurement);
+                }
+            }
+            fieldsHtml += '</div>';
+            
+            content.innerHTML = fieldsHtml;
+        }
+    }
+}
+
+// Toggle InfluxDB field and load its tag keys
+async function toggleInfluxField(header, field, measurement) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Show loading state
+        content.innerHTML = '<div class="tree-item-empty">Loading tag keys...</div>';
+        
+        // Load tags associated with this field
+        await Schema.loadFieldAssociatedTags(field);
+        
+        // Get tags for this measurement, filtered by field association
+        const allTags = Schema.influxTags[measurement] || [];
+        const key = `${measurement}:${field}`;
+        const associatedTags = Schema.fieldAssociatedTags[key];
+        
+        let tagsToShow = allTags;
+        if (associatedTags !== null && associatedTags !== undefined) {
+            tagsToShow = allTags.filter(tag => associatedTags.includes(tag));
+        }
+        
+        // Render the tag keys with search functionality
+        let tagsHtml = '';
+        
+        // Add search box for tags
+        tagsHtml += '<div class="schema-search" style="margin: 8px 0;">';
+        tagsHtml += '<input type="text" id="tagsSearch-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '" placeholder="Search tags..." onkeyup="filterFieldTags(this.value, \'' + Utils.escapeHtml(field) + '\', \'' + Utils.escapeHtml(measurement) + '\')" style="width: 100%; padding: 4px; font-size: 11px; background: #2d2d30; color: #cccccc; border: 1px solid #454545; border-radius: 3px;">';
+        tagsHtml += '</div>';
+        
+        tagsHtml += '<div id="tagsList-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+        if (tagsToShow.length === 0) {
+            tagsHtml += '<div class="tree-item-empty">No tag keys found for this field</div>';
+        } else {
+            for (const tag of tagsToShow) {
+                tagsHtml += Schema.renderTagWithValues(tag, field, measurement);
+            }
+        }
+        tagsHtml += '</div>';
+        
+        content.innerHTML = tagsHtml;
+    }
+}
+
+// Toggle InfluxDB tag and load its values
+async function toggleInfluxTag(header, tag, field, measurement) {
+    const icon = header.querySelector('.tree-node-icon');
+    const content = header.nextElementSibling;
+    
+    if (content.classList.contains('expanded')) {
+        content.classList.remove('expanded');
+        content.classList.add('collapsed');
+        icon.textContent = '▶';
+    } else {
+        content.classList.remove('collapsed');
+        content.classList.add('expanded');
+        icon.textContent = '▼';
+        
+        // Check if tag values are already loaded
+        const key = `${measurement}:${tag}`;
+        if (!Schema.influxTagValues[key] || content.innerHTML.includes('Click to load tag values')) {
+            // Show loading state
+            content.innerHTML = '<div class="tree-item-empty">Loading tag values...</div>';
+            
+            // Load tag values
+            await Schema.loadTagValuesForMeasurement(tag, measurement);
+            
+            // Render the tag values with search functionality
+            const tagValues = Schema.influxTagValues[key] || [];
+            let valuesHtml = '';
+            
+            // Add search box for tag values
+            valuesHtml += '<div class="schema-search" style="margin: 8px 0;">';
+            valuesHtml += '<input type="text" id="tagValuesSearch-' + Utils.escapeHtml(tag).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '" placeholder="Search values..." onkeyup="filterTagValuesList(this.value, \'' + Utils.escapeHtml(tag) + '\', \'' + Utils.escapeHtml(field) + '\', \'' + Utils.escapeHtml(measurement) + '\')" style="width: 100%; padding: 4px; font-size: 11px; background: #2d2d30; color: #cccccc; border: 1px solid #454545; border-radius: 3px;">';
+            valuesHtml += '</div>';
+            
+            valuesHtml += '<div id="tagValuesList-' + Utils.escapeHtml(tag).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_') + '">';
+            if (tagValues.length === 0) {
+                valuesHtml += '<div class="tree-item-empty">No values found</div>';
+            } else {
+                for (const value of tagValues) {
+                    valuesHtml += '<div class="tree-item" onclick="insertTagValue(\'' + Utils.escapeHtml(tag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
+                    valuesHtml += '<span class="tree-item-icon">📄</span>';
+                    valuesHtml += '<span class="tree-item-name">' + Utils.escapeHtml(value) + '</span>';
+                    valuesHtml += '</div>';
+                }
+            }
+            valuesHtml += '</div>';
+            
+            content.innerHTML = valuesHtml;
+        }
+    }
+}
+
 function filterPrometheusMetrics(searchTerm) {
     const metricsList = document.getElementById('metricsList');
     if (!metricsList) return;
@@ -1049,6 +1630,10 @@ function insertMetric(metric) {
 
 function insertLabel(label) {
     Schema.insertIntoQuery(label);
+}
+
+function insertMeasurement(measurement) {
+    Schema.insertIntoQuery(measurement);
 }
 
 function insertField(field) {
@@ -1284,4 +1869,108 @@ function toggleSchemaExplorer() {
         schemaSection.classList.add('collapsed');
         toggleButton.textContent = 'Show';
     }
+}
+
+// Filter InfluxDB measurements
+function filterInfluxMeasurements(searchTerm) {
+    if (Schema.currentDatasourceType !== 'influxdb') return;
+    
+    const filteredMeasurements = searchTerm ? 
+        Schema.influxMeasurements.filter(measurement => 
+            measurement.toLowerCase().includes(searchTerm.toLowerCase())
+        ) : Schema.influxMeasurements;
+    
+    // Update all retention policy measurement lists
+    for (const policy of Schema.influxRetentionPolicies) {
+        const measurementsContainer = document.getElementById('measurements-' + Utils.escapeHtml(policy).replace(/[^a-zA-Z0-9]/g, '_'));
+        if (measurementsContainer && !measurementsContainer.innerHTML.includes('Click to load measurements')) {
+            let measurementsHtml = '';
+            if (filteredMeasurements.length === 0) {
+                measurementsHtml = '<div class="tree-item-empty">No measurements found</div>';
+            } else {
+                for (const measurement of filteredMeasurements) {
+                    measurementsHtml += Schema.renderMeasurementWithFields(measurement, policy);
+                }
+            }
+            measurementsContainer.innerHTML = measurementsHtml;
+        }
+    }
+}
+
+// Filter fields for a specific measurement
+function filterMeasurementFields(searchTerm, measurement) {
+    const fields = Schema.influxFields[measurement] || [];
+    const filteredFields = searchTerm ? 
+        fields.filter(field => field.toLowerCase().includes(searchTerm.toLowerCase())) : 
+        fields;
+    
+    const fieldsContainer = document.getElementById('fieldsList-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_'));
+    if (!fieldsContainer) return;
+    
+    let fieldsHtml = '';
+    if (filteredFields.length === 0) {
+        fieldsHtml = '<div class="tree-item-empty">No fields found</div>';
+    } else {
+        for (const field of filteredFields) {
+            fieldsHtml += Schema.renderFieldWithTags(field, measurement);
+        }
+    }
+    
+    fieldsContainer.innerHTML = fieldsHtml;
+}
+
+// Filter tags for a specific field in a measurement
+function filterFieldTags(searchTerm, field, measurement) {
+    let allTags = Schema.influxTags[measurement] || [];
+    
+    // Filter tags based on field association if available
+    const key = `${measurement}:${field}`;
+    const associatedTags = Schema.fieldAssociatedTags[key];
+    if (associatedTags !== null && associatedTags !== undefined) {
+        allTags = allTags.filter(tag => associatedTags.includes(tag));
+    }
+    
+    const filteredTags = searchTerm ? 
+        allTags.filter(tag => tag.toLowerCase().includes(searchTerm.toLowerCase())) : 
+        allTags;
+    
+    const tagsContainer = document.getElementById('tagsList-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_'));
+    if (!tagsContainer) return;
+    
+    let tagsHtml = '';
+    if (filteredTags.length === 0) {
+        tagsHtml = '<div class="tree-item-empty">No tag keys found</div>';
+    } else {
+        for (const tag of filteredTags) {
+            tagsHtml += Schema.renderTagWithValues(tag, field, measurement);
+        }
+    }
+    
+    tagsContainer.innerHTML = tagsHtml;
+}
+
+// Filter tag values for a specific tag
+function filterTagValuesList(searchTerm, tag, field, measurement) {
+    const key = `${measurement}:${tag}`;
+    const tagValues = Schema.influxTagValues[key] || [];
+    const filteredValues = searchTerm ? 
+        tagValues.filter(value => value.toLowerCase().includes(searchTerm.toLowerCase())) : 
+        tagValues;
+    
+    const valuesContainer = document.getElementById('tagValuesList-' + Utils.escapeHtml(tag).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(field).replace(/[^a-zA-Z0-9]/g, '_') + '-' + Utils.escapeHtml(measurement).replace(/[^a-zA-Z0-9]/g, '_'));
+    if (!valuesContainer) return;
+    
+    let valuesHtml = '';
+    if (filteredValues.length === 0) {
+        valuesHtml = '<div class="tree-item-empty">No values found</div>';
+    } else {
+        for (const value of filteredValues) {
+            valuesHtml += '<div class="tree-item" onclick="insertTagValue(\'' + Utils.escapeHtml(tag) + '\', \'' + Utils.escapeHtml(value) + '\')">';
+            valuesHtml += '<span class="tree-item-icon">📄</span>';
+            valuesHtml += '<span class="tree-item-name">' + Utils.escapeHtml(value) + '</span>';
+            valuesHtml += '</div>';
+        }
+    }
+    
+    valuesContainer.innerHTML = valuesHtml;
 }
