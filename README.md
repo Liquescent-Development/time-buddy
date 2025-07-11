@@ -73,7 +73,6 @@ A powerful cross-platform desktop application for executing InfluxQL and PromQL 
    - **macOS**: `.dmg` disk image  
    - **Linux**: `.AppImage` executable
 3. Install and launch the application
-
 ### Option 2: Build from Source
 ```bash
 # Clone repository
