@@ -2,7 +2,7 @@
 
 A powerful cross-platform desktop application for executing InfluxQL and PromQL queries through the Grafana API. Built with Electron, featuring an advanced VS Code-like interface with syntax highlighting, intelligent auto-completion, file system integration, and native desktop experience.
 
-<img src="content/grafana_query_ide_demo.gif" style="max-height: 500px; width: auto;" alt="Demo">
+<img src="content/grafana_query_ide_demo_v2.gif" style="max-height: 500px; width: auto;" alt="Grafana Query IDE Demo - VS Code-like interface with syntax highlighting and autocomplete">
 
 ## ✨ Key Features
 
@@ -73,7 +73,6 @@ A powerful cross-platform desktop application for executing InfluxQL and PromQL 
    - **macOS**: `.dmg` disk image  
    - **Linux**: `.AppImage` executable
 3. Install and launch the application
-
 ### Option 2: Build from Source
 ```bash
 # Clone repository
