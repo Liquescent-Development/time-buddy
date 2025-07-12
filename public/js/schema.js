@@ -69,7 +69,16 @@ const Schema = {
             return true;
         }
         
-        // Check if we have cached data for this datasource
+        // First check persistent storage
+        if (typeof Storage !== 'undefined') {
+            const persistentCache = Storage.getSchemaFromStorage(datasourceId, 24 * 60 * 60 * 1000); // 24 hours
+            if (persistentCache) {
+                console.log('Schema load NOT needed: using persistent storage for', datasourceId);
+                return false;
+            }
+        }
+        
+        // Check if we have in-memory cached data for this datasource
         const cached = this.schemaCache[datasourceId];
         if (!cached) {
             console.log('Schema load needed: no cached data for', datasourceId);
@@ -83,7 +92,7 @@ const Schema = {
             return true;
         }
         
-        console.log('Schema load NOT needed: using cached data for', datasourceId);
+        console.log('Schema load NOT needed: using in-memory cache for', datasourceId);
         return false;
     },
     
@@ -100,9 +109,20 @@ const Schema = {
             return;
         }
         
+        // Try to load from persistent storage first
+        if (!force && typeof Storage !== 'undefined') {
+            const persistentCache = Storage.getSchemaFromStorage(datasourceId, 24 * 60 * 60 * 1000); // 24 hours
+            if (persistentCache) {
+                console.log('Loading schema from persistent storage for:', datasourceId);
+                this.loadFromPersistentCache(persistentCache, datasourceId, datasourceType);
+                this.renderSchemaUI();
+                return;
+            }
+        }
+        
         // Check if we need to load schema
         if (!force && !this.shouldLoadSchema(datasourceId)) {
-            // Load from cache
+            // Load from in-memory cache
             this.loadFromCache(datasourceId);
             this.renderSchemaUI();
             return;
@@ -138,6 +158,43 @@ const Schema = {
         }
     },
     
+    // Load schema from persistent storage cache
+    loadFromPersistentCache(cached, datasourceId, datasourceType) {
+        console.log('Loading schema from persistent storage for:', datasourceId);
+        
+        // Set current state
+        this.currentDatasourceId = datasourceId;
+        this.currentDatasourceType = datasourceType;
+        this.lastDatasourceId = datasourceId;
+        
+        // Load cached data
+        if (datasourceType === 'prometheus') {
+            this.prometheusMetrics = cached.metrics || [];
+            this.prometheusLabels = cached.labels || {};
+        } else if (datasourceType === 'influxdb') {
+            this.influxRetentionPolicies = cached.retentionPolicies || [];
+            this.influxMeasurements = cached.measurements || [];
+            this.influxFields = cached.fields || {};
+            this.influxTags = cached.tags || {};
+            this.influxTagValues = cached.tagValues || {};
+        }
+        
+        // Also update in-memory cache
+        this.schemaCache[datasourceId] = {
+            type: datasourceType,
+            data: {
+                retentionPolicies: this.influxRetentionPolicies,
+                measurements: this.influxMeasurements,
+                fields: this.influxFields,
+                tags: this.influxTags,
+                tagValues: this.influxTagValues,
+                metrics: this.prometheusMetrics,
+                labels: this.prometheusLabels
+            },
+            timestamp: cached.timestamp
+        };
+    },
+    
     // Save schema to cache
     saveToCache(datasourceId, datasourceType) {
         console.log('Saving schema to cache for:', datasourceId, datasourceType);
@@ -154,11 +211,23 @@ const Schema = {
             data.tagValues = this.influxTagValues;
         }
         
+        const timestamp = Date.now();
+        
+        // Save to in-memory cache
         this.schemaCache[datasourceId] = {
             type: datasourceType,
             data: data,
-            timestamp: Date.now()
+            timestamp: timestamp
         };
+        
+        // Save to persistent storage
+        if (typeof Storage !== 'undefined') {
+            const persistentData = {
+                ...data,
+                type: datasourceType
+            };
+            Storage.saveSchemaToStorage(datasourceId, persistentData);
+        }
         
         this.lastDatasourceId = datasourceId;
     },
@@ -361,12 +430,79 @@ const Schema = {
                 measurements: this.influxMeasurements.length
             });
             
+            // Load fields for common measurements to enable better autocomplete
+            await this.loadCommonFieldsAndTags();
+            
         } catch (error) {
             console.error('Error loading InfluxDB schema:', error);
             // Set defaults if discovery fails
             this.influxRetentionPolicies = ['autogen'];
             this.influxMeasurements = [];
         }
+    },
+    
+    // Load fields and tags for common measurements to enhance autocompletion
+    async loadCommonFieldsAndTags() {
+        if (this.influxMeasurements.length === 0) return;
+        
+        console.log('Loading fields and tags for common measurements...');
+        
+        // Load fields and tags for up to 10 measurements initially (more will be loaded dynamically as needed)
+        const measurementsToLoad = this.influxMeasurements.slice(0, Math.min(10, this.influxMeasurements.length));
+        const defaultRetentionPolicy = this.influxRetentionPolicies[0] || 'autogen';
+        
+        for (const measurement of measurementsToLoad) {
+            try {
+                console.log(`Loading schema for measurement: ${measurement}`);
+                
+                // Load fields
+                let fieldsQuery = `SHOW FIELD KEYS FROM "${measurement}"`;
+                let fieldsResult = await this.executeSchemaQuery(fieldsQuery, 'influxdb');
+                
+                // If no results, try with retention policy
+                if (!fieldsResult || !fieldsResult.results || !fieldsResult.results.A || 
+                    !fieldsResult.results.A.series || fieldsResult.results.A.series.length === 0) {
+                    fieldsQuery = `SHOW FIELD KEYS FROM "${defaultRetentionPolicy}"."${measurement}"`;
+                    fieldsResult = await this.executeSchemaQuery(fieldsQuery, 'influxdb');
+                }
+                
+                if (fieldsResult && fieldsResult.results && fieldsResult.results.A) {
+                    const fields = this.extractInfluxResults(fieldsResult.results.A);
+                    if (fields.length > 0) {
+                        this.influxFields[measurement] = fields;
+                        console.log(`Loaded ${fields.length} fields for ${measurement}:`, fields);
+                    }
+                }
+                
+                // Load tags
+                let tagsQuery = `SHOW TAG KEYS FROM "${measurement}"`;
+                let tagsResult = await this.executeSchemaQuery(tagsQuery, 'influxdb');
+                
+                // If no results, try with retention policy
+                if (!tagsResult || !tagsResult.results || !tagsResult.results.A || 
+                    !tagsResult.results.A.series || tagsResult.results.A.series.length === 0) {
+                    tagsQuery = `SHOW TAG KEYS FROM "${defaultRetentionPolicy}"."${measurement}"`;
+                    tagsResult = await this.executeSchemaQuery(tagsQuery, 'influxdb');
+                }
+                
+                if (tagsResult && tagsResult.results && tagsResult.results.A) {
+                    const tags = this.extractInfluxResults(tagsResult.results.A);
+                    if (tags.length > 0) {
+                        this.influxTags[measurement] = tags;
+                        console.log(`Loaded ${tags.length} tags for ${measurement}:`, tags);
+                    }
+                }
+                
+            } catch (error) {
+                console.warn(`Failed to load schema for measurement ${measurement}:`, error);
+                // Continue with next measurement
+            }
+        }
+        
+        console.log('Common fields and tags loaded:', {
+            fieldsForMeasurements: Object.keys(this.influxFields).length,
+            tagsForMeasurements: Object.keys(this.influxTags).length
+        });
     },
     
     // Load fields and tags for a specific measurement
