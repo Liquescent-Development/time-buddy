@@ -75,6 +75,26 @@
             this.position++;
         }
 
+        isRegexContext() {
+            // Look backwards for =~ or !~ operators
+            let pos = this.position - 1;
+            
+            // Skip whitespace backwards
+            while (pos >= 0 && /\s/.test(this.input[pos])) {
+                pos--;
+            }
+            
+            // Check for =~ or !~
+            if (pos >= 1 && this.input.slice(pos - 1, pos + 1) === '=~') {
+                return true;
+            }
+            if (pos >= 1 && this.input.slice(pos - 1, pos + 1) === '!~') {
+                return true;
+            }
+            
+            return false;
+        }
+
         skipWhitespace() {
             const start = this.position;
             while (/\s/.test(this.current())) {
@@ -143,7 +163,19 @@
                         line: startLine,
                         column: startColumn
                     };
+                } else if (this.current() === '\n') {
+                    // Regex can't span lines, this is probably an invalid regex
+                    return {
+                        type: TokenType.INVALID,
+                        value: this.input.slice(start, this.position),
+                        start: start,
+                        end: this.position,
+                        line: startLine,
+                        column: startColumn,
+                        error: 'Unclosed regular expression (cannot span lines)'
+                    };
                 }
+                // Note: Inside regex, # characters are literal, not comments
                 this.advance();
             }
 
@@ -326,8 +358,8 @@
                 return this.readString(this.current());
             }
 
-            // Regular expressions
-            if (this.current() === '/' && this.peek() !== '*') {
+            // Regular expressions - only after regex operators (=~, !~)
+            if (this.current() === '/' && this.peek() !== '*' && this.isRegexContext()) {
                 return this.readRegex();
             }
 
@@ -684,8 +716,8 @@
                 return true;
             }
             
-            // Handle numbers
-            if (this.consume(TokenType.NUMBER) || this.consume(TokenType.DURATION)) {
+            // Handle numbers and regex patterns
+            if (this.consume(TokenType.NUMBER) || this.consume(TokenType.DURATION) || this.consume(TokenType.REGEX)) {
                 return true;
             }
             
