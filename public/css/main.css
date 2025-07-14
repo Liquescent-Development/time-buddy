@@ -2955,3 +2955,113 @@ body {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
 }
+
+/* InfluxQL Linting Styles - VSCode-like error underlining */
+.CodeMirror-lint-mark-error {
+    background-image: url("data:image/svg+xml,%3csvg width='6' height='3' viewBox='0 0 6 3' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='m0 3 l3 -3 l1 0 l3 3' stroke='%23FF5370' fill='none' stroke-width='1'/%3e%3c/svg%3e");
+    background-position: left bottom;
+    background-repeat: repeat-x;
+    background-size: 6px 3px;
+    padding-bottom: 3px;
+    border-bottom: none;
+}
+
+.CodeMirror-lint-mark-warning {
+    background-image: url("data:image/svg+xml,%3csvg width='6' height='3' viewBox='0 0 6 3' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='m0 3 l3 -3 l1 0 l3 3' stroke='%23FFCB6B' fill='none' stroke-width='1'/%3e%3c/svg%3e");
+    background-position: left bottom;
+    background-repeat: repeat-x;
+    background-size: 6px 3px;
+    padding-bottom: 3px;
+    border-bottom: none;
+}
+
+/* Lint markers in gutter */
+.CodeMirror-lint-marker-error {
+    background-image: url("data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3e%3ccircle cx='8' cy='8' r='6' fill='%23FF5370'/%3e%3cpath d='M7.5 5h1v4h-1zm0 5h1v1h-1z' fill='%23FFFFFF'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 16px 16px;
+    cursor: pointer;
+    width: 16px !important;
+    height: 16px !important;
+    border-radius: 8px;
+}
+
+.CodeMirror-lint-marker-warning {
+    background-image: url("data:image/svg+xml,%3csvg width='16' height='16' viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3e%3ccircle cx='8' cy='8' r='6' fill='%23FFCB6B'/%3e%3cpath d='M7.5 5h1v4h-1zm0 5h1v1h-1z' fill='%23FFFFFF'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 16px 16px;
+    cursor: pointer;
+    width: 16px !important;
+    height: 16px !important;
+    border-radius: 8px;
+}
+
+/* Tooltip styles for lint messages */
+.CodeMirror-lint-tooltip {
+    background-color: #2d2d30 !important;
+    border: 1px solid #454545 !important;
+    border-radius: 4px !important;
+    color: #cccccc !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+    padding: 8px 12px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+    max-width: 400px !important;
+    word-wrap: break-word !important;
+    z-index: 2000 !important;
+}
+
+.CodeMirror-lint-tooltip .lint-error {
+    color: #FF5370 !important;
+    font-weight: 500 !important;
+}
+
+.CodeMirror-lint-tooltip .lint-warning {
+    color: #FFCB6B !important;
+    font-weight: 500 !important;
+}
+
+/* Enhanced InfluxQL Syntax Highlighting */
+.CodeMirror .cm-tag {
+    color: #C792EA !important; /* Purple for ::tag and ::field */
+    font-weight: 500 !important;
+}
+
+.CodeMirror .cm-def {
+    color: #82AAFF !important; /* Blue for template variables like $timeFilter */
+    font-weight: 500 !important;
+}
+
+/* Ensure operators like AND are properly highlighted */
+.CodeMirror .cm-operator {
+    color: #89DDFF !important; /* Light blue for operators */
+    font-weight: bold !important;
+}
+
+/* Enhanced keyword highlighting */
+.CodeMirror .cm-keyword {
+    color: #C792EA !important; /* Purple for keywords */
+    font-weight: bold !important;
+}
+
+/* Function names */
+.CodeMirror .cm-builtin {
+    color: #FFCB6B !important; /* Yellow for functions */
+    font-weight: 500 !important;
+}
+
+/* Literals and atoms */
+.CodeMirror .cm-atom {
+    color: #F78C6C !important; /* Orange for literals like TRUE, FALSE, NULL */
+    font-weight: 500 !important;
+}
+
+/* Duration literals (1h, 5m, 30s, etc.) */
+.CodeMirror .cm-duration {
+    color: #F07178 !important; /* Coral/pink for duration literals */
+    font-weight: 600 !important;
+    font-style: italic !important;
+}

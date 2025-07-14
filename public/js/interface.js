@@ -214,7 +214,7 @@ const Interface = {
                     const tabInfo = this.tabs.get(tabData.id);
                     if (tabInfo && tabInfo.editor) {
                         tabInfo.editor.setValue(tabData.content);
-                        const mode = tabData.queryType === 'promql' ? 'promql' : 'sql';
+                        const mode = tabData.queryType === 'promql' ? 'promql' : 'influxql';
                         tabInfo.editor.setOption('mode', mode);
                         
                         // Set the datasource selection in the UI
@@ -408,14 +408,21 @@ const Interface = {
         console.log('PromQL mode available:', CodeMirror.modes && CodeMirror.modes.promql);
         
         try {
-            let mode = GrafanaConfig.currentQueryType === 'promql' ? 'promql' : 'sql';
+            let mode = GrafanaConfig.currentQueryType === 'promql' ? 'promql' : 'influxql';
             
             // Fallback to basic modes if custom modes aren't available
             if (mode === 'promql' && (!CodeMirror.modes || !CodeMirror.modes.promql)) {
                 console.warn('PromQL mode not available, falling back to text/x-sql');
                 mode = 'text/x-sql';
+            } else if (mode === 'influxql' && (!CodeMirror.modes || !CodeMirror.modes.influxql)) {
+                console.warn('InfluxQL mode not available, falling back to text/x-sql');
+                mode = 'text/x-sql';
             }
             console.log('Using mode:', mode);
+            
+            // Enable linting for InfluxQL mode
+            const enableLinting = mode === 'influxql';
+            console.log('Enabling linting for mode:', mode, '=', enableLinting);
             
             const editor = CodeMirror.fromTextArea(textarea, {
                 mode: mode,
@@ -427,6 +434,8 @@ const Interface = {
                 tabSize: 2,
                 lineWrapping: true,
                 smartIndent: true,
+                lint: enableLinting,
+                gutters: enableLinting ? ["CodeMirror-linenumbers", "CodeMirror-lint-markers"] : ["CodeMirror-linenumbers"],
                 extraKeys: {
                     'Ctrl-Space': 'autocomplete',
                     'Ctrl-Enter': () => this.executeQuery(tabId),
@@ -468,6 +477,7 @@ const Interface = {
             
             // Setup autocomplete and validation event handlers
             this.setupEditorEventHandlers(editor, tabId);
+            
             
             console.log('CodeMirror successfully initialized for tab:', tabId);
             
@@ -614,10 +624,20 @@ const Interface = {
         if (tabData) {
             tabData.queryType = type;
             
-            // Update CodeMirror mode
+            // Update CodeMirror mode and linting
             if (tabData.editor) {
-                const mode = type === 'promql' ? 'promql' : 'sql';
+                const mode = type === 'promql' ? 'promql' : 'influxql';
+                const enableLinting = mode === 'influxql';
+                
+                console.log('Updating editor mode to:', mode, 'with linting:', enableLinting);
                 tabData.editor.setOption('mode', mode);
+                tabData.editor.setOption('lint', enableLinting);
+                tabData.editor.setOption('gutters', enableLinting ? 
+                    ["CodeMirror-linenumbers", "CodeMirror-lint-markers"] : 
+                    ["CodeMirror-linenumbers"]);
+                    
+                // Refresh editor to apply changes
+                tabData.editor.refresh();
             }
             
             // Set global config and update title bar for active tab
@@ -662,7 +682,7 @@ const Interface = {
         const tabData = this.tabs.get(tabId);
         if (!tabData) return;
         
-        // Find datasource details
+        // Find datasource details - first try DOM element
         const datasourceItem = document.querySelector(`[data-uid="${datasourceId}"]`);
         if (datasourceItem) {
             tabData.datasourceId = datasourceId;
@@ -672,6 +692,22 @@ const Interface = {
             // Auto-detect query type based on datasource
             const queryType = datasourceItem.dataset.type === 'prometheus' ? 'promql' : 'influxql';
             this.setQueryType(tabId, queryType);
+        } else if (GrafanaConfig.datasources && GrafanaConfig.datasources.length > 0) {
+            // Fallback to GrafanaConfig.datasources if DOM element not found
+            const ds = GrafanaConfig.datasources.find(d => d.uid === datasourceId);
+            if (ds) {
+                tabData.datasourceId = datasourceId;
+                tabData.datasourceName = ds.name;
+                tabData.datasourceType = ds.type;
+                
+                // Auto-detect query type based on datasource
+                const queryType = ds.type === 'prometheus' ? 'promql' : 'influxql';
+                this.setQueryType(tabId, queryType);
+            } else {
+                tabData.datasourceId = null;
+                tabData.datasourceName = null;
+                tabData.datasourceType = null;
+            }
         } else {
             tabData.datasourceId = null;
             tabData.datasourceName = null;
@@ -919,13 +955,22 @@ const Interface = {
         console.log('connectionList parent:', connectionList.parentElement);
         console.log('connectionList getBoundingClientRect:', connectionList.getBoundingClientRect());
         
-        // Force each connection item to be visible
+        // Force each connection item to be visible and clear any search filters
         connectionList.querySelectorAll('.connection-item').forEach(item => {
             item.style.display = 'flex';
             item.style.visibility = 'visible';
             item.style.opacity = '1';
             item.style.height = 'auto';
         });
+        
+        // Clear connection search filter when reloading
+        const connectionSearch = document.getElementById('connectionSearch');
+        if (connectionSearch && connectionSearch.value) {
+            // Only clear if we have connections to show
+            if (connectionList.querySelectorAll('.connection-item').length > 0) {
+                connectionSearch.value = '';
+            }
+        }
         
         console.log('Set connectionList HTML with', connectionList.querySelectorAll('.connection-item').length, 'connections');
         
@@ -1361,7 +1406,7 @@ const Interface = {
         }
         
         // Show loading state
-        container.innerHTML = '<div class="empty-state">Loading schema...</div>';
+        container.innerHTML = '<div class="schema-loading">Loading schema...</div>';
         
         // Update Schema module with current datasource info
         Schema.currentDatasourceType = GrafanaConfig.selectedDatasourceType;

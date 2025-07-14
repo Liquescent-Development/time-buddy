@@ -4,8 +4,13 @@ const Editor = {
         console.log('Initializing CodeMirror...');
         const textarea = document.getElementById('query');
         
+        const initialMode = GrafanaConfig.currentQueryType === 'promql' ? 'promql' : 'influxql';
+        const enableLinting = initialMode === 'influxql';
+        
+        console.log('Initializing CodeMirror with mode:', initialMode, 'linting:', enableLinting);
+        
         GrafanaConfig.queryEditor = CodeMirror.fromTextArea(textarea, {
-            mode: GrafanaConfig.currentQueryType === 'promql' ? 'promql' : 'influxql',
+            mode: initialMode,
             theme: 'monokai',
             lineNumbers: true,
             matchBrackets: true,
@@ -13,6 +18,8 @@ const Editor = {
             indentUnit: 2,
             smartIndent: true,
             lineWrapping: false,
+            lint: enableLinting,
+            gutters: enableLinting ? ["CodeMirror-linenumbers", "CodeMirror-lint-markers"] : ["CodeMirror-linenumbers"],
             extraKeys: {
                 "Ctrl-Space": "autocomplete",
                 "Tab": function(cm) {
@@ -131,7 +138,7 @@ const Editor = {
         CodeMirror.defineMode("influxql", function() {
             const keywords = new Set(['ALL', 'ALTER', 'ANALYZE', 'ANY', 'AS', 'ASC', 'BEGIN', 'BY', 'CREATE', 'CONTINUOUS', 
                 'DATABASE', 'DATABASES', 'DEFAULT', 'DELETE', 'DESC', 'DESTINATIONS', 'DIAGNOSTICS', 'DISTINCT', 'DROP', 
-                'DURATION', 'END', 'EVERY', 'EXPLAIN', 'FIELD', 'FOR', 'FROM', 'GRANT', 'GRANTS', 'GROUP', 'GROUPS', 
+                'DURATION', 'END', 'EVERY', 'EXPLAIN', 'FIELD', 'FILL', 'FOR', 'FROM', 'GRANT', 'GRANTS', 'GROUP', 'GROUPS', 
                 'IN', 'INF', 'INSERT', 'INTO', 'KEY', 'KEYS', 'KILL', 'LIMIT', 'SHOW', 'MEASUREMENT', 'MEASUREMENTS', 
                 'NAME', 'OFFSET', 'ON', 'ORDER', 'PASSWORD', 'POLICY', 'POLICIES', 'PRIVILEGES', 'QUERIES', 'QUERY', 
                 'READ', 'REPLICATION', 'RESAMPLE', 'RETENTION', 'REVOKE', 'SELECT', 'SERIES', 'SET', 'SHARD', 'SHARDS', 
@@ -144,6 +151,12 @@ const Editor = {
             
             const operators = new Set(['AND', 'OR', 'NOT', 'IS', 'LIKE', 'REGEX'].map(k => k.toLowerCase()));
             const literals = new Set(['TRUE', 'FALSE', 'NULL', 'NOW', 'TIME'].map(k => k.toLowerCase()));
+            
+            // FILL function values
+            const fillValues = new Set(['linear', 'none', 'null', 'previous'].map(k => k.toLowerCase()));
+            
+            // Type casting keywords
+            const castTypes = new Set(['tag', 'field'].map(k => k.toLowerCase()));
             
             return {
                 token: function(stream, state) {
@@ -168,6 +181,16 @@ const Editor = {
                         return "comment";
                     }
                     
+                    // Template variables ($var, $__interval, etc.)
+                    if (stream.match(/^\$[a-zA-Z_][a-zA-Z0-9_]*/)) {
+                        return "def"; // Use 'def' class for variables (shows as cyan/teal)
+                    }
+                    
+                    // Type casting (::tag, ::field)
+                    if (stream.match(/^::(tag|field)/i)) {
+                        return "tag"; // Special styling for type casting
+                    }
+                    
                     // Strings (single quotes)
                     if (stream.match(/^'([^'\\]|\\.)*'/)) {
                         return "string";
@@ -183,13 +206,13 @@ const Editor = {
                         return "string.special";
                     }
                     
-                    // Numbers (integers and floats)
-                    if (stream.match(/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/)) {
-                        return "number";
+                    // Duration literals (1h, 5m, 30s, 2d, 1w, etc.) - Check BEFORE numbers!
+                    if (stream.match(/^\d+(ms|[uµsmhdw])/)) {
+                        return "duration"; // Use custom duration class
                     }
                     
-                    // Duration literals
-                    if (stream.match(/^\d+[uµmshd w]/)) {
+                    // Numbers (integers and floats)
+                    if (stream.match(/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?/)) {
                         return "number";
                     }
                     
@@ -198,7 +221,12 @@ const Editor = {
                         return "number";
                     }
                     
-                    // Operators
+                    // Double colon operator
+                    if (stream.match(/^::/)) {
+                        return "operator";
+                    }
+                    
+                    // Other operators
                     if (stream.match(/^(=~|!~|<>|<=|>=|!=|[=<>+\-*\/%&|^])/)) {
                         return "operator";
                     }
@@ -206,7 +234,26 @@ const Editor = {
                     // Identifiers and keywords
                     if (stream.match(/^[a-zA-Z_][a-zA-Z0-9_]*/)) {
                         const word = stream.current().toLowerCase();
-                        if (keywords.has(word)) return "keyword";
+                        
+                        // Check if this is a FILL function value in context
+                        if (state.inFillFunction && fillValues.has(word)) {
+                            state.inFillFunction = false;
+                            return "string"; // Style FILL values as strings
+                        }
+                        
+                        // Check if this is a type cast
+                        if (castTypes.has(word) && state.afterTypeOperator) {
+                            state.afterTypeOperator = false;
+                            return "tag";
+                        }
+                        
+                        if (keywords.has(word)) {
+                            // Set context for FILL function
+                            if (word === 'fill') {
+                                state.expectingFillParen = true;
+                            }
+                            return "keyword";
+                        }
                         if (functions.has(word)) return "builtin";
                         if (operators.has(word)) return "operator";
                         if (literals.has(word)) return "atom";
@@ -215,6 +262,16 @@ const Editor = {
                     
                     // Punctuation
                     if (stream.match(/^[(),.;]/)) {
+                        const punct = stream.current();
+                        
+                        // Handle FILL function context
+                        if (punct === '(' && state.expectingFillParen) {
+                            state.expectingFillParen = false;
+                            state.inFillFunction = true;
+                        } else if (punct === ')' && state.inFillFunction) {
+                            state.inFillFunction = false;
+                        }
+                        
                         return "punctuation";
                     }
                     
@@ -223,7 +280,12 @@ const Editor = {
                 },
                 
                 startState: function() {
-                    return {inComment: false};
+                    return {
+                        inComment: false,
+                        inFillFunction: false,
+                        expectingFillParen: false,
+                        afterTypeOperator: false
+                    };
                 }
             };
         });
@@ -797,12 +859,13 @@ const Editor = {
             return;
         }
         
+        // For InfluxQL, we now use CodeMirror's linting
+        // For PromQL, we still use the basic validation
         let errors = [];
         if (GrafanaConfig.currentQueryType === 'promql') {
             errors = this.validatePromQL(query);
-        } else if (GrafanaConfig.currentQueryType === 'influxql') {
-            errors = this.validateInfluxQL(query);
         }
+        // InfluxQL validation is now handled by the linter
         
         if (errorDisplay) {
             if (errors.length > 0) {
@@ -1140,7 +1203,20 @@ const Editor = {
         
         // Update CodeMirror mode
         if (GrafanaConfig.queryEditor) {
-            GrafanaConfig.queryEditor.setOption('mode', type === 'promql' ? 'promql' : 'influxql');
+            const newMode = type === 'promql' ? 'promql' : 'influxql';
+            console.log('Setting CodeMirror mode to:', newMode);
+            GrafanaConfig.queryEditor.setOption('mode', newMode);
+            
+            // Enable/disable linting based on mode
+            if (type === 'influxql') {
+                console.log('Enabling linting for InfluxQL mode');
+                GrafanaConfig.queryEditor.setOption('lint', true);
+                GrafanaConfig.queryEditor.setOption('gutters', ["CodeMirror-linenumbers", "CodeMirror-lint-markers"]);
+            } else {
+                console.log('Disabling linting for PromQL mode');
+                GrafanaConfig.queryEditor.setOption('lint', false);
+                GrafanaConfig.queryEditor.setOption('gutters', ["CodeMirror-linenumbers"]);
+            }
             
             // Update placeholder
             const placeholder = type === 'influxql' 
