@@ -33,6 +33,12 @@ const Dashboard = {
         try {
             console.log('Loading all dashboards');
             
+            // Show loading state
+            const container = document.getElementById('dashboardResults');
+            if (container) {
+                container.innerHTML = '<div class="dashboard-loading">Loading dashboards...</div>';
+            }
+            
             // Get all dashboards without a search query
             const searchUrl = `/api/search?type=dash-db`;
             
@@ -105,6 +111,12 @@ const Dashboard = {
         // Fallback to server-side search if we don't have all dashboards loaded
         try {
             console.log('Searching dashboards server-side for:', query);
+            
+            // Show loading state
+            const container = document.getElementById('dashboardResults');
+            if (container) {
+                container.innerHTML = '<div class="dashboard-loading">Searching dashboards...</div>';
+            }
             
             const searchUrl = `/api/search?q=${encodeURIComponent(query)}&type=dash-db`;
             
@@ -182,6 +194,28 @@ const Dashboard = {
             });
             document.querySelector(`[data-dashboard-uid="${dashboardItem.uid}"]`).classList.add('selected');
             
+            // Show loading state
+            const dashboardQueries = document.getElementById('dashboardQueries');
+            const dashboardResults = document.getElementById('dashboardResults');
+            
+            if (dashboardQueries && dashboardResults) {
+                // Hide results, show queries section with loading
+                dashboardResults.style.display = 'none';
+                dashboardQueries.classList.remove('hidden');
+                
+                // Show loading in the queries section
+                const queryList = document.getElementById('dashboardQueryList');
+                if (queryList) {
+                    queryList.innerHTML = '<div class="dashboard-loading">Loading dashboard queries...</div>';
+                }
+                
+                // Also clear the preview
+                const previewSection = document.getElementById('dashboardQueryPreview');
+                if (previewSection) {
+                    previewSection.classList.add('hidden');
+                }
+            }
+            
             // Fetch full dashboard data
             const dashboard = await this.getDashboardByUid(dashboardItem.uid);
             if (!dashboard) return;
@@ -240,7 +274,7 @@ const Dashboard = {
         if (container) {
             if (GrafanaConfig.connected) {
                 // If connected, load all dashboards
-                container.innerHTML = '<div class="loading">Loading dashboards...</div>';
+                container.innerHTML = '<div class="dashboard-loading">Loading dashboards...</div>';
                 this.loadAllDashboards();
             } else {
                 // If not connected, show connect message
@@ -309,8 +343,41 @@ const Dashboard = {
         document.getElementById('selectedDashboardTitle').textContent = dashboard.title || 'Untitled Dashboard';
         document.getElementById('selectedDashboardDescription').textContent = dashboard.description || 'No description available';
         
+        // Update dashboard link
+        this.updateDashboardLink(dashboard);
+        
         // Render query list
         this.renderQueryList(queries);
+    },
+    
+    // Update dashboard link
+    updateDashboardLink(dashboard) {
+        const linkContainer = document.getElementById('selectedDashboardLink');
+        const linkElement = document.getElementById('dashboardLinkUrl');
+        
+        if (!linkContainer || !linkElement) return;
+        
+        // Check if we have the necessary data to construct the URL
+        if (GrafanaConfig.url && dashboard.uid) {
+            // Remove trailing slash from Grafana URL if present
+            const baseUrl = GrafanaConfig.url.replace(/\/$/, '');
+            
+            // Construct the dashboard URL
+            const dashboardUrl = `${baseUrl}/d/${dashboard.uid}/${dashboard.meta?.slug || dashboard.title?.toLowerCase().replace(/\s+/g, '-') || 'dashboard'}`;
+            
+            // Update the link
+            linkElement.href = dashboardUrl;
+            linkContainer.classList.remove('hidden');
+            
+            console.log('Dashboard link created:', dashboardUrl);
+        } else {
+            // Hide the link if we can't construct the URL
+            linkContainer.classList.add('hidden');
+            console.warn('Cannot create dashboard link - missing URL or UID:', {
+                url: GrafanaConfig.url,
+                uid: dashboard.uid
+            });
+        }
     },
     
     // Render query list
@@ -530,6 +597,7 @@ function copyQueryToEditor(queryId) {
         setTimeout(() => {
             console.log('copyQueryToEditor: Processing query:', query);
             console.log('copyQueryToEditor: Query datasource:', query.datasource);
+            console.log('copyQueryToEditor: GrafanaConfig.datasources:', GrafanaConfig.datasources);
             
             // Get the tab data and set the query
             const tabData = Interface.tabs.get(newTabId);
@@ -550,6 +618,20 @@ function copyQueryToEditor(queryId) {
                     setTimeout(() => {
                         console.log('copyQueryToEditor: Force calling updateExecuteButton');
                         Interface.updateExecuteButton(newTabId);
+                        
+                        // Also populate the datasource dropdown
+                        Interface.populateTabDatasourceSelect(newTabId);
+                        
+                        // Set the dropdown value again after population
+                        setTimeout(() => {
+                            const container = document.querySelector(`[data-tab-id="${newTabId}"].editor-container`);
+                            if (container) {
+                                const datasourceSelect = container.querySelector('.tab-datasource-select');
+                                if (datasourceSelect) {
+                                    datasourceSelect.value = datasourceUid;
+                                }
+                            }
+                        }, 50);
                     }, 100);
                 } else {
                     console.log('copyQueryToEditor: No valid datasource UID found');
@@ -600,9 +682,23 @@ function executeQueryFromDashboard(queryId) {
                     setTimeout(() => {
                         Interface.updateExecuteButton(newTabId);
                         
-                        // Execute the query after ensuring button is enabled
+                        // Also populate the datasource dropdown
+                        Interface.populateTabDatasourceSelect(newTabId);
+                        
+                        // Set the dropdown value again after population
                         setTimeout(() => {
-                            Interface.executeQuery(newTabId);
+                            const container = document.querySelector(`[data-tab-id="${newTabId}"].editor-container`);
+                            if (container) {
+                                const datasourceSelect = container.querySelector('.tab-datasource-select');
+                                if (datasourceSelect) {
+                                    datasourceSelect.value = datasourceUid;
+                                }
+                            }
+                            
+                            // Execute the query after ensuring everything is set
+                            setTimeout(() => {
+                                Interface.executeQuery(newTabId);
+                            }, 50);
                         }, 50);
                     }, 100);
                 }
@@ -617,6 +713,34 @@ function executeQueryFromDashboard(queryId) {
         console.error('Error executing query from dashboard:', error);
         Interface.showToast('Error executing query from dashboard', 'error');
     }
+}
+
+function backToDashboardList() {
+    // Hide queries section, show results
+    const dashboardQueries = document.getElementById('dashboardQueries');
+    const dashboardResults = document.getElementById('dashboardResults');
+    
+    if (dashboardQueries) {
+        dashboardQueries.classList.add('hidden');
+    }
+    
+    if (dashboardResults) {
+        dashboardResults.style.display = '';
+    }
+    
+    // Hide dashboard link
+    const linkContainer = document.getElementById('selectedDashboardLink');
+    if (linkContainer) {
+        linkContainer.classList.add('hidden');
+    }
+    
+    // Clear selected dashboard
+    Dashboard.selectedDashboard = null;
+    
+    // Remove selected state from all dashboard items
+    document.querySelectorAll('.dashboard-item').forEach(item => {
+        item.classList.remove('selected');
+    });
 }
 
 function toggleDashboardExplorer() {
