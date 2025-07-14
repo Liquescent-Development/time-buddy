@@ -339,7 +339,7 @@ const FileExplorer = {
                         currentTabData.editor.clearHistory();
                         
                         // Set the correct mode
-                        const mode = fileType === 'promql' ? 'promql' : 'sql';
+                        const mode = fileType === 'promql' ? 'promql' : 'influxql';
                         currentTabData.editor.setOption('mode', mode);
                         console.log('Content set in CodeMirror, mode:', mode);
                     } else {
@@ -353,7 +353,7 @@ const FileExplorer = {
                             if (retryTabData.editor) {
                                 retryTabData.editor.setValue(content);
                                 retryTabData.editor.clearHistory();
-                                const mode = fileType === 'promql' ? 'promql' : 'sql';
+                                const mode = fileType === 'promql' ? 'promql' : 'influxql';
                                 retryTabData.editor.setOption('mode', mode);
                                 console.log('Content set in CodeMirror after retry, mode:', mode);
                             } else {

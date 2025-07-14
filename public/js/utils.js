@@ -39,7 +39,7 @@ const Utils = {
         GrafanaConfig.currentResults = null;
         GrafanaConfig.selectedSeries = 0;
         if (type === 'loading') {
-            resultsDiv.innerHTML = '<div class="loading">' + message + '</div>';
+            resultsDiv.innerHTML = '<div class="query-loading">' + message + '</div>';
         } else {
             resultsDiv.innerHTML = '<div class="status ' + type + '">' + message + '</div>';
         }
