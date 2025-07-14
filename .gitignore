@@ -140,3 +140,4 @@ dist
 
 # Claude
 CLAUDE.md
+influxql_spec.md

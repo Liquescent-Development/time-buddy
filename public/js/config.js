@@ -33,14 +33,66 @@ const QueryKeywords = {
         'group_left', 'group_right', 'offset', 'ignoring', 'on', 'and', 'or', 'unless'
     ],
     influxql: [
-        'SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'OFFSET',
-        'SHOW', 'CREATE', 'DROP', 'ALTER', 'INSERT', 'DELETE', 'UPDATE',
-        'MEASUREMENTS', 'DATABASES', 'SERIES', 'TAG', 'FIELD', 'TIME',
-        'MEAN', 'MEDIAN', 'MODE', 'SPREAD', 'STDDEV', 'SUM', 'COUNT',
-        'DISTINCT', 'INTEGRAL', 'DERIVATIVE', 'DIFFERENCE', 'NON_NEGATIVE_DERIVATIVE',
-        'ELAPSED', 'MOVING_AVERAGE', 'CUMULATIVE_SUM', 'HOLT_WINTERS',
-        'PERCENTILE', 'SAMPLE', 'TOP', 'BOTTOM', 'FIRST', 'LAST', 'MAX', 'MIN',
-        'NOW', 'AND', 'OR', 'NOT', 'IN', 'LIKE', 'REGEX', 'IS', 'NULL'
+        // Keywords from specification
+        'ALL', 'ALTER', 'ANALYZE', 'ANY', 'AS', 'ASC', 'BEGIN', 'BY', 'CREATE', 'CONTINUOUS', 
+        'DATABASE', 'DATABASES', 'DEFAULT', 'DELETE', 'DESC', 'DESTINATIONS', 'DIAGNOSTICS', 
+        'DISTINCT', 'DROP', 'DURATION', 'END', 'EVERY', 'EXPLAIN', 'FIELD', 'FOR', 'FROM', 
+        'GRANT', 'GRANTS', 'GROUP', 'GROUPS', 'IN', 'INF', 'INSERT', 'INTO', 'KEY', 'KEYS', 
+        'KILL', 'LIMIT', 'SHOW', 'MEASUREMENT', 'MEASUREMENTS', 'NAME', 'OFFSET', 'ON', 'ORDER', 
+        'PASSWORD', 'POLICY', 'POLICIES', 'PRIVILEGES', 'QUERIES', 'QUERY', 'READ', 'REPLICATION', 
+        'RESAMPLE', 'RETENTION', 'REVOKE', 'SELECT', 'SERIES', 'SET', 'SHARD', 'SHARDS', 'SLIMIT', 
+        'SOFFSET', 'STATS', 'SUBSCRIPTION', 'SUBSCRIPTIONS', 'TAG', 'TO', 'USER', 'USERS', 
+        'VALUES', 'WHERE', 'WITH', 'WRITE',
+        
+        // Functions and aggregates
+        'MEAN', 'MEDIAN', 'MODE', 'SPREAD', 'STDDEV', 'SUM', 'COUNT', 'DISTINCT', 'INTEGRAL', 
+        'DERIVATIVE', 'DIFFERENCE', 'NON_NEGATIVE_DERIVATIVE', 'ELAPSED', 'MOVING_AVERAGE', 
+        'CUMULATIVE_SUM', 'HOLT_WINTERS', 'PERCENTILE', 'SAMPLE', 'TOP', 'BOTTOM', 'FIRST', 
+        'LAST', 'MAX', 'MIN',
+        
+        // Operators and literals
+        'AND', 'OR', 'NOT', 'TRUE', 'FALSE', 'NULL', 'IS', 'LIKE', 'REGEX', 'FILL', 'LINEAR',
+        'NONE', 'PREVIOUS', 'NOW', 'TIME', 'TZ',
+        
+        // Additional common terms
+        'CONTINUOUS QUERY', 'RETENTION POLICY', 'SHARD DURATION', 'REPLICATION', 'ALL PRIVILEGES'
+    ]
+};
+
+// Enhanced autocompletion data for InfluxQL
+const InfluxQLHelpers = {
+    aggregateFunctions: [
+        'COUNT', 'SUM', 'MEAN', 'MEDIAN', 'MODE', 'SPREAD', 'STDDEV',
+        'FIRST', 'LAST', 'MAX', 'MIN', 'PERCENTILE', 'SAMPLE', 'TOP', 'BOTTOM'
+    ],
+    selectorFunctions: [
+        'FIRST', 'LAST', 'MAX', 'MIN', 'SAMPLE', 'TOP', 'BOTTOM'
+    ],
+    transformationFunctions: [
+        'DERIVATIVE', 'DIFFERENCE', 'NON_NEGATIVE_DERIVATIVE', 'INTEGRAL', 
+        'ELAPSED', 'MOVING_AVERAGE', 'CUMULATIVE_SUM', 'HOLT_WINTERS'
+    ],
+    dateFunctions: [
+        'NOW', 'TIME'
+    ],
+    fillOptions: [
+        'FILL(null)', 'FILL(none)', 'FILL(previous)', 'FILL(linear)', 'FILL(0)'
+    ],
+    durationUnits: [
+        'u', 'µ', 'ms', 's', 'm', 'h', 'd', 'w'
+    ],
+    operators: [
+        '=', '!=', '<>', '<', '<=', '>', '>=', '=~', '!~', 'AND', 'OR', 'NOT'
+    ],
+    showStatements: [
+        'SHOW DATABASES', 'SHOW MEASUREMENTS', 'SHOW SERIES', 'SHOW TAG KEYS',
+        'SHOW TAG VALUES', 'SHOW FIELD KEYS', 'SHOW RETENTION POLICIES', 
+        'SHOW USERS', 'SHOW GRANTS', 'SHOW QUERIES', 'SHOW SHARDS', 
+        'SHOW SHARD GROUPS', 'SHOW SUBSCRIPTIONS', 'SHOW CONTINUOUS QUERIES'
+    ],
+    createStatements: [
+        'CREATE DATABASE', 'CREATE RETENTION POLICY', 'CREATE USER', 
+        'CREATE CONTINUOUS QUERY', 'CREATE SUBSCRIPTION'
     ]
 };
 

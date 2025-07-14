@@ -31,6 +31,86 @@ const Storage = {
         console.log('DEBUG: All connections after save:', connections);
     },
 
+    // Schema cache storage
+    getSavedSchemaCache() {
+        const rawData = localStorage.getItem('grafanaSchemaCache');
+        if (rawData === null) {
+            console.log('DEBUG: No schema cache found in localStorage');
+            return {};
+        }
+        
+        try {
+            const cache = JSON.parse(rawData || '{}');
+            console.log('DEBUG: Loaded schema cache for', Object.keys(cache).length, 'datasources');
+            return cache;
+        } catch (error) {
+            console.error('DEBUG: Error parsing schema cache from localStorage:', error);
+            return {};
+        }
+    },
+
+    saveSchemaToStorage(datasourceId, schemaData) {
+        const cache = this.getSavedSchemaCache();
+        const timestamp = Date.now();
+        
+        cache[datasourceId] = {
+            ...schemaData,
+            timestamp: timestamp,
+            version: '1.0' // For future compatibility
+        };
+        
+        localStorage.setItem('grafanaSchemaCache', JSON.stringify(cache));
+        console.log(`DEBUG: Saved schema cache for datasource ${datasourceId}:`, {
+            retentionPolicies: schemaData.retentionPolicies?.length || 0,
+            measurements: schemaData.measurements?.length || 0,
+            fieldsForMeasurements: Object.keys(schemaData.fields || {}).length,
+            tagsForMeasurements: Object.keys(schemaData.tags || {}).length
+        });
+    },
+
+    getSchemaFromStorage(datasourceId, maxAgeMs = 24 * 60 * 60 * 1000) { // Default: 24 hours
+        const cache = this.getSavedSchemaCache();
+        const cached = cache[datasourceId];
+        
+        if (!cached) {
+            console.log(`DEBUG: No cached schema found for datasource ${datasourceId}`);
+            return null;
+        }
+        
+        const age = Date.now() - cached.timestamp;
+        if (age > maxAgeMs) {
+            console.log(`DEBUG: Cached schema for ${datasourceId} is expired (${Math.round(age / 1000 / 60)} minutes old)`);
+            // Clean up expired cache
+            delete cache[datasourceId];
+            localStorage.setItem('grafanaSchemaCache', JSON.stringify(cache));
+            return null;
+        }
+        
+        console.log(`DEBUG: Using cached schema for ${datasourceId} (${Math.round(age / 1000 / 60)} minutes old)`);
+        return cached;
+    },
+
+    clearExpiredSchemaCache(maxAgeMs = 24 * 60 * 60 * 1000) {
+        const cache = this.getSavedSchemaCache();
+        const now = Date.now();
+        let clearedCount = 0;
+        
+        Object.keys(cache).forEach(datasourceId => {
+            const age = now - cache[datasourceId].timestamp;
+            if (age > maxAgeMs) {
+                delete cache[datasourceId];
+                clearedCount++;
+            }
+        });
+        
+        if (clearedCount > 0) {
+            localStorage.setItem('grafanaSchemaCache', JSON.stringify(cache));
+            console.log(`DEBUG: Cleared ${clearedCount} expired schema cache entries`);
+        }
+        
+        return clearedCount;
+    },
+
     // Debug function to inspect and recover localStorage data
     debugLocalStorage() {
         console.log('=== DEBUG: localStorage INSPECTION ===');

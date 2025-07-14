@@ -101,6 +101,9 @@
                                             </button>
                                         </div>
                                     </div>
+                                    <div class="search-container">
+                                        <input type="text" id="connectionSearch" class="search-input" placeholder="Filter connections..." oninput="filterConnections()">
+                                    </div>
                                     <div class="section-scrollable">
                                         <div class="connection-list" id="connectionList">
                                             <div class="empty-state">
@@ -122,6 +125,9 @@
                                                 <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                                             </svg>
                                         </button>
+                                    </div>
+                                    <div class="search-container">
+                                        <input type="text" id="datasourceSearch" class="search-input" placeholder="Filter data sources..." oninput="filterDataSources()">
                                     </div>
                                     <div class="section-scrollable">
                                         <div class="datasource-list" id="datasourceList">
@@ -168,6 +174,14 @@
                                 </div>
                                 <!-- Dashboard Queries Section -->
                                 <div id="dashboardQueries" class="dashboard-queries hidden">
+                                    <div class="dashboard-back">
+                                        <button class="back-button" onclick="backToDashboardList()">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                                            </svg>
+                                            Back to Dashboards
+                                        </button>
+                                    </div>
                                     <div class="dashboard-info">
                                         <h4 id="selectedDashboardTitle"></h4>
                                         <p id="selectedDashboardDescription"></p>
@@ -398,6 +412,7 @@
     <script src="js/utils.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/api.js"></script>
+    <script src="js/influxqlLinter.js"></script>
     <script src="js/editor.js"></script>
     <script src="js/connections.js"></script>
     <script src="js/variables.js"></script>

@@ -35,6 +35,11 @@ const App = {
         this.setDefaultApplicationState();
         
         console.log('VS Code-like interface initialization complete');
+        
+        // Clean up expired schema cache on startup
+        if (typeof Storage !== 'undefined') {
+            Storage.clearExpiredSchemaCache();
+        }
     },
     
     // Set default application state
@@ -298,6 +303,15 @@ function populateDataSourceList(datasources) {
         });
     });
     
+    // Clear datasource search filter when reloading
+    const datasourceSearch = document.getElementById('datasourceSearch');
+    if (datasourceSearch && datasourceSearch.value) {
+        // Only clear if we have datasources to show
+        if (datasourceList.querySelectorAll('.datasource-item').length > 0) {
+            datasourceSearch.value = '';
+        }
+    }
+    
     // Populate tab datasource selects after a short delay to ensure DOM is updated
     setTimeout(() => {
         Interface.populateAllTabDatasourceSelects();
@@ -363,6 +377,101 @@ function clearDashboardSearch() {
     if (searchInput) {
         searchInput.value = '';
         searchDashboards();
+    }
+}
+
+// Connection filtering
+function filterConnections() {
+    const searchInput = document.getElementById('connectionSearch');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    
+    const connectionItems = document.querySelectorAll('.connection-item');
+    let visibleCount = 0;
+    
+    connectionItems.forEach(item => {
+        // Get the text content from the item - includes both name and URL
+        const textContent = item.textContent.toLowerCase();
+        
+        if (textContent.includes(searchTerm)) {
+            item.style.display = '';
+            visibleCount++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    
+    // Show/hide empty state if all connections are filtered out
+    const connectionList = document.getElementById('connectionList');
+    if (connectionList) {
+        if (visibleCount === 0 && connectionItems.length > 0) {
+            if (!connectionList.querySelector('.no-matches')) {
+                const noMatches = document.createElement('div');
+                noMatches.className = 'empty-state no-matches';
+                noMatches.textContent = 'No connections match your search';
+                connectionList.appendChild(noMatches);
+            }
+        } else {
+            const noMatches = connectionList.querySelector('.no-matches');
+            if (noMatches) {
+                noMatches.remove();
+            }
+        }
+    }
+}
+
+// Data source filtering
+function filterDataSources() {
+    const searchInput = document.getElementById('datasourceSearch');
+    const searchTerm = searchInput ? searchInput.value.toLowerCase() : '';
+    
+    const datasourceItems = document.querySelectorAll('.datasource-item');
+    let visibleCount = 0;
+    
+    datasourceItems.forEach(item => {
+        const name = item.dataset.name?.toLowerCase() || '';
+        const type = item.dataset.type?.toLowerCase() || '';
+        
+        if (name.includes(searchTerm) || type.includes(searchTerm)) {
+            item.style.display = '';
+            visibleCount++;
+        } else {
+            item.style.display = 'none';
+        }
+    });
+    
+    // Show/hide empty state if all datasources are filtered out
+    const datasourceList = document.getElementById('datasourceList');
+    if (datasourceList) {
+        if (visibleCount === 0 && datasourceItems.length > 0) {
+            if (!datasourceList.querySelector('.no-matches')) {
+                const noMatches = document.createElement('div');
+                noMatches.className = 'empty-state no-matches';
+                noMatches.textContent = 'No data sources match your search';
+                datasourceList.appendChild(noMatches);
+            }
+        } else {
+            const noMatches = datasourceList.querySelector('.no-matches');
+            if (noMatches) {
+                noMatches.remove();
+            }
+        }
+    }
+}
+
+// Clear search filters
+function clearConnectionSearch() {
+    const searchInput = document.getElementById('connectionSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        filterConnections();
+    }
+}
+
+function clearDataSourceSearch() {
+    const searchInput = document.getElementById('datasourceSearch');
+    if (searchInput) {
+        searchInput.value = '';
+        filterDataSources();
     }
 }
 
@@ -478,6 +587,7 @@ window.onload = function() {
     
     // Expose debug functions to global scope for console access
     window.debugStorage = Storage.debugLocalStorage.bind(Storage);
+    window.recoverConnections = Storage.recoverConnections.bind(Storage);
     window.exportConnections = exportConnections;
     
     
