@@ -455,6 +455,10 @@
             this.tokenizer = new Tokenizer(text);
             this.tokens = [];
             this.current = 0;
+            // Track query structure for validation
+            this.selectFields = [];
+            this.hasGroupBy = false;
+            this.isInAggregateFunction = false;
         }
 
         validate() {
@@ -594,6 +598,10 @@
         validateSelectStatement() {
             this.expect(TokenType.KEYWORD, 'SELECT');
             
+            // Reset state for this SELECT statement
+            this.selectFields = [];
+            this.hasGroupBy = false;
+            
             // Validate field list
             if (!this.validateFieldList()) {
                 return;
@@ -611,17 +619,30 @@
             
             // Optional clauses
             this.validateOptionalClauses();
+            
+            // After parsing the full SELECT statement, validate field/tag rules
+            this.validateFieldTagRules();
         }
 
         validateFieldList() {
             let hasField = false;
+            const fieldListStart = this.current;
             
             do {
+                const fieldStart = this.current;
+                let fieldInfo = { hasAggregateFunction: false, hasField: false, hasTag: false, token: null };
+                
                 if (this.currentToken().type === TokenType.OPERATOR && this.currentToken().value === '*') {
                     this.current++;
                     hasField = true;
-                } else if (this.validateExpression()) {
+                    fieldInfo.hasField = true;
+                    this.selectFields.push(fieldInfo);
+                } else if (this.validateFieldExpression(fieldInfo)) {
                     hasField = true;
+                    // Only track field info if it's not a complex expression
+                    if (!fieldInfo.isComplexExpression) {
+                        this.selectFields.push(fieldInfo);
+                    }
                     // Optional alias
                     if (this.consume(TokenType.KEYWORD, 'AS')) {
                         // Alias can be either an identifier or a quoted string
@@ -638,6 +659,10 @@
             } while (this.consume(TokenType.COMMA));
             
             return hasField;
+        }
+        
+        validateFieldExpression(fieldInfo) {
+            return this.validateExpression(fieldInfo);
         }
 
         validateMeasurementList() {
@@ -672,25 +697,80 @@
             return false;
         }
 
-        validateExpression() {
+        validateExpression(fieldInfo) {
             // Simple expression validation - just check for basic structure
             const start = this.current;
             
+            // First, validate the primary expression (term)
+            if (!this.validateTerm(fieldInfo)) {
+                return false;
+            }
+            
+            // Handle binary operators (arithmetic, comparison, etc.)
+            while (this.currentToken().type === TokenType.OPERATOR) {
+                const op = this.currentToken().value;
+                // Check if it's a binary operator that continues the expression
+                if (['+', '-', '*', '/', '%', '=', '!=', '<>', '<', '<=', '>', '>='].includes(op)) {
+                    this.current++; // consume operator
+                    if (fieldInfo) {
+                        fieldInfo.isComplexExpression = true;
+                    }
+                    // Expect another term after the operator
+                    if (!this.validateTerm(fieldInfo)) {
+                        this.addError('Expected expression after operator ' + op, this.currentToken());
+                        return false;
+                    }
+                } else {
+                    // Not a binary operator we handle in expressions
+                    break;
+                }
+            }
+            
+            return true;
+        }
+        
+        validateTerm(fieldInfo) {
+            // Handle parenthesized expressions first
+            if (this.consume(TokenType.LPAREN)) {
+                if (fieldInfo) {
+                    fieldInfo.isComplexExpression = true;
+                }
+                if (!this.validateExpression(fieldInfo)) {
+                    return false;
+                }
+                return this.expect(TokenType.RPAREN);
+            }
+            
             // Handle functions
             if (this.currentToken().type === TokenType.FUNCTION) {
+                const funcName = this.currentToken().value.toUpperCase();
+                const isAggregate = FUNCTIONS.has(funcName);
+                if (fieldInfo && isAggregate) {
+                    fieldInfo.hasAggregateFunction = true;
+                }
+                
                 this.current++;
                 if (!this.expect(TokenType.LPAREN)) {
                     return false;
                 }
                 
+                // Mark that we're inside an aggregate function for nested field validation
+                const wasInAggregate = this.isInAggregateFunction;
+                if (isAggregate) {
+                    this.isInAggregateFunction = true;
+                }
+                
                 // Function arguments
                 if (this.currentToken().type !== TokenType.RPAREN) {
                     do {
-                        if (!this.validateExpression()) {
+                        if (!this.validateExpression(fieldInfo)) {
                             return false;
                         }
                     } while (this.consume(TokenType.COMMA));
                 }
+                
+                // Restore aggregate function context
+                this.isInAggregateFunction = wasInAggregate;
                 
                 if (!this.expect(TokenType.RPAREN)) {
                     return false;
@@ -699,34 +779,55 @@
             }
             
             // Handle identifiers (field names) with optional ::tag or ::field suffix
-            if (this.consume(TokenType.IDENTIFIER) || this.consume(TokenType.STRING)) {
+            if (this.currentToken().type === TokenType.IDENTIFIER || this.currentToken().type === TokenType.STRING) {
+                const identToken = this.currentToken();
+                this.current++;
+                
                 // Check for optional ::tag or ::field casting
+                let isTag = false;
+                let isField = false;
                 if (this.currentToken().type === TokenType.OPERATOR && this.currentToken().value === '::') {
                     this.current++; // consume ::
                     // Expect 'tag' or 'field' after :: (can be KEYWORD or IDENTIFIER)
                     const castToken = this.currentToken();
-                    if ((castToken.type === TokenType.IDENTIFIER || castToken.type === TokenType.KEYWORD) && 
-                        (castToken.value.toLowerCase() === 'tag' || castToken.value.toLowerCase() === 'field')) {
-                        this.current++;
-                    } else {
-                        this.addError("Expected 'tag' or 'field' after ::", castToken);
-                        return false;
+                    if ((castToken.type === TokenType.IDENTIFIER || castToken.type === TokenType.KEYWORD)) {
+                        if (castToken.value.toLowerCase() === 'tag') {
+                            isTag = true;
+                            this.current++;
+                        } else if (castToken.value.toLowerCase() === 'field') {
+                            isField = true;
+                            this.current++;
+                        } else {
+                            this.addError("Expected 'tag' or 'field' after ::", castToken);
+                            return false;
+                        }
                     }
                 }
+                
+                // Track field/tag usage for validation
+                if (fieldInfo && !fieldInfo.isComplexExpression) {
+                    if (!identToken.value.startsWith('$')) { // Don't count variables as fields
+                        if (isTag) {
+                            fieldInfo.hasTag = true;
+                        } else if (isField || !isTag) {
+                            // If explicitly marked as field or not marked at all, treat as field
+                            fieldInfo.hasField = true;
+                            fieldInfo.token = identToken;
+                            
+                            // If we have a GROUP BY and this field is not in an aggregate function, record it
+                            if (!this.isInAggregateFunction && !fieldInfo.hasAggregateFunction) {
+                                fieldInfo.nonAggregatedField = identToken;
+                            }
+                        }
+                    }
+                }
+                
                 return true;
             }
             
             // Handle numbers and regex patterns
             if (this.consume(TokenType.NUMBER) || this.consume(TokenType.DURATION) || this.consume(TokenType.REGEX)) {
                 return true;
-            }
-            
-            // Handle parenthesized expressions
-            if (this.consume(TokenType.LPAREN)) {
-                if (!this.validateExpression()) {
-                    return false;
-                }
-                return this.expect(TokenType.RPAREN);
             }
             
             return false;
@@ -745,6 +846,7 @@
                 if (!this.expect(TokenType.KEYWORD, 'BY')) {
                     return;
                 }
+                this.hasGroupBy = true;
                 this.validateGroupByClause();
             }
             
@@ -843,7 +945,13 @@
                     this.currentToken().value.toUpperCase() === 'TIME') {
                     this.current++;
                     if (this.expect(TokenType.LPAREN)) {
-                        if (!this.expect(TokenType.DURATION, null, 'Expected duration in time() function')) {
+                        // Accept either a duration (1m, 5m, etc.) or a variable ($__interval, $myInterval, etc.)
+                        const token = this.currentToken();
+                        if (token.type === TokenType.DURATION || 
+                            (token.type === TokenType.IDENTIFIER && token.value.startsWith('$'))) {
+                            this.current++;
+                        } else {
+                            this.addError('Expected duration or variable in time() function', token);
                             return;
                         }
                         if (!this.expect(TokenType.RPAREN)) {
@@ -1081,6 +1189,34 @@
             }
             
             this.expectIdentifierOrString('Expected user name');
+        }
+        
+        validateFieldTagRules() {
+            // Rule 1: If GROUP BY is present, all field references must be in aggregate functions
+            if (this.hasGroupBy) {
+                for (const fieldInfo of this.selectFields) {
+                    if (fieldInfo.nonAggregatedField) {
+                        this.addError(
+                            `Field '${fieldInfo.nonAggregatedField.value}' must be used with an aggregate function when GROUP BY is present`,
+                            fieldInfo.nonAggregatedField
+                        );
+                    }
+                }
+            }
+            
+            // Rule 2: If only tags are selected (no fields), the query needs at least one field
+            const hasFieldSelection = this.selectFields.some(f => f.hasField || f.hasAggregateFunction);
+            const hasTagSelection = this.selectFields.some(f => f.hasTag);
+            
+            if (hasTagSelection && !hasFieldSelection && this.selectFields.length > 0) {
+                // Find the first tag token for error positioning
+                const tagField = this.selectFields.find(f => f.hasTag);
+                const errorToken = tagField && tagField.token ? tagField.token : this.currentToken();
+                this.addError(
+                    'Query must select at least one field value in addition to tags',
+                    errorToken
+                );
+            }
         }
     }
 

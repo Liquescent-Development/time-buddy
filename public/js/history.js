@@ -252,38 +252,95 @@ const History = {
         const history = Storage.getHistory();
         const item = history.find(function(h) { return h.id === id; });
         
-        if (item) {
+        if (!item) return;
+        
+        // Check if we should create a new tab or use the current one
+        let targetTabId = null;
+        
+        if (typeof Interface !== 'undefined' && Interface.activeTab) {
+            // Check if active tab has content
+            const activeTabData = Interface.tabs.get(Interface.activeTab);
+            if (activeTabData && activeTabData.editor) {
+                const currentContent = activeTabData.editor.getValue().trim();
+                
+                if (currentContent) {
+                    // Tab has content, create a new tab
+                    targetTabId = Interface.createNewTab();
+                    Interface.switchTab(targetTabId);
+                    
+                    // Wait for the new tab's editor to be initialized
+                    setTimeout(() => {
+                        this.setHistoryItemInTab(targetTabId, item);
+                    }, 150); // Wait longer than the 50ms CodeMirror initialization delay
+                    return; // Exit early, the setTimeout will handle the rest
+                } else {
+                    // Tab is empty, use current tab
+                    targetTabId = Interface.activeTab;
+                }
+            } else {
+                // No editor, use current tab
+                targetTabId = Interface.activeTab;
+            }
+        }
+        
+        // Set the query content for current tab or fallback to legacy
+        if (targetTabId) {
+            this.setHistoryItemInTab(targetTabId, item);
+        } else {
+            // Fallback to legacy Editor methods
             Editor.setQueryValue(item.query);
             
-            // Set query type
             if (item.queryType) {
                 Editor.setQueryType(item.queryType);
             }
-            
-            // Select datasource (new interface)
-            if (item.datasourceId) {
-                // Find the datasource item in the new interface
-                const datasourceItem = document.querySelector(`[data-uid="${item.datasourceId}"]`);
-                if (datasourceItem) {
-                    // Remove selection from all datasource items
-                    document.querySelectorAll('.datasource-item').forEach(dsItem => {
-                        dsItem.classList.remove('selected');
-                    });
-                    
-                    // Select the matching datasource
-                    datasourceItem.classList.add('selected');
-                    
-                    // Update global config
-                    GrafanaConfig.currentDatasourceId = datasourceItem.dataset.uid;
-                    GrafanaConfig.selectedDatasourceType = datasourceItem.dataset.type;
-                    GrafanaConfig.selectedDatasourceNumericId = datasourceItem.dataset.id;
-                    GrafanaConfig.selectedDatasourceName = datasourceItem.dataset.name;
-                    
-                    // Trigger change event
-                    if (typeof onDataSourceChange === 'function') {
-                        onDataSourceChange();
-                    }
+        }
+        
+        // Also update global datasource selection (for sidebar)
+        if (item.datasourceId) {
+            // Find the datasource item in the new interface
+            const datasourceItem = document.querySelector(`[data-uid="${item.datasourceId}"]`);
+            if (datasourceItem) {
+                // Remove selection from all datasource items
+                document.querySelectorAll('.datasource-item').forEach(dsItem => {
+                    dsItem.classList.remove('selected');
+                });
+                
+                // Select the matching datasource
+                datasourceItem.classList.add('selected');
+                
+                // Update global config
+                GrafanaConfig.currentDatasourceId = datasourceItem.dataset.uid;
+                GrafanaConfig.selectedDatasourceType = datasourceItem.dataset.type;
+                GrafanaConfig.selectedDatasourceNumericId = datasourceItem.dataset.id;
+                GrafanaConfig.selectedDatasourceName = datasourceItem.dataset.name;
+                
+                // Trigger change event
+                if (typeof onDataSourceChange === 'function') {
+                    onDataSourceChange();
                 }
+            }
+        }
+    },
+
+    // Helper function to set history item content in a specific tab
+    setHistoryItemInTab(targetTabId, item) {
+        if (typeof Interface !== 'undefined') {
+            // Use Interface for tab-specific operations
+            const tabData = Interface.tabs.get(targetTabId);
+            if (tabData && tabData.editor) {
+                tabData.editor.setValue(item.query);
+                
+                // Set query type if available
+                if (item.queryType) {
+                    Interface.setQueryType(targetTabId, item.queryType);
+                }
+                
+                // Set datasource for this tab
+                if (item.datasourceId) {
+                    Interface.setTabDatasource(targetTabId, item.datasourceId);
+                }
+            } else {
+                console.warn('No editor found for tab:', targetTabId);
             }
         }
     },

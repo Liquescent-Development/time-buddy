@@ -284,6 +284,21 @@
                                                 <input type="number" id="timeTo" value="0" min="0" step="0.1" class="small-input">
                                             </div>
                                             <div class="option-group">
+                                                <label>Interval ($__interval):</label>
+                                                <select id="queryInterval" class="small-input">
+                                                    <option value="15s">15s</option>
+                                                    <option value="30s">30s</option>
+                                                    <option value="1m" selected>1m</option>
+                                                    <option value="5m">5m</option>
+                                                    <option value="15m">15m</option>
+                                                    <option value="30m">30m</option>
+                                                    <option value="1h">1h</option>
+                                                    <option value="6h">6h</option>
+                                                    <option value="12h">12h</option>
+                                                    <option value="1d">1d</option>
+                                                </select>
+                                            </div>
+                                            <div class="option-group">
                                                 <button class="execute-button" onclick="Interface.executeQuery('untitled-1')" disabled>
                                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                                         <path d="M8 5v14l11-7z"/>

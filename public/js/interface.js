@@ -357,6 +357,21 @@ const Interface = {
                         <input type="number" class="small-input time-to" value="0" min="0" step="0.1">
                     </div>
                     <div class="option-group">
+                        <label>Interval ($__interval):</label>
+                        <select class="small-input tab-interval-select">
+                            <option value="15s">15s</option>
+                            <option value="30s">30s</option>
+                            <option value="1m" selected>1m</option>
+                            <option value="5m">5m</option>
+                            <option value="15m">15m</option>
+                            <option value="30m">30m</option>
+                            <option value="1h">1h</option>
+                            <option value="6h">6h</option>
+                            <option value="12h">12h</option>
+                            <option value="1d">1d</option>
+                        </select>
+                    </div>
+                    <div class="option-group">
                         <button class="execute-button" onclick="Interface.executeQuery('${tabId}')" disabled>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                                 <path d="M8 5v14l11-7z"/>
@@ -1083,6 +1098,11 @@ const Interface = {
             // Temporarily set the global query editor value to the executable query
             const originalGetQueryValue = Editor.getQueryValue;
             Editor.getQueryValue = () => executableQuery;
+            
+            // Update global datasource config for query execution and history
+            GrafanaConfig.currentDatasourceId = tabData.datasourceId;
+            GrafanaConfig.selectedDatasourceType = tabData.datasourceType;
+            GrafanaConfig.selectedDatasourceName = tabData.datasourceName;
             
             // Create temporary select element for compatibility with old Queries module
             const tempSelect = document.createElement('select');

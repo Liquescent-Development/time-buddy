@@ -2622,8 +2622,7 @@ body {
 }
 
 .query-preview {
-    margin-top: 8px;
-    padding-top: 8px;
+    /* Removed margin-top and padding-top to eliminate gap */
 }
 
 .query-preview.hidden {
@@ -2654,7 +2653,7 @@ body {
 
 #dashboardQueryPreview .query-preview-header {
     padding: 6px 12px;
-    margin-bottom: 0;
+    margin: 0; /* Remove all margins */
     background-color: #2d2d30;
     border-bottom: 1px solid #3c3c3c;
     position: sticky;

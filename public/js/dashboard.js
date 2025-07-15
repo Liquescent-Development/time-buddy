@@ -866,8 +866,13 @@ const Dashboard = {
         const timeFilter = `time >= ${timeRange.from}ms and time <= ${timeRange.to}ms`;
         resolvedQuery = resolvedQuery.replace(/\$timeFilter/g, timeFilter);
         
-        // Default interval (could be made configurable later)
-        resolvedQuery = resolvedQuery.replace(/\$__interval/g, '1m');
+        // Handle $__interval - use dashboard's refresh interval
+        let interval = '1m'; // default fallback
+        if (this.selectedDashboard && this.selectedDashboard.refresh) {
+            interval = this.selectedDashboard.refresh;
+            console.log('🔧 Using dashboard refresh interval:', interval);
+        }
+        resolvedQuery = resolvedQuery.replace(/\$__interval/g, interval);
         
         console.log('🔧 After built-in variables:', resolvedQuery);
         
@@ -1205,16 +1210,21 @@ const Dashboard = {
                     query: target.query,
                     rawSql: target.rawSql,
                     expr: target.expr,
+                    expression: target.expression,
                     hide: target.hide,
-                    datasource: target.datasource
+                    datasource: target.datasource,
+                    // Log all properties to see what we're missing
+                    allProperties: Object.keys(target)
                 });
             });
             
-            // Execute all targets for complex panels (filter out hidden targets)
+            // Execute all targets for complex panels
+            // Include ALL targets that have query content, even if hidden
+            // Hidden queries are needed when expressions reference them
             queries = query.panel.targets
-                .filter(target => !target.hide && (target.query || target.rawSql || target.expr))
+                .filter(target => (target.query || target.rawSql || target.expr || target.expression))
                 .map((target, index) => {
-                    let targetQuery = target.query || target.rawSql || target.expr || '';
+                    let targetQuery = target.query || target.rawSql || target.expr || target.expression || '';
                     
                     // Resolve template variables for each target
                     targetQuery = this.resolveTemplateVariables(targetQuery, timeRange);
