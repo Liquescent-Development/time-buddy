@@ -103,6 +103,9 @@ const Interface = {
             case 'history':
                 this.loadHistory();
                 break;
+            case 'analytics':
+                this.loadAnalytics();
+                break;
         }
     },
 
@@ -1566,6 +1569,15 @@ const Interface = {
             FileExplorer.initialize();
         } else {
             console.error('FileExplorer module not available');
+        }
+    },
+
+    loadAnalytics() {
+        console.log('Interface.loadAnalytics called');
+        if (typeof Analytics !== 'undefined') {
+            Analytics.initialize();
+        } else {
+            console.error('Analytics module not available');
         }
     },
 

@@ -19,6 +19,31 @@ const Schema = {
     isLoadingFieldTags: false,
     isLoadingTagValues: false,
     
+    // Computed property to indicate if schema is loaded
+    get loadedSchema() {
+        if (!this.currentDatasourceId) return null;
+        
+        if (this.currentDatasourceType === 'influxdb') {
+            return {
+                measurements: this.influxMeasurements.length > 0 ? 
+                    this.influxMeasurements.reduce((acc, measurement) => {
+                        acc[measurement] = {
+                            fields: this.influxFields[measurement] || {},
+                            tags: this.influxTags[measurement] || {}
+                        };
+                        return acc;
+                    }, {}) : null
+            };
+        } else if (this.currentDatasourceType === 'prometheus') {
+            return {
+                metrics: this.prometheusMetrics,
+                labels: this.prometheusLabels
+            };
+        }
+        
+        return null;
+    },
+    
     // Cache management
     schemaCache: {}, // Cache schema data per datasource: { datasourceId: { type, data, timestamp } }
     cacheExpiry: 5 * 60 * 1000, // 5 minutes cache expiry
