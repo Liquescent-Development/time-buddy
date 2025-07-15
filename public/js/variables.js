@@ -285,14 +285,84 @@ const Variables = {
     substituteVariables(queryText) {
         let substitutedQuery = queryText;
         
-        // Only use variables for current connection
+        // 1. First handle built-in Grafana variables (like $timeFilter, $__interval)
+        const timeFromHours = parseFloat(document.getElementById('timeFrom').value) || 1;
+        const timeToHours = parseFloat(document.getElementById('timeTo').value) || 0;
+        const now = Date.now();
+        const fromTime = now - (timeFromHours * 60 * 60 * 1000);
+        const toTime = now - (timeToHours * 60 * 60 * 1000);
+        
+        const timeFilter = `time >= ${fromTime}ms and time <= ${toTime}ms`;
+        substitutedQuery = substitutedQuery.replace(/\$timeFilter/g, timeFilter);
+        
+        // Handle $__interval - check if we're in dashboard context or query editor context
+        let interval = '1m'; // default fallback
+        
+        // Check if we're in dashboard context (has selected dashboard)
+        if (typeof Dashboard !== 'undefined' && Dashboard.selectedDashboard) {
+            // Use dashboard's refresh interval if available
+            if (Dashboard.selectedDashboard.refresh) {
+                interval = Dashboard.selectedDashboard.refresh;
+                console.log('Variables.substituteVariables: Using dashboard interval:', interval);
+            }
+        } else {
+            // We're in query editor context - use user-configurable interval
+            // First try to get from the active tab's interval selector
+            let intervalElement = null;
+            if (typeof Interface !== 'undefined' && Interface.activeTab) {
+                const activeTabContainer = document.querySelector(`[data-tab-id="${Interface.activeTab}"] .tab-interval-select`);
+                if (activeTabContainer) {
+                    intervalElement = activeTabContainer;
+                }
+            }
+            
+            // Fallback to the legacy global interval selector
+            if (!intervalElement) {
+                intervalElement = document.getElementById('queryInterval');
+            }
+            
+            if (intervalElement && intervalElement.value) {
+                interval = intervalElement.value;
+                console.log('Variables.substituteVariables: Using query editor interval:', interval);
+            }
+        }
+        
+        substitutedQuery = substitutedQuery.replace(/\$__interval/g, interval);
+        
+        console.log('Variables.substituteVariables: After built-in variables:', substitutedQuery);
+        
+        // 2. Get dashboard variables if available
+        let dashboardVariables = {};
+        if (typeof Dashboard !== 'undefined' && Dashboard.getDashboardVariables) {
+            dashboardVariables = Dashboard.getDashboardVariables();
+            console.log('Found dashboard variables for substitution:', dashboardVariables);
+        }
+        
+        // 3. Substitute dashboard variables (they take priority over user-created ones)
+        Object.entries(dashboardVariables).forEach(([varName, varValue]) => {
+            // Skip built-in variables that we already handled
+            if (varName === 'timeFilter' || varName === '__interval') {
+                return;
+            }
+            
+            // Handle both $varName and ${varName} formats
+            const regex1 = new RegExp(`\\$${varName}\\b`, 'g');
+            const regex2 = new RegExp(`\\$\\{${varName}\\}`, 'g');
+            
+            substitutedQuery = substitutedQuery.replace(regex1, varValue);
+            substitutedQuery = substitutedQuery.replace(regex2, varValue);
+            
+            console.log(`Variables.substituteVariables: Replaced $${varName} with "${varValue}"`);
+        });
+        
+        // 4. Finally substitute user-created variables (as fallbacks)
         const currentConnectionId = GrafanaConfig.currentConnectionId;
         const filteredVariables = currentConnectionId 
             ? this.variables.filter(v => v.connectionId === currentConnectionId)
             : [];
         
         if (filteredVariables.length > 0) {
-            console.log('Found variables for substitution:', filteredVariables.map(v => ({ name: v.name, selectedValue: v.selectedValue, selectedValues: v.selectedValues })));
+            console.log('Found user-created variables for substitution:', filteredVariables.map(v => ({ name: v.name, selectedValue: v.selectedValue, selectedValues: v.selectedValues })));
         }
         
         for (const variable of filteredVariables) {
