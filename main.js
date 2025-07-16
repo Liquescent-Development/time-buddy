@@ -83,44 +83,30 @@ async function startFrontendServer() {
     }
 
     return new Promise((resolve, reject) => {
-        const serverPath = path.join(__dirname, 'server.js');
-        console.log(`Starting frontend server: ${serverPath}`);
-        
-        serverProcess = spawn('node', [serverPath], {
-            stdio: 'pipe',
-            env: { ...process.env, PORT: SERVER_PORT }
-        });
-
-        serverProcess.stdout.on('data', (data) => {
-            console.log('Server:', data.toString());
-            if (data.toString().includes('listening on port')) {
-                resolve();
-            }
-        });
-
-        serverProcess.stderr.on('data', (data) => {
-            const errorStr = data.toString();
-            console.error('Server Error:', errorStr);
+        try {
+            // In production, server.js is unpacked from asar
+            const serverPath = app.isPackaged 
+                ? path.join(__dirname, '..', 'app.asar.unpacked', 'server.js')
+                : path.join(__dirname, 'server.js');
             
-            // If port is already in use, resolve anyway (server already running)
-            if (errorStr.includes('EADDRINUSE')) {
-                console.log('Server already running, continuing...');
+            console.log(`Starting frontend server: ${serverPath}`);
+            
+            // Require the server directly instead of spawning it
+            process.env.PORT = SERVER_PORT;
+            process.env.NODE_ENV = 'production';
+            
+            require(serverPath);
+            
+            // Give the server a moment to start
+            setTimeout(() => {
+                console.log('Frontend server started successfully');
                 resolve();
-            }
-        });
-
-        serverProcess.on('error', (error) => {
+            }, 1000);
+            
+        } catch (error) {
             console.error('Failed to start server:', error);
-            // Don't reject - the server might already be running
-            console.log('Server start failed, but continuing anyway...');
-            resolve();
-        });
-
-        // Timeout after 5 seconds
-        setTimeout(() => {
-            console.log('Frontend server startup timeout, assuming server is ready...');
-            resolve(); // Resolve anyway, the server might be starting
-        }, 5000);
+            resolve(); // Don't block the app
+        }
     });
 }
 
@@ -134,10 +120,19 @@ async function startMockServer() {
     }
 
     return new Promise((resolve, reject) => {
-        const mockServerPath = path.join(__dirname, 'mock_server.js');
+        // In production, mock_server.js is unpacked from asar
+        const mockServerPath = app.isPackaged 
+            ? path.join(__dirname, '..', 'app.asar.unpacked', 'mock_server.js')
+            : path.join(__dirname, 'mock_server.js');
+        
         console.log(`Starting mock Grafana server: ${mockServerPath}`);
         
-        mockServerProcess = spawn('node', [mockServerPath], {
+        // Use the Node.js runtime that comes with Electron
+        const nodePath = process.platform === 'darwin' 
+            ? path.join(path.dirname(process.execPath), '..', 'Frameworks', 'Electron Framework.framework', 'Versions', 'A', 'Resources', 'node')
+            : 'node';
+        
+        mockServerProcess = spawn(nodePath, [mockServerPath], {
             stdio: 'pipe',
             env: { ...process.env, PORT: MOCK_SERVER_PORT }
         });
@@ -181,7 +176,7 @@ function createMainWindow() {
         height: 1000,
         minWidth: 1200,
         minHeight: 800,
-        icon: path.join(__dirname, 'assets', 'icon.png'),
+        icon: path.join(__dirname, 'assets', 'logo.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
