@@ -81,6 +81,18 @@ body {
     border: 1px solid rgba(46, 213, 115, 0.4) !important;
 }
 
+.connection-status.ai-disconnected {
+    color: #ff9f00 !important;
+    background-color: rgba(255, 159, 0, 0.15) !important;
+    border: 1px solid rgba(255, 159, 0, 0.4) !important;
+}
+
+.connection-status.ai-connected {
+    color: #5f27cd !important;
+    background-color: rgba(95, 39, 205, 0.15) !important;
+    border: 1px solid rgba(95, 39, 205, 0.4) !important;
+}
+
 .query-language-indicator {
     font-size: 11px;
     color: #569cd6;
@@ -102,9 +114,8 @@ body {
 
 /* Main Content Area (everything except activity bar) */
 .main-content-area {
-    display: flex;
     flex: 1;
-    flex-direction: row; /* Sidebar and editor content side by side */
+    display: flex;
     overflow: hidden;
 }
 
@@ -122,6 +133,8 @@ body {
     flex: 1;
     flex-direction: column; /* Editor and panel stacked vertically */
     overflow: hidden;
+    width: 0; /* Force flex item to shrink and grow properly */
+    min-width: 0; /* Allow flex item to shrink below content size */
 }
 
 /* Activity Bar */
@@ -174,6 +187,7 @@ body {
 /* Sidebar */
 .sidebar {
     width: 300px;
+    flex-shrink: 0;
     min-width: 200px;
     max-width: 600px;
     background-color: #252526;
@@ -211,6 +225,19 @@ body {
     color: #cccccc;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.header-actions .icon-button {
+    padding: 4px;
+    position: relative;
+    float: none;
+    z-index: auto;
 }
 
 .sidebar-content {
@@ -3752,6 +3779,94 @@ body {
     display: block;
 }
 
+/* Analytics panel specific scrolling - Create a scrollable analytics environment */
+/* Override parent containers when analytics is active - DISABLED - CAUSES LAYOUT ISSUES */
+/*
+body:has(#analyticsPanel.active) .main-layout,
+body:has(#analyticsPanel.active) .main-content-area,
+body:has(#analyticsPanel.active) .sidebar {
+    overflow: visible !important;
+}
+*/
+
+/* Alternative fallback for browsers without :has() support - DISABLED - CAUSES LAYOUT ISSUES */
+/*
+.analytics-active .main-layout,
+.analytics-active .main-content-area,
+.analytics-active .sidebar {
+    overflow: visible !important;
+}
+*/ 
+
+#analyticsPanel {
+    position: relative !important;
+    overflow: hidden !important;
+    height: 100% !important;
+}
+
+#analyticsPanel.active {
+    display: flex !important;
+    flex-direction: column !important;
+}
+
+#analyticsPanel .sidebar-header {
+    flex-shrink: 0 !important;
+    z-index: 1 !important;
+    position: relative !important;
+}
+
+/* DISABLED - CAUSES LAYOUT ISSUES - ABSOLUTE POSITIONING BREAKS LAYOUT */
+/*
+#analyticsPanel .sidebar-content {
+    position: absolute !important;
+    top: 35px !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 8px 12px 24px 12px !important;
+    scrollbar-width: thin !important;
+    scrollbar-color: #454545 #252526 !important;
+}
+*/
+
+/* Webkit scrollbar styling for analytics */
+#analyticsPanel .sidebar-content::-webkit-scrollbar {
+    width: 8px !important;
+}
+
+#analyticsPanel .sidebar-content::-webkit-scrollbar-track {
+    background: #252526 !important;
+}
+
+#analyticsPanel .sidebar-content::-webkit-scrollbar-thumb {
+    background: #454545 !important;
+    border-radius: 4px !important;
+}
+
+#analyticsPanel .sidebar-content::-webkit-scrollbar-thumb:hover {
+    background: #555555 !important;
+}
+
+#analyticsPanel .analytics-setup,
+#analyticsPanel .analytics-results {
+    flex-shrink: 0 !important;
+    margin-bottom: 16px !important;
+    width: 100% !important;
+}
+
+/* Ensure the analytics results container can expand */
+#analyticsPanel .analytics-results {
+    max-height: none !important;
+    overflow: visible !important;
+}
+
+/* Add some padding at the bottom for better scrolling */
+#analyticsPanel .sidebar-content > *:last-child {
+    margin-bottom: 32px !important;
+}
+
 .model-status {
     display: flex;
     align-items: center;
@@ -3975,6 +4090,277 @@ body {
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid #2d2d30;
+    overflow-y: auto;
+    max-height: none; /* Allow content to expand */
+}
+
+/* Analytics Visualization Styles */
+.analysis-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #2d2d30;
+}
+
+.analysis-results-header h4 {
+    margin: 0;
+    color: #cccccc;
+    font-size: 16px;
+}
+
+.analysis-summary {
+    display: flex;
+    gap: 12px;
+}
+
+.metric-badge, .confidence-badge {
+    background-color: #2d2d30;
+    color: #cccccc;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    border: 1px solid #454545;
+}
+
+.analysis-charts {
+    margin: 20px 0;
+}
+
+.chart-container {
+    background-color: #1e1e1e;
+    border: 1px solid #2d2d30;
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.chart-container canvas {
+    max-width: 100%;
+    height: 400px !important;
+}
+
+.analysis-insights {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-top: 20px;
+    grid-auto-rows: min-content; /* Allow rows to size to content */
+}
+
+.severity-distribution, .anomaly-list, .insights-panel {
+    background-color: #252526;
+    border: 1px solid #2d2d30;
+    border-radius: 4px;
+    padding: 16px;
+}
+
+.severity-distribution h5, .anomaly-list h5, .insights-panel h5 {
+    margin: 0 0 12px 0;
+    color: #cccccc;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.severity-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.severity-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.severity-label {
+    min-width: 80px;
+    font-size: 12px;
+    color: #cccccc;
+    text-transform: capitalize;
+}
+
+.severity-progress {
+    flex: 1;
+    height: 6px;
+    background-color: #1e1e1e;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.severity-fill {
+    height: 100%;
+    border-radius: 3px;
+}
+
+.severity-count {
+    min-width: 30px;
+    font-size: 12px;
+    color: #858585;
+    text-align: right;
+}
+
+.anomalies-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 400px; /* Increased from 300px */
+    overflow-y: auto;
+}
+
+.anomaly-item {
+    background-color: #1e1e1e;
+    border: 1px solid #2d2d30;
+    border-radius: 4px;
+    padding: 12px;
+}
+
+.anomaly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.anomaly-time {
+    font-size: 11px;
+    color: #858585;
+}
+
+.anomaly-severity {
+    font-size: 11px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.anomaly-details {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.anomaly-value, .anomaly-score, .anomaly-type {
+    color: #cccccc;
+}
+
+.anomaly-explanation {
+    font-size: 12px;
+    color: #858585;
+    line-height: 1.4;
+}
+
+.insights-list ul {
+    margin: 0;
+    padding-left: 16px;
+}
+
+.insights-list li {
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: #cccccc;
+    line-height: 1.4;
+}
+
+.show-more {
+    text-align: center;
+    font-size: 12px;
+    color: #858585;
+    font-style: italic;
+    margin-top: 8px;
+}
+
+.export-controls {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #2d2d30;
+}
+
+.export-buttons {
+    display: flex;
+    gap: 8px;
+}
+
+.export-btn {
+    background-color: #2d2d30;
+    color: #cccccc;
+    border: 1px solid #454545;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.export-btn:hover {
+    background-color: #383838;
+}
+
+.analysis-loading {
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #2d2d30;
+    border-top: 3px solid #007acc;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-steps {
+    margin: 20px 0;
+}
+
+.loading-step {
+    padding: 4px 0;
+    font-size: 12px;
+    color: #858585;
+}
+
+.loading-step.active {
+    color: #007acc;
+}
+
+.loading-step.completed {
+    color: #4CAF50;
+}
+
+.loading-step.error {
+    color: #f44336;
+}
+
+.loading-config {
+    margin-top: 16px;
+    font-size: 12px;
+    color: #858585;
+    background-color: #252526;
+    padding: 12px;
+    border-radius: 4px;
+    text-align: left;
+}
+
+/* Responsive adjustments for analytics */
+@media (max-width: 1200px) {
+    .analysis-insights {
+        grid-template-columns: 1fr; /* Stack vertically on smaller screens */
+        gap: 16px;
+    }
+}
+
+/* Ensure analytics panel content is properly contained */
+#analyticsPanel .analytics-results .analysis-insights {
+    margin-bottom: 20px; /* Add bottom margin for scroll visibility */
 }
 
 .results-header {
@@ -4033,4 +4419,915 @@ body {
     100% {
         opacity: 1;
     }
+}
+
+/* Phase 2 Analytics Visualization Styles */
+
+/* Analysis Loading States */
+.analysis-loading {
+    text-align: center;
+    padding: 32px 16px;
+    color: #cccccc;
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #454545;
+    border-top: 3px solid #007acc;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.loading-steps {
+    margin: 16px 0;
+    text-align: left;
+    max-width: 300px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.loading-step {
+    padding: 4px 0;
+    color: #666666;
+    font-size: 11px;
+    opacity: 0.5;
+    transition: all 0.3s ease;
+}
+
+.loading-step.active {
+    color: #007acc;
+    opacity: 1;
+    font-weight: 500;
+}
+
+.loading-step.completed {
+    color: #4CAF50;
+    opacity: 1;
+    font-weight: 500;
+}
+
+.loading-step.error {
+    color: #f44336;
+    opacity: 1;
+    font-weight: 500;
+}
+
+.loading-config {
+    margin-top: 16px;
+    padding: 12px;
+    background: #2d2d30;
+    border-radius: 4px;
+    font-size: 11px;
+    border: 1px solid #454545;
+}
+
+/* Analysis Results Visualization */
+.analysis-results-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #454545;
+}
+
+.analysis-results-header h4 {
+    margin: 0;
+    color: #f46800;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.analysis-summary {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.metric-badge,
+.confidence-badge {
+    padding: 4px 8px;
+    background: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #cccccc;
+}
+
+.metric-badge strong {
+    color: #f46800;
+}
+
+.confidence-badge {
+    background: rgba(0, 122, 204, 0.1);
+    border-color: #007acc;
+    color: #007acc;
+}
+
+/* Chart Container */
+.analysis-charts {
+    margin: 16px 0;
+}
+
+.chart-container {
+    background: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    padding: 16px;
+    margin-bottom: 16px;
+    position: relative;
+    height: 400px;
+}
+
+/* Analysis Insights Grid */
+.analysis-insights {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+}
+
+.analysis-insights > div {
+    background: #2d2d30;
+    border: 1px solid #454545;
+    border-radius: 4px;
+    padding: 12px;
+}
+
+.analysis-insights h5 {
+    margin: 0 0 8px 0;
+    color: #f46800;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+/* Severity Distribution */
+.severity-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.severity-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+}
+
+.severity-label {
+    width: 60px;
+    color: #cccccc;
+    font-weight: 500;
+    text-transform: capitalize;
+}
+
+.severity-progress {
+    flex: 1;
+    height: 16px;
+    background: #1e1e1e;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.severity-fill {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.severity-count {
+    width: 20px;
+    text-align: right;
+    color: #999999;
+    font-weight: 500;
+}
+
+/* Anomalies List */
+.anomalies-grid {
+    max-height: 300px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.anomaly-item {
+    background: #1e1e1e;
+    border: 1px solid #454545;
+    border-radius: 3px;
+    padding: 8px;
+    font-size: 11px;
+}
+
+.anomaly-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.anomaly-time {
+    color: #999999;
+    font-size: 10px;
+}
+
+.anomaly-severity {
+    font-weight: bold;
+    font-size: 10px;
+}
+
+.anomaly-details {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 8px;
+    margin: 4px 0;
+    font-size: 10px;
+    color: #cccccc;
+}
+
+.anomaly-explanation {
+    margin-top: 4px;
+    color: #999999;
+    font-size: 10px;
+    font-style: italic;
+}
+
+/* Insights Lists */
+.insights-list {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.patterns-section,
+.recommendations-section,
+.uncertainty-section {
+    margin-bottom: 12px;
+}
+
+.patterns-section h6,
+.recommendations-section h6,
+.uncertainty-section h6 {
+    margin: 0 0 4px 0;
+    color: #f46800;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.insights-list ul {
+    margin: 0;
+    padding-left: 16px;
+    list-style: disc;
+}
+
+.insights-list li {
+    color: #cccccc;
+    font-size: 11px;
+    line-height: 1.4;
+    margin-bottom: 2px;
+}
+
+/* Forecast Information */
+.forecast-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+    font-size: 11px;
+}
+
+.info-item label {
+    color: #999999;
+    font-weight: 500;
+}
+
+.info-item span {
+    color: #cccccc;
+    font-weight: bold;
+}
+
+/* Prediction Table */
+.prediction-table-container {
+    max-height: 250px;
+    overflow: auto;
+}
+
+.prediction-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+}
+
+.prediction-table th,
+.prediction-table td {
+    padding: 4px 6px;
+    text-align: left;
+    border-bottom: 1px solid #454545;
+}
+
+.prediction-table th {
+    background: #1e1e1e;
+    color: #f46800;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+}
+
+.prediction-table td {
+    color: #cccccc;
+}
+
+.prediction-table strong {
+    color: #007acc;
+}
+
+/* Trend Analysis */
+.trend-grid,
+.seasonality-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+
+.trend-item,
+.seasonality-item {
+    background: #1e1e1e;
+    border: 1px solid #454545;
+    border-radius: 3px;
+    padding: 8px;
+}
+
+.trend-item h6,
+.seasonality-item h6 {
+    margin: 0 0 4px 0;
+    color: #f46800;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.trend-direction {
+    font-weight: bold;
+    font-size: 12px;
+    margin-bottom: 2px;
+}
+
+.trend-direction.increasing {
+    color: #4caf50;
+}
+
+.trend-direction.decreasing {
+    color: #f44336;
+}
+
+.trend-direction.stable {
+    color: #ffc107;
+}
+
+.trend-strength,
+.trend-significance,
+.trend-rate,
+.seasonality-strength,
+.seasonality-description,
+.seasonality-peaks {
+    font-size: 10px;
+    color: #cccccc;
+    margin-bottom: 2px;
+}
+
+/* Export Controls */
+.export-controls {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #454545;
+}
+
+.export-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+.export-btn {
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px solid #454545;
+    border-radius: 3px;
+    color: #cccccc;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.export-btn:hover {
+    background: #2d2d30;
+    border-color: #007acc;
+    color: #007acc;
+}
+
+/* Raw Results */
+.raw-results {
+    max-height: 400px;
+    overflow: auto;
+}
+
+.results-meta {
+    font-size: 10px;
+    color: #999999;
+    margin-bottom: 8px;
+}
+
+.results-content pre {
+    background: #1e1e1e;
+    border: 1px solid #454545;
+    border-radius: 3px;
+    padding: 12px;
+    font-size: 10px;
+    color: #cccccc;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+    max-height: 300px;
+    overflow: auto;
+}
+
+/* Error States */
+.analysis-error {
+    text-align: center;
+    padding: 32px 16px;
+    color: #f44336;
+}
+
+.analysis-error h4 {
+    margin: 0 0 8px 0;
+    color: #f44336;
+}
+
+.retry-btn {
+    margin-top: 12px;
+    padding: 8px 16px;
+    background: #f44336;
+    border: none;
+    border-radius: 3px;
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.retry-btn:hover {
+    background: #d32f2f;
+}
+
+/* Empty States */
+.empty-state {
+    text-align: center;
+    padding: 16px;
+    color: #999999;
+    font-size: 11px;
+    font-style: italic;
+}
+
+.show-more {
+    text-align: center;
+    padding: 8px;
+    color: #007acc;
+    font-size: 10px;
+    border-top: 1px solid #454545;
+    margin-top: 8px;
+    cursor: pointer;
+}
+
+.show-more:hover {
+    background: #2d2d30;
+}
+
+/* Analytics Results Modal */
+.analytics-results-modal {
+    min-width: 900px;
+    max-width: 95vw;
+    max-height: 90vh;
+}
+
+.analytics-modal-content {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(90vh - 120px);
+}
+
+.analytics-results-info {
+    padding: 16px 20px;
+    background-color: #252526;
+    border-bottom: 1px solid #3c3c3c;
+    display: flex;
+    gap: 24px;
+    flex-shrink: 0;
+}
+
+.analytics-results-info .info-item {
+    font-size: 12px;
+    color: #cccccc;
+}
+
+.analytics-results-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background-color: #1e1e1e;
+}
+
+/* Ensure charts and content in modal scale properly */
+.analytics-results-modal .analysis-charts {
+    max-width: 100%;
+}
+
+.analytics-results-modal .chart-container {
+    max-width: 100%;
+    height: 400px;
+    margin: 0 auto;
+}
+
+.analytics-results-modal canvas {
+    max-width: 100% !important;
+    height: auto !important;
+}
+
+/* AI Analytics Section Styling */
+.analysis-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    background-color: #252526;
+    border-radius: 4px;
+    padding: 4px;
+}
+
+.tab-button {
+    flex: 1;
+    background-color: transparent;
+    border: none;
+    color: #858585;
+    padding: 8px 12px;
+    border-radius: 3px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.1s ease;
+    font-family: inherit;
+}
+
+.tab-button:hover {
+    background-color: #3c3c3c;
+    color: #cccccc;
+}
+
+.tab-button.active {
+    background-color: #007acc;
+    color: #ffffff;
+}
+
+.analysis-options {
+    display: none;
+    margin-bottom: 16px;
+}
+
+.analysis-options.active {
+    display: block;
+}
+
+.form-section {
+    margin-bottom: 24px;
+}
+
+.section-header {
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #3c3c3c;
+}
+
+.section-header h4 {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #858585;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.select-input {
+    width: 100%;
+    background-color: #3c3c3c;
+    border: 1px solid #2d2d30;
+    border-radius: 3px;
+    padding: 8px 12px;
+    color: #cccccc;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.1s ease;
+}
+
+.select-input:focus {
+    outline: none;
+    border-color: #007acc;
+    box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.2);
+}
+
+.select-input option {
+    background-color: #3c3c3c;
+    color: #cccccc;
+}
+
+.form-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid #3c3c3c;
+}
+
+/* AI Connection items - match regular connection styling exactly */
+.ai-connection-item {
+    padding: 4px 8px;
+    margin-bottom: 1px;
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    transition: all 0.1s ease;
+}
+
+.ai-connection-item:hover {
+    background-color: #37373d;
+}
+
+.ai-connection-item.active {
+    background-color: #094771;
+    color: #ffffff;
+    border-left: 3px solid #007acc;
+}
+
+.ai-connection-item .connection-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.ai-connection-item .connection-name {
+    font-size: 13px;
+    color: #cccccc;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.ai-connection-item .connection-url {
+    font-size: 11px;
+    color: #858585;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.ai-connection-item .connection-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.ai-connection-item:hover .connection-actions {
+    opacity: 1;
+}
+
+.ai-connection-item .connection-actions .icon-button {
+    padding: 2px;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.ai-connection-item .connection-status {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background-color: #858585;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-left: 8px;
+}
+
+.ai-connection-item.connected .connection-status {
+    background-color: #2ed573 !important;
+}
+
+.ai-connection-item.connecting .connection-status {
+    background-color: #ffa500 !important;
+}
+
+.connection-item .detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    margin-bottom: 4px;
+}
+
+.connection-item .detail-label {
+    color: #858585;
+}
+
+.connection-item .detail-value {
+    color: #cccccc;
+    font-weight: 500;
+}
+
+/* Custom model field */
+#customModelGroup {
+    margin-top: 8px;
+}
+
+/* Status indicators */
+.status-indicator.connecting {
+    background-color: #ffa500 !important;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+/* Fix AI Analytics Layout Issues */
+#analyticsPanel .sidebar-content {
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding: 8px 12px !important;
+    height: auto !important;
+}
+
+#analyticsPanel .section-header {
+    margin-bottom: 12px;
+    margin-top: 12px;
+}
+
+#analyticsPanel .section-header:first-child {
+    margin-top: 0;
+}
+
+/* Reduce spacing after Time Range specifically */
+#analyticsPanel .form-group:has(select) + .section-header,
+#analyticsPanel .form-section:last-of-type + .section-header {
+    margin-top: 8px;
+}
+
+#analyticsPanel .form-section {
+    margin-bottom: 16px;
+    clear: both;
+}
+
+#analyticsPanel .analysis-tabs {
+    margin-bottom: 16px;
+    clear: both;
+}
+
+#analyticsPanel .analysis-options {
+    margin-bottom: 16px;
+    clear: both;
+}
+
+/* Ensure ANALYSIS TYPE section is visible */
+#analyticsPanel .analysis-type-section {
+    margin-bottom: 16px;
+    clear: both;
+    position: relative;
+    overflow: visible;
+}
+
+#analyticsPanel .analysis-type-section .form-group {
+    margin-bottom: 12px;
+}
+
+#analyticsPanel .slider-container {
+    margin-bottom: 16px;
+    clear: both;
+    position: relative;
+    overflow: visible;
+    width: 100%;
+    max-width: 240px; /* Constrain slider width for 300px sidebar */
+}
+
+/* Alert threshold specific styling */
+#analyticsPanel .slider-with-value {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#analyticsPanel .slider-with-value input[type="range"] {
+    flex: 1;
+    min-width: 0;
+    max-width: 180px;
+}
+
+#analyticsPanel .slider-value {
+    font-size: 11px;
+    color: #ffa500;
+    font-weight: 600;
+    min-width: 30px;
+    text-align: right;
+}
+
+#analyticsPanel .form-group label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: #cccccc;
+}
+
+#analyticsPanel select,
+#analyticsPanel input {
+    width: 100%;
+    margin-bottom: 8px;
+}
+
+#analyticsPanel .form-actions {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    clear: both;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+#analyticsPanel .form-actions button {
+    width: 100%;
+    position: relative;
+    z-index: 1;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 36px;
+}
+
+#analyticsPanel .connection-item {
+    margin-bottom: 12px;
+    clear: both;
+}
+
+/* Ensure proper spacing for all form groups in analytics */
+#analyticsPanel .form-group {
+    margin-bottom: 16px;
+    clear: both;
+}
+
+/* Fix button overlap issues */
+#analyticsPanel .primary-button,
+#analyticsPanel .secondary-button,
+#analyticsPanel .icon-button {
+    position: relative;
+    float: none;
+    clear: none;
+}
+
+/* Prevent floating issues in analytics panel */
+#analyticsPanel * {
+    box-sizing: border-box;
+}
+
+#analyticsPanel .icon-button {
+    z-index: auto;
 }

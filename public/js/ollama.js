@@ -6,7 +6,8 @@ const OllamaService = {
     config: {
         endpoint: null, // User-provided endpoint
         model: 'llama3.1:8b-instruct-q4_K_M', // Default recommended model
-        timeout: 30000, // 30 second timeout
+        timeout: 120000, // 2 minute timeout for AI analysis
+        connectionTimeout: 5000, // 5 second timeout for connection tests
         maxRetries: 3,
         retryDelay: 1000 // 1 second initial retry delay
     },
@@ -52,10 +53,17 @@ const OllamaService = {
     async testConnection() {
         try {
             console.log('🔍 Testing Ollama connection to:', this.config.endpoint);
+            
+            // Create abort controller with compatibility check
+            const abortController = this.createAbortController();
+            const timeoutId = setTimeout(() => abortController.abort(), this.config.connectionTimeout);
+            
             const response = await fetch(`${this.config.endpoint}/api/tags`, {
                 method: 'GET',
-                signal: AbortSignal.timeout(5000) // 5 second timeout for connection test
+                signal: abortController.signal
             });
+            
+            clearTimeout(timeoutId);
             
             const isOk = response.ok;
             console.log('🔗 Connection test result:', isOk ? 'SUCCESS' : 'FAILED');
@@ -123,9 +131,9 @@ const OllamaService = {
             stream: false,
             options: {
                 temperature: options.temperature || 0.1, // Low temperature for analytical tasks
-                num_predict: options.max_tokens || 2048,
+                ...(options.num_predict !== -1 && { num_predict: options.num_predict || 4096 }), // -1 means infinite (omit parameter)
                 top_p: options.top_p || 0.9,
-                num_ctx: options.context_length || 4096,
+                num_ctx: options.num_ctx || 8192, // Default 8192 tokens for context
                 ...options
             }
         };
@@ -140,12 +148,20 @@ const OllamaService = {
         let lastError;
         for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
             try {
+                const abortController = this.createAbortController();
+                const timeoutId = setTimeout(() => {
+                    console.log(`⏰ Request timeout after ${this.config.timeout}ms on attempt ${attempt}`);
+                    abortController.abort();
+                }, this.config.timeout);
+                
                 const response = await fetch(`${this.config.endpoint}/api/generate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestBody),
-                    signal: AbortSignal.timeout(this.config.timeout)
+                    signal: abortController.signal
                 });
+                
+                clearTimeout(timeoutId);
 
                 if (!response.ok) {
                     throw new Error(`Ollama API error: ${response.status} ${response.statusText}`);
@@ -175,7 +191,14 @@ const OllamaService = {
 
             } catch (error) {
                 lastError = error;
-                console.warn(`🔄 Generation attempt ${attempt} failed:`, error.message);
+                
+                // Handle different error types
+                if (error.name === 'AbortError') {
+                    console.warn(`⏰ Request timed out on attempt ${attempt} after ${this.config.timeout}ms`);
+                    lastError = new Error(`Request timed out after ${this.config.timeout / 1000} seconds`);
+                } else {
+                    console.warn(`🔄 Generation attempt ${attempt} failed:`, error.message);
+                }
                 
                 if (attempt < this.config.maxRetries) {
                     const delay = this.config.retryDelay * Math.pow(2, attempt - 1); // Exponential backoff
@@ -226,6 +249,19 @@ const OllamaService = {
         this.isConnected = false;
         this.lastError = null;
         console.log('🔌 Ollama service disconnected');
+    },
+
+    // Create AbortController with compatibility check
+    createAbortController() {
+        if (typeof AbortController === 'undefined') {
+            console.warn('AbortController not supported in this browser');
+            // Return a mock controller for older browsers
+            return {
+                signal: null,
+                abort: () => console.warn('AbortController.abort() not supported')
+            };
+        }
+        return new AbortController();
     }
 };
 

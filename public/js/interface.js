@@ -1579,6 +1579,11 @@ const Interface = {
         } else {
             console.error('Analytics module not available');
         }
+        
+        // Load AI connections when analytics panel is opened
+        if (typeof loadAiConnections === 'function') {
+            loadAiConnections();
+        }
     },
 
     // Initialize resizers for sidebar and panel
@@ -1887,6 +1892,276 @@ async function saveConnection() {
     if (success) {
         hideConnectionDialog();
     }
+}
+
+// AI Connection Management Functions
+function showNewAiConnectionDialog() {
+    document.getElementById('aiConnectionDialogTitle').textContent = 'New AI Connection';
+    document.getElementById('aiConnectionName').value = '';
+    document.getElementById('aiEndpoint').value = 'http://localhost:11434';
+    document.getElementById('aiModel').value = 'llama3.1:8b-instruct-q4_K_M';
+    document.getElementById('customModelName').value = '';
+    document.getElementById('aiResponseTokens').value = '-1';
+    document.getElementById('aiContextSize').value = '16384';
+    document.getElementById('showAdvancedAiSettings').checked = false;
+    document.getElementById('advancedAiSettings').style.display = 'none';
+    document.getElementById('customModelGroup').style.display = 'none';
+    
+    // Clear any editing state
+    window.editingAiConnectionId = null;
+    
+    document.getElementById('aiConnectionDialog').style.display = 'flex';
+}
+
+function hideAiConnectionDialog() {
+    document.getElementById('aiConnectionDialog').style.display = 'none';
+    window.editingAiConnectionId = null;
+}
+
+function toggleAdvancedAiSettings() {
+    const checkbox = document.getElementById('showAdvancedAiSettings');
+    const advancedSettings = document.getElementById('advancedAiSettings');
+    advancedSettings.style.display = checkbox.checked ? 'block' : 'none';
+}
+
+async function saveAiConnection() {
+    const name = document.getElementById('aiConnectionName').value.trim();
+    const endpoint = document.getElementById('aiEndpoint').value.trim();
+    const model = document.getElementById('aiModel').value;
+    const customModel = document.getElementById('customModelName').value.trim();
+    const responseTokens = document.getElementById('aiResponseTokens').value;
+    const contextSize = document.getElementById('aiContextSize').value;
+    
+    if (!name || !endpoint) {
+        alert('Please fill in all required fields');
+        return;
+    }
+    
+    const aiConnection = {
+        id: window.editingAiConnectionId || Date.now().toString(),
+        name: name,
+        endpoint: endpoint,
+        model: model === 'custom' ? customModel : model,
+        responseTokens: parseInt(responseTokens),
+        contextSize: parseInt(contextSize),
+        status: 'disconnected',
+        createdAt: new Date().toISOString()
+    };
+    
+    // Save to storage
+    let aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    
+    if (window.editingAiConnectionId) {
+        // Update existing
+        const index = aiConnections.findIndex(conn => conn.id === window.editingAiConnectionId);
+        if (index !== -1) {
+            aiConnections[index] = aiConnection;
+        }
+    } else {
+        // Add new
+        aiConnections.push(aiConnection);
+    }
+    
+    localStorage.setItem('aiConnections', JSON.stringify(aiConnections));
+    
+    // Test connection
+    const success = await testAiConnectionInDialog(aiConnection);
+    
+    if (success) {
+        // Update the connection status
+        const updatedConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+        const connectionIndex = updatedConnections.findIndex(conn => conn.id === aiConnection.id);
+        if (connectionIndex !== -1) {
+            updatedConnections[connectionIndex].status = 'connected';
+            localStorage.setItem('aiConnections', JSON.stringify(updatedConnections));
+        }
+        
+        hideAiConnectionDialog();
+        loadAiConnections();
+        
+        // Update title bar status
+        if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+            window.Analytics.updateTitleBarStatus();
+        }
+    }
+}
+
+async function testAiConnectionInDialog(connection) {
+    try {
+        const response = await fetch(`${connection.endpoint}/api/tags`);
+        if (response.ok) {
+            return true;
+        } else {
+            alert('Failed to connect to AI service. Please check your endpoint URL.');
+            return false;
+        }
+    } catch (error) {
+        alert(`Connection failed: ${error.message}`);
+        return false;
+    }
+}
+
+function loadAiConnections() {
+    const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    const connectionList = document.getElementById('aiConnectionList');
+    
+    if (aiConnections.length === 0) {
+        connectionList.innerHTML = `
+            <div class="empty-state">
+                <div style="margin-bottom: 12px; color: #858585;">No AI connections configured</div>
+                <button class="primary-button" onclick="showNewAiConnectionDialog()" style="font-size: 12px; padding: 6px 12px;">
+                    Add First AI Connection
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    connectionList.innerHTML = aiConnections.map(connection => `
+        <div class="ai-connection-item ${connection.status === 'connected' ? 'connected' : ''}" 
+             onclick="connectToAiService('${connection.id}')">
+            <div class="connection-info">
+                <div class="connection-name">${connection.name}</div>
+                <div class="connection-url">${connection.endpoint}</div>
+            </div>
+            <div class="connection-actions">
+                <button class="icon-button" onclick="event.stopPropagation(); editAiConnection('${connection.id}')" title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                    </svg>
+                </button>
+                <button class="icon-button delete-connection-btn" onclick="event.stopPropagation(); deleteAiConnection('${connection.id}')" title="Delete">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="connection-status"></div>
+        </div>
+    `).join('');
+}
+
+function editAiConnection(connectionId) {
+    const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    const connection = aiConnections.find(conn => conn.id === connectionId);
+    
+    if (!connection) return;
+    
+    document.getElementById('aiConnectionDialogTitle').textContent = 'Edit AI Connection';
+    document.getElementById('aiConnectionName').value = connection.name;
+    document.getElementById('aiEndpoint').value = connection.endpoint;
+    
+    // Check if it's a custom model
+    const modelSelect = document.getElementById('aiModel');
+    const isCustomModel = ![...modelSelect.options].some(option => option.value === connection.model);
+    
+    if (isCustomModel) {
+        modelSelect.value = 'custom';
+        document.getElementById('customModelName').value = connection.model;
+        document.getElementById('customModelGroup').style.display = 'block';
+    } else {
+        modelSelect.value = connection.model;
+        document.getElementById('customModelGroup').style.display = 'none';
+    }
+    
+    document.getElementById('aiResponseTokens').value = connection.responseTokens || -1;
+    document.getElementById('aiContextSize').value = connection.contextSize || 16384;
+    
+    window.editingAiConnectionId = connectionId;
+    document.getElementById('aiConnectionDialog').style.display = 'flex';
+}
+
+function deleteAiConnection(connectionId) {
+    if (!confirm('Delete this AI connection?')) return;
+    
+    let aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    aiConnections = aiConnections.filter(conn => conn.id !== connectionId);
+    localStorage.setItem('aiConnections', JSON.stringify(aiConnections));
+    
+    loadAiConnections();
+    
+    // Update title bar status
+    if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+        window.Analytics.updateTitleBarStatus();
+    }
+}
+
+async function connectToAiService(connectionId) {
+    const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    const connection = aiConnections.find(conn => conn.id === connectionId);
+    
+    if (!connection) return;
+    
+    // Set connecting state
+    connection.status = 'connecting';
+    const connectionIndex = aiConnections.findIndex(conn => conn.id === connectionId);
+    aiConnections[connectionIndex] = connection;
+    localStorage.setItem('aiConnections', JSON.stringify(aiConnections));
+    loadAiConnections();
+    
+    try {
+        const response = await fetch(`${connection.endpoint}/api/tags`);
+        if (response.ok) {
+            connection.status = 'connected';
+            // Set this as the active AI connection
+            localStorage.setItem('activeAiConnection', connectionId);
+        } else {
+            connection.status = 'disconnected';
+        }
+    } catch (error) {
+        connection.status = 'disconnected';
+        console.error('AI connection failed:', error);
+    }
+    
+    // Update storage and UI
+    aiConnections[connectionIndex] = connection;
+    localStorage.setItem('aiConnections', JSON.stringify(aiConnections));
+    loadAiConnections();
+    
+    // Update title bar status
+    if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+        window.Analytics.updateTitleBarStatus();
+    }
+}
+
+function filterAiConnections() {
+    const searchTerm = document.getElementById('aiConnectionSearch').value.toLowerCase();
+    const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    
+    const filteredConnections = aiConnections.filter(connection => 
+        connection.name.toLowerCase().includes(searchTerm) ||
+        connection.endpoint.toLowerCase().includes(searchTerm)
+    );
+    
+    const connectionList = document.getElementById('aiConnectionList');
+    
+    if (filteredConnections.length === 0) {
+        connectionList.innerHTML = '<div class="empty-state" style="color: #858585;">No matching AI connections found</div>';
+        return;
+    }
+    
+    connectionList.innerHTML = filteredConnections.map(connection => `
+        <div class="ai-connection-item ${connection.status === 'connected' ? 'connected' : ''}" 
+             onclick="connectToAiService('${connection.id}')">
+            <div class="connection-info">
+                <div class="connection-name">${connection.name}</div>
+                <div class="connection-url">${connection.endpoint}</div>
+            </div>
+            <div class="connection-actions">
+                <button class="icon-button" onclick="event.stopPropagation(); editAiConnection('${connection.id}')" title="Edit">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                    </svg>
+                </button>
+                <button class="icon-button delete-connection-btn" onclick="event.stopPropagation(); deleteAiConnection('${connection.id}')" title="Delete">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="connection-status"></div>
+        </div>
+    `).join('');
 }
 
 // Global functions for compatibility

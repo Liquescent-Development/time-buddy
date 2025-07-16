@@ -7,6 +7,8 @@
     
     <!-- External Dependencies -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/2.29.3/index.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-adapter-date-fns/2.0.0/chartjs-adapter-date-fns.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/sql/sql.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/show-hint.min.js"></script>
@@ -31,6 +33,7 @@
                 <span class="app-name">Grafana Query IDE</span>
                 <div class="title-bar-controls">
                     <span class="connection-status disconnected" id="titleBarConnectionStatus">Not Connected</span>
+                    <span class="connection-status ai-disconnected" id="titleBarAiStatus">AI: Not Connected</span>
                 </div>
             </div>
         </div>
@@ -256,46 +259,61 @@
 
                         <!-- AI Analytics Panel -->
                         <div class="sidebar-panel" id="analyticsPanel">
-                            <div class="panel-header">
-                                <h3>🤖 AI Analytics</h3>
-                                <div class="model-status" id="modelStatus">
-                                    <span class="status-indicator offline"></span>
-                                    <span class="status-text">Not Connected</span>
-                                </div>
+                            <div class="sidebar-header">
+                                <h3>AI ANALYTICS</h3>
                             </div>
-
-                            <div class="analytics-setup">
-                                <div class="setup-section">
-                                    <h4>🔌 Ollama Configuration</h4>
-                                    <div class="form-group">
-                                        <label>Ollama Endpoint:</label>
-                                        <input type="url" id="ollamaEndpoint" 
-                                               placeholder="http://localhost:11434" 
-                                               value="http://localhost:11434">
+                            <div class="sidebar-content">
+                                <!-- AI Connections Section -->
+                                <div class="section-wrapper">
+                                    <div class="section-header">
+                                        <h4>AI Connections</h4>
+                                        <div style="display: flex; gap: 8px; align-items: center;">
+                                            <button class="icon-button" onclick="showNewAiConnectionDialog()" title="New AI Connection" style="background: #007acc; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                                </svg>
+                                            </button>
+                                        </div>
                                     </div>
+                                    <div class="search-container">
+                                        <input type="text" id="aiConnectionSearch" class="search-input" placeholder="Filter AI connections..." oninput="filterAiConnections()">
+                                    </div>
+                                    <div class="section-scrollable">
+                                        <div class="connection-list" id="aiConnectionList">
+                                            <!-- AI connections will be dynamically populated here -->
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Data Configuration Section -->
+                                <div class="section-header">
+                                    <h4>DATA CONFIGURATION</h4>
+                                </div>
+                                
+                                <div class="form-section">
                                     <div class="form-group">
-                                        <label>Model:</label>
-                                        <select id="selectedModel">
-                                            <option value="llama3.1:8b-instruct-q4_K_M">Llama 3.1 8B (Recommended)</option>
-                                            <option value="llama3.1:70b-instruct-q4_K_M">Llama 3.1 70B (High Performance)</option>
-                                            <option value="deepseek-math:7b-instruct-q4_K_M">DeepSeek Math 7B (Specialized)</option>
-                                            <option value="llama3.2:3b-instruct-q4_K_M">Llama 3.2 3B (Fast)</option>
+                                        <label>Data Source:</label>
+                                        <select id="analyticsDatasource" class="select-input" onchange="onAnalyticsDatasourceChange()">
+                                            <option value="">Select data source</option>
                                         </select>
                                     </div>
-                                    <button id="testConnection" class="secondary-button">Test Connection</button>
-                                </div>
-
-                                <div class="setup-section">
-                                    <h4>📊 Data Configuration</h4>
+                                    <div class="form-group">
+                                        <label>Retention Policy:</label>
+                                        <select id="analyticsRetentionPolicy" class="select-input">
+                                            <option value="raw" selected>raw (Default)</option>
+                                            <option value="autogen">autogen</option>
+                                            <option value="default">default</option>
+                                        </select>
+                                    </div>
                                     <div class="form-group">
                                         <label>Measurement:</label>
-                                        <select id="analyticsMeasurement">
+                                        <select id="analyticsMeasurement" class="select-input">
                                             <option value="">Select measurement...</option>
                                         </select>
                                     </div>
                                     <div class="form-group">
                                         <label>Field:</label>
-                                        <select id="analyticsField">
+                                        <select id="analyticsField" class="select-input">
                                             <option value="">Select field...</option>
                                         </select>
                                     </div>
@@ -307,7 +325,7 @@
                                     </div>
                                     <div class="form-group">
                                         <label>Time Range:</label>
-                                        <select id="analyticsTimeRange">
+                                        <select id="analyticsTimeRange" class="select-input">
                                             <option value="1h">Last 1 Hour</option>
                                             <option value="6h">Last 6 Hours</option>
                                             <option value="1d" selected>Last 1 Day</option>
@@ -317,19 +335,22 @@
                                     </div>
                                 </div>
 
-                                <div class="setup-section">
-                                    <h4>🔮 Analysis Type</h4>
-                                    <div class="analysis-tabs">
-                                        <button class="tab-button active" data-analysis="anomaly">
-                                            ⚠️ Anomaly Detection
-                                        </button>
-                                        <button class="tab-button" data-analysis="prediction">
-                                            📈 Prediction
-                                        </button>
-                                        <button class="tab-button" data-analysis="trend">
-                                            📊 Trend Analysis
-                                        </button>
-                                    </div>
+                                <!-- Analysis Type Section -->
+                                <div class="section-header">
+                                    <h4>ANALYSIS TYPE</h4>
+                                </div>
+                                
+                                <div class="analysis-tabs">
+                                    <button class="tab-button active" data-analysis="anomaly">
+                                        ⚠️ Anomaly Detection
+                                    </button>
+                                    <button class="tab-button" data-analysis="prediction">
+                                        📈 Prediction
+                                    </button>
+                                    <button class="tab-button" data-analysis="trend">
+                                        📊 Trend Analysis
+                                    </button>
+                                </div>
 
                                     <!-- Anomaly Detection Options -->
                                     <div id="anomalyOptions" class="analysis-options active">
@@ -383,31 +404,25 @@
                                     </div>
                                 </div>
 
-                                <div class="analytics-actions">
+                                <div class="form-actions">
                                     <button id="runAnalysis" class="primary-button" disabled>
-                                        🚀 Run Analysis
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M8 5v14l11-7z"/>
+                                        </svg>
+                                        Run Analysis
                                     </button>
                                     <button id="scheduleAnalysis" class="secondary-button" disabled>
-                                        ⏰ Schedule
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zM12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                                        </svg>
+                                        Schedule
                                     </button>
                                 </div>
                             </div>
 
-                            <div class="analytics-results" id="analyticsResults" style="display: none;">
-                                <div class="results-header">
-                                    <h4>📋 Analysis Results</h4>
-                                    <div class="results-actions">
-                                        <button class="icon-button" onclick="exportAnalysisResults()">📁</button>
-                                        <button class="icon-button" onclick="shareAnalysisResults()">🔗</button>
-                                    </div>
-                                </div>
-                                <div class="results-content" id="analyticsResultsContent">
-                                    <!-- Results populated dynamically -->
-                                </div>
-                            </div>
+                            <!-- Analytics results now shown in modal -->
                         </div>
-                    </div>
-
+                    
                     <!-- Editor and Panel Area -->
                     <div class="editor-panel-area">
                         <!-- Main Editor Area -->
@@ -523,6 +538,8 @@
                     </div>
                 </div>
             </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -585,6 +602,76 @@
         </div>
     </div>
 
+    <!-- AI Connection Dialog -->
+    <div class="modal-overlay" id="aiConnectionDialog">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="aiConnectionDialogTitle">New AI Connection</h3>
+                <button class="modal-close" onclick="hideAiConnectionDialog()">×</button>
+            </div>
+            <div class="modal-content">
+                <div class="form-group">
+                    <label for="aiConnectionName">Connection Name</label>
+                    <input type="text" id="aiConnectionName" placeholder="My Ollama Server">
+                </div>
+                <div class="form-group">
+                    <label for="aiEndpoint">Ollama Endpoint</label>
+                    <input type="text" id="aiEndpoint" placeholder="http://localhost:11434">
+                </div>
+                <div class="form-group">
+                    <label for="aiModel">Default Model</label>
+                    <select id="aiModel">
+                        <option value="llama3.1:8b-instruct-q4_K_M" selected>Llama 3.1 8B (Recommended)</option>
+                        <option value="llama3:8b-instruct-q4_K_M">Llama 3 8B</option>
+                        <option value="llama3:13b-instruct-q4_K_M">Llama 3 13B</option>
+                        <option value="llama3:70b-instruct-q4_K_M">Llama 3 70B</option>
+                        <option value="mistral:7b-instruct-q4_K_M">Mistral 7B</option>
+                        <option value="codellama:7b-instruct-q4_K_M">Code Llama 7B</option>
+                        <option value="custom">Custom Model...</option>
+                    </select>
+                </div>
+                <div class="form-group" id="customModelGroup" style="display: none;">
+                    <label for="customModelName">Custom Model Name</label>
+                    <input type="text" id="customModelName" placeholder="Enter model name">
+                </div>
+                
+                <!-- Advanced Settings -->
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="showAdvancedAiSettings" onchange="toggleAdvancedAiSettings()"> Advanced Settings
+                    </label>
+                </div>
+                
+                <div id="advancedAiSettings" style="display: none;">
+                    <div class="form-group">
+                        <label for="aiResponseTokens">Response Tokens (num_predict)</label>
+                        <select id="aiResponseTokens">
+                            <option value="-1" selected>Infinite (Ollama Default)</option>
+                            <option value="1024">1,024</option>
+                            <option value="2048">2,048</option>
+                            <option value="4096">4,096</option>
+                            <option value="8192">8,192</option>
+                            <option value="16384">16,384</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="aiContextSize">Context Size (num_ctx)</label>
+                        <select id="aiContextSize">
+                            <option value="4096">4,096 (Default)</option>
+                            <option value="8192">8,192 (Large)</option>
+                            <option value="16384" selected>16,384 (Large Context)</option>
+                            <option value="32768">32,768 (Extra Large)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button onclick="saveAiConnection()" class="primary-button">Save & Connect</button>
+                <button onclick="hideAiConnectionDialog()" class="secondary-button">Cancel</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Auth Status -->
     <div id="authStatus" class="auth-status-toast"></div>
 
@@ -606,6 +693,9 @@
     <script src="js/demo.js"></script>
     <script src="js/ollama.js"></script>
     <script src="js/modelManager.js"></script>
+    <script src="js/timeSeriesProcessor.js"></script>
+    <script src="js/aiAnalytics.js"></script>
+    <script src="js/analyticsVisualizer.js"></script>
     <script src="js/analytics.js"></script>
     <script src="js/interface.js"></script>
     <script src="js/app.js"></script>
