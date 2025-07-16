@@ -87,6 +87,12 @@ const AnalyticsVisualizer = {
             </div>
             
             <div class="analysis-charts">
+                <div class="chart-controls">
+                    <label class="chart-toggle">
+                        <input type="checkbox" id="logScaleToggle" onchange="AnalyticsVisualizer.toggleLogScale('anomalyChart')">
+                        Log Scale (Y-axis)
+                    </label>
+                </div>
                 <div class="chart-container">
                     <canvas id="anomalyChart" width="800" height="400"></canvas>
                 </div>
@@ -1276,6 +1282,78 @@ const AnalyticsVisualizer = {
                 <pre>${JSON.stringify(results, null, 2)}</pre>
             </div>
         `;
+    },
+
+    // Toggle log scale for chart Y-axis
+    toggleLogScale(chartId) {
+        const chart = this.chartInstances[chartId];
+        if (!chart) {
+            console.error(`Chart instance not found for ID: ${chartId}`);
+            return;
+        }
+
+        const isLogScale = chart.options.scales.y.type === 'logarithmic';
+        const newScale = isLogScale ? 'linear' : 'logarithmic';
+        
+        console.log(`🔄 Toggling ${chartId} Y-axis scale: ${isLogScale ? 'log' : 'linear'} → ${newScale}`);
+        
+        // Store original data if not already stored
+        if (!chart.originalData) {
+            chart.originalData = chart.data.datasets.map(dataset => ({
+                ...dataset,
+                data: [...dataset.data]
+            }));
+        }
+        
+        // Update the scale type
+        chart.options.scales.y.type = newScale;
+        
+        if (newScale === 'logarithmic') {
+            // Transform data to handle zero and negative values
+            chart.data.datasets.forEach((dataset, i) => {
+                if (dataset.data) {
+                    dataset.data = dataset.data.map(point => {
+                        if (point !== null && point !== undefined) {
+                            // For zero or negative values, use a small positive value (0.1)
+                            return point <= 0 ? 0.1 : point;
+                        }
+                        return point;
+                    });
+                }
+            });
+            
+            // Set minimum value to avoid log(0) issues
+            chart.options.scales.y.min = 0.1;
+            chart.options.scales.y.ticks = {
+                ...chart.options.scales.y.ticks,
+                callback: function(value) {
+                    if (value === 0.1) return '0';
+                    if (value >= 1000) return (value / 1000).toFixed(0) + 'k';
+                    if (value >= 1) return value.toFixed(0);
+                    return value.toFixed(1);
+                }
+            };
+        } else {
+            // Restore original data
+            chart.originalData.forEach((originalDataset, i) => {
+                if (chart.data.datasets[i]) {
+                    chart.data.datasets[i].data = [...originalDataset.data];
+                }
+            });
+            
+            // Reset to linear scale defaults
+            delete chart.options.scales.y.min;
+            chart.options.scales.y.ticks = {
+                ...chart.options.scales.y.ticks,
+                callback: function(value) {
+                    if (value >= 1000) return (value / 1000).toFixed(0) + 'k';
+                    return value.toFixed(0);
+                }
+            };
+        }
+        
+        // Update the chart
+        chart.update();
     }
 };
 
