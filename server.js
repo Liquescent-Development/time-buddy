@@ -475,7 +475,7 @@ app.use((err, req, res, next) => {
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔════════════════════════════════════════════════════╗
-║          Grafana Query IDE Server                  ║
+║            Time Buddy Server                       ║
 ╠════════════════════════════════════════════════════╣
 ║  Server running on: http://localhost:${PORT}          ║
 ║  Health check: http://localhost:${PORT}/health       ║

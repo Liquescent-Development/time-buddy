@@ -2,15 +2,15 @@
 
 <img src="assets/logo.svg" alt="Time Buddy Logo" width="120" height="120">
 
-# Grafana Query IDE
+# Time Buddy
 
-**A powerful desktop IDE for modern time series query development**
+**Your time series metric friend**
 
 [![Release](https://img.shields.io/github/v/release/Liquescent-Development/grafana-query-ide?style=flat-square)](https://github.com/Liquescent-Development/grafana-query-ide/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Liquescent-Development/grafana-query-ide/releases)
 [![License](https://img.shields.io/github/license/Liquescent-Development/grafana-query-ide?style=flat-square)](LICENSE)
 
-*Professional PromQL and InfluxQL development with VS Code-like interface, AI-powered analytics, and seamless Grafana integration*
+*A powerful desktop IDE for modern time series query development with VS Code-like interface, AI-powered analytics, and seamless Grafana integration*
 
 [📥 Download](https://github.com/Liquescent-Development/grafana-query-ide/releases) • [🚀 Quick Start](#-quick-start) • [📖 Documentation](#-features)
 
@@ -18,7 +18,7 @@
 
 ---
 
-## 🎯 Why Choose Grafana Query IDE?
+## 🎯 Why Choose Time Buddy?
 
 **Stop switching between browser tabs.** Build and debug time series queries in a dedicated desktop environment designed for developers.
 
@@ -91,7 +91,7 @@
 ```bash
 # Clone and install
 git clone https://github.com/Liquescent-Development/grafana-query-ide.git
-cd grafana-query-ide
+cd time-buddy
 npm install
 
 # Development mode
