@@ -4919,6 +4919,12 @@ body:has(#analyticsPanel.active) .sidebar {
     max-height: 90vh;
 }
 
+.analytics-loading-modal {
+    min-width: 400px;
+    max-width: 500px;
+    max-height: 300px;
+}
+
 .analytics-modal-content {
     padding: 0;
     display: flex;

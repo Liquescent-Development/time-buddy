@@ -1438,6 +1438,35 @@ const Analytics = {
         URL.revokeObjectURL(url);
     },
 
+    // Show loading indicator for saved analysis
+    showSavedAnalysisLoading() {
+        const loadingHtml = `
+            <div class="modal-overlay active" id="savedAnalysisLoadingModal">
+                <div class="modal analytics-loading-modal">
+                    <div class="modal-content">
+                        <div class="analysis-loading">
+                            <div class="loading-spinner"></div>
+                            <h4>📊 Loading Saved Analysis</h4>
+                            <p>Preparing charts and visualizations...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        const modalContainer = document.createElement('div');
+        modalContainer.innerHTML = loadingHtml;
+        document.body.appendChild(modalContainer.firstElementChild);
+    },
+
+    // Close saved analysis loading modal
+    closeSavedAnalysisLoading() {
+        const modal = document.getElementById('savedAnalysisLoadingModal');
+        if (modal) {
+            modal.remove();
+        }
+    },
+
     // Show results in modal (similar to Dashboard panel viewer)
     showResultsModal(results) {
         console.log('📊 Showing analytics results in modal');
@@ -1445,7 +1474,7 @@ const Analytics = {
         // Close loading modal first
         this.closeLoadingModal();
         
-        // Create modal HTML
+        // Create modal HTML with initial loading state
         const modalHtml = `
             <div class="modal-overlay active" id="analyticsResultsModal">
                 <div class="modal analytics-results-modal">
@@ -1466,7 +1495,11 @@ const Analytics = {
                             </div>
                         </div>
                         <div class="analytics-results-body" id="analyticsModalResults">
-                            <!-- Results will be rendered here -->
+                            <div class="analysis-loading">
+                                <div class="loading-spinner"></div>
+                                <h4>📊 Rendering Charts</h4>
+                                <p>Creating visualizations...</p>
+                            </div>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -1484,9 +1517,20 @@ const Analytics = {
         modalContainer.innerHTML = modalHtml;
         document.body.appendChild(modalContainer.firstElementChild);
         
-        // Render results
+        // Close the saved analysis loading modal now that results modal is shown
+        this.closeSavedAnalysisLoading();
+        
+        // Render results with proper loading handling
         if (typeof AnalyticsVisualizer !== 'undefined') {
-            AnalyticsVisualizer.visualizeResults(results, 'analyticsModalResults');
+            // Use setTimeout to allow UI to update and show the loading state
+            setTimeout(() => {
+                try {
+                    AnalyticsVisualizer.visualizeResults(results, 'analyticsModalResults');
+                } catch (error) {
+                    console.error('Error rendering charts:', error);
+                    this.showRawResultsInModal(results);
+                }
+            }, 100);
         } else {
             this.showRawResultsInModal(results);
         }
@@ -1498,6 +1542,9 @@ const Analytics = {
         if (modal) {
             modal.remove();
         }
+        
+        // Also close saved analysis loading modal if it's still open
+        this.closeSavedAnalysisLoading();
     },
 
     // Show raw results in modal
@@ -1626,6 +1673,9 @@ const Analytics = {
             return;
         }
 
+        // Show loading indicator immediately
+        this.showSavedAnalysisLoading();
+
         // Close saved analyses modal
         this.closeSavedAnalyses();
         
@@ -1639,7 +1689,7 @@ const Analytics = {
         this.config.timeRange = analysis.config.timeRange;
         this.config.tags = analysis.config.tags || {};
         
-        // Show results modal
+        // Show results modal with loading handled
         this.showResultsModal(analysis.results);
     },
 
