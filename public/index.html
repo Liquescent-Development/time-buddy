@@ -318,12 +318,6 @@
                                         </select>
                                     </div>
                                     <div class="form-group">
-                                        <label>Tags (Optional):</label>
-                                        <div id="analyticsTagFilters" class="tag-filters">
-                                            <!-- Dynamically populated -->
-                                        </div>
-                                    </div>
-                                    <div class="form-group">
                                         <label>Time Range:</label>
                                         <select id="analyticsTimeRange" class="select-input">
                                             <option value="1h">Last 1 Hour</option>
@@ -332,6 +326,67 @@
                                             <option value="7d">Last 7 Days</option>
                                             <option value="30d">Last 30 Days</option>
                                         </select>
+                                    </div>
+                                </div>
+
+                                <!-- Tag Filtering Section -->
+                                <div class="section-header">
+                                    <h4>FILTERING & GROUPING</h4>
+                                </div>
+                                
+                                <div class="form-section">
+                                    <div class="form-group">
+                                        <label>Filter by Tags:</label>
+                                        <div id="tagFiltersContainer">
+                                            <div class="tag-filter-item">
+                                                <select class="tag-key-select select-input" onchange="onTagKeyChange(this)">
+                                                    <option value="">Select tag...</option>
+                                                </select>
+                                                <select class="tag-value-select select-input" disabled>
+                                                    <option value="">Select value...</option>
+                                                </select>
+                                                <button type="button" class="icon-button tag-filter-remove" onclick="removeTagFilter(this)" title="Remove filter">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="secondary-button" onclick="addTagFilter()" style="margin-top: 8px;">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                            </svg>
+                                            Add Tag Filter
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="form-group">
+                                        <label>Group By:</label>
+                                        <div class="groupby-options">
+                                            <div class="form-group">
+                                                <label>
+                                                    <input type="checkbox" id="groupByTime" onchange="onGroupByChange()"> 
+                                                    Group by Time
+                                                </label>
+                                                <select id="timeGroupInterval" class="select-input" disabled>
+                                                    <option value="1m">1 minute</option>
+                                                    <option value="5m">5 minutes</option>
+                                                    <option value="15m">15 minutes</option>
+                                                    <option value="1h" selected>1 hour</option>
+                                                    <option value="6h">6 hours</option>
+                                                    <option value="1d">1 day</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>
+                                                    <input type="checkbox" id="groupByTags" onchange="onGroupByChange()"> 
+                                                    Group by Tags
+                                                </label>
+                                                <select id="groupByTagsSelect" class="select-input" multiple disabled>
+                                                    <option value="">No tags available</option>
+                                                </select>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
 

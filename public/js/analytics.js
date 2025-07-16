@@ -13,6 +13,11 @@ const Analytics = {
         measurement: '',
         field: '',
         tags: {},
+        tagFilters: [], // Array of {tagKey: '', tagValue: ''} objects
+        groupByTime: false,
+        timeGroupInterval: '1h',
+        groupByTags: false,
+        groupByTagsList: [], // Array of tag keys to group by
         timeRange: '1d',
         sensitivity: 'medium',
         alertThreshold: 0.8,
@@ -125,6 +130,9 @@ const Analytics = {
                     if (fieldSelect) {
                         fieldSelect.innerHTML = '<option value="">Select measurement first</option>';
                     }
+                    // Clear tag dropdowns
+                    this.updateTagFilterDropdowns([]);
+                    this.updateGroupByTagsDropdown([]);
                 }
             });
         }
@@ -180,6 +188,46 @@ const Analytics = {
                 this.config.field = e.target.value;
                 this.saveConfiguration();
                 this.updateAnalysisButton();
+                // Load tags when field changes
+                if (e.target.value && this.config.measurement) {
+                    console.log('🏷️ Loading tags for field change:', this.config.measurement, e.target.value);
+                    this.loadTagsForField(this.config.measurement, e.target.value);
+                }
+            });
+        }
+
+        // Grouping options
+        const groupByTime = document.getElementById('groupByTime');
+        if (groupByTime) {
+            groupByTime.addEventListener('change', (e) => {
+                this.config.groupByTime = e.target.checked;
+                document.getElementById('timeGroupInterval').disabled = !e.target.checked;
+                this.saveConfiguration();
+            });
+        }
+
+        const timeGroupInterval = document.getElementById('timeGroupInterval');
+        if (timeGroupInterval) {
+            timeGroupInterval.addEventListener('change', (e) => {
+                this.config.timeGroupInterval = e.target.value;
+                this.saveConfiguration();
+            });
+        }
+
+        const groupByTags = document.getElementById('groupByTags');
+        if (groupByTags) {
+            groupByTags.addEventListener('change', (e) => {
+                this.config.groupByTags = e.target.checked;
+                document.getElementById('groupByTagsSelect').disabled = !e.target.checked;
+                this.saveConfiguration();
+            });
+        }
+
+        const groupByTagsSelect = document.getElementById('groupByTagsSelect');
+        if (groupByTagsSelect) {
+            groupByTagsSelect.addEventListener('change', (e) => {
+                this.config.groupByTagsList = Array.from(e.target.selectedOptions).map(option => option.value);
+                this.saveConfiguration();
             });
         }
     },
@@ -251,10 +299,24 @@ const Analytics = {
         // Load retention policies from current datasource
         this.loadRetentionPolicies();
         
+        // Load tags if measurement and field are already selected
+        if (this.config.measurement && this.config.field) {
+            console.log('🏷️ Loading tags from updateUI for existing measurement/field');
+            this.loadTagsForField(this.config.measurement, this.config.field);
+        }
+        
         // Check for existing AI connections
         this.checkAiConnection().catch(error => {
             console.warn('Failed to check AI connections:', error);
         });
+        
+        // Force load AI connections UI
+        setTimeout(() => {
+            if (typeof loadAiConnections === 'function') {
+                console.log('🔗 Force loading AI connections from Analytics.updateUI');
+                loadAiConnections();
+            }
+        }, 100);
     },
 
     // Check if we have any connected AI services and initialize them
@@ -730,9 +792,17 @@ const Analytics = {
                 }
                 
                 if (fields.length === 0) {
+                    // Check retry count to prevent infinite loop
+                    if (!this._fieldLoadRetries) {
+                        this._fieldLoadRetries = {};
+                    }
+                    const retryCount = this._fieldLoadRetries[measurement] || 0;
+                    const maxRetries = 2;
+                    
                     // Try to load fields if they haven't been loaded yet for InfluxDB
-                    if (GrafanaConfig.selectedDatasourceType === 'influxdb') {
-                        console.log('🔄 Fields not found, attempting to load for measurement:', measurement);
+                    if (GrafanaConfig.selectedDatasourceType === 'influxdb' && retryCount < maxRetries) {
+                        console.log(`🔄 Fields not found, attempting to load for measurement: ${measurement} (attempt ${retryCount + 1}/${maxRetries})`);
+                        this._fieldLoadRetries[measurement] = retryCount + 1;
                         fieldSelect.innerHTML = '<option value="">Loading fields...</option>';
                         
                         // Trigger field loading for this measurement
@@ -744,7 +814,20 @@ const Analytics = {
                             fieldSelect.innerHTML = '<option value="">No fields found</option>';
                         });
                     } else {
+                        console.log(`❌ Max retries reached or not InfluxDB for measurement: ${measurement}`);
                         fieldSelect.innerHTML = '<option value="">No fields found</option>';
+                        
+                        // For measurements with no fields but tags, add a default "value" field option
+                        if (GrafanaConfig.selectedDatasourceType === 'influxdb') {
+                            const tags = Schema.getInfluxMeasurementTags && Schema.getInfluxMeasurementTags(measurement);
+                            if (tags && tags.length > 0) {
+                                console.log('📊 No fields found but tags exist, adding default "value" field option');
+                                const valueOption = document.createElement('option');
+                                valueOption.value = 'value';
+                                valueOption.textContent = 'value (default)';
+                                fieldSelect.appendChild(valueOption);
+                            }
+                        }
                     }
                 }
             } else {
@@ -755,6 +838,10 @@ const Analytics = {
             console.error('❌ Failed to load fields:', error);
             fieldSelect.innerHTML = '<option value="">Error loading fields</option>';
         }
+        
+        // Load tags for this measurement (they should be available from Schema now)
+        console.log('🏷️ Loading tags at end of loadFieldsForMeasurement for:', measurement);
+        this.loadTagsForField(measurement, this.config.field || 'any');
     },
 
     // Check which fields have recent data
@@ -809,7 +896,21 @@ const Analytics = {
     buildQuickDataCheckQuery(measurement, field) {
         if (GrafanaConfig.selectedDatasourceType === 'influxdb') {
             const retentionPolicy = this.config.retentionPolicy || 'raw';
-            return `SELECT mean("${field}") as "value" FROM "${retentionPolicy}"."${measurement}" WHERE time >= now() - 24h GROUP BY time(1h) fill(none) LIMIT 5`;
+            let query = `SELECT mean("${field}") as "value" FROM "${retentionPolicy}"."${measurement}" WHERE time >= now() - 24h`;
+            
+            // Add tag filters if any
+            query += this.generateWhereClause();
+            
+            // Add grouping
+            const groupBy = this.generateGroupByClause();
+            if (groupBy) {
+                query += groupBy;
+            } else {
+                query += ' GROUP BY time(1h)';
+            }
+            
+            query += ' fill(none) LIMIT 5';
+            return query;
         } else if (GrafanaConfig.selectedDatasourceType === 'prometheus') {
             return `${measurement}[1h]`;
         }
@@ -1462,10 +1563,347 @@ const Analytics = {
         }
 
         console.log('✅ Analytics datasource changed successfully');
+    },
+
+    // Load tags for the selected measurement and field
+    async loadTagsForField(measurement, field) {
+        if (!measurement) {
+            console.log('🏷️ Skipping tag loading - missing measurement');
+            return;
+        }
+        
+        console.log('🏷️ Loading tags for measurement:', measurement, 'field:', field);
+        console.log('🏷️ Schema available:', typeof Schema !== 'undefined');
+        
+        try {
+            // Wait a moment for Schema to be updated if needed
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            // Get tags from Schema if available
+            if (typeof Schema !== 'undefined' && Schema.influxTags) {
+                console.log('🏷️ All Schema measurements:', Object.keys(Schema.influxTags));
+                
+                if (Schema.influxTags[measurement]) {
+                    const tags = Schema.influxTags[measurement];
+                    console.log('🏷️ Found tags for', measurement, ':', tags);
+                    
+                    // Update tag filter dropdowns
+                    this.updateTagFilterDropdowns(tags);
+                    
+                    // Update group by tags dropdown
+                    this.updateGroupByTagsDropdown(tags);
+                } else {
+                    console.warn('⚠️ No tags found for measurement:', measurement);
+                    console.log('🏷️ Available measurements in Schema:', Object.keys(Schema.influxTags));
+                    this.updateTagFilterDropdowns([]);
+                    this.updateGroupByTagsDropdown([]);
+                }
+            } else {
+                console.warn('⚠️ Schema or Schema.influxTags not available');
+                this.updateTagFilterDropdowns([]);
+                this.updateGroupByTagsDropdown([]);
+            }
+        } catch (error) {
+            console.error('❌ Failed to load tags:', error);
+            this.updateTagFilterDropdowns([]);
+            this.updateGroupByTagsDropdown([]);
+        }
+    },
+
+    // Update tag filter dropdowns with available tags
+    updateTagFilterDropdowns(tags) {
+        const tagKeySelects = document.querySelectorAll('.tag-key-select');
+        console.log('🏷️ Updating tag filter dropdowns, found', tagKeySelects.length, 'selects with', tags.length, 'tags');
+        
+        tagKeySelects.forEach((select, index) => {
+            console.log('🏷️ Updating tag select', index, 'with tags:', tags);
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">Select tag...</option>';
+            
+            tags.forEach(tag => {
+                const option = document.createElement('option');
+                option.value = tag;
+                option.textContent = tag;
+                if (tag === currentValue) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        });
+    },
+
+    // Update group by tags dropdown
+    updateGroupByTagsDropdown(tags) {
+        const groupByTagsSelect = document.getElementById('groupByTagsSelect');
+        if (!groupByTagsSelect) return;
+        
+        const selectedValues = Array.from(groupByTagsSelect.selectedOptions).map(option => option.value);
+        groupByTagsSelect.innerHTML = '';
+        
+        if (tags.length === 0) {
+            groupByTagsSelect.innerHTML = '<option value="">No tags available</option>';
+            return;
+        }
+        
+        tags.forEach(tag => {
+            const option = document.createElement('option');
+            option.value = tag;
+            option.textContent = tag;
+            if (selectedValues.includes(tag)) {
+                option.selected = true;
+            }
+            groupByTagsSelect.appendChild(option);
+        });
+    },
+
+    // Load tag values for a specific tag key
+    async loadTagValues(tagKey, targetSelect) {
+        console.log('🏷️ loadTagValues called with:', { tagKey, measurement: this.config.measurement, targetSelect: !!targetSelect });
+        
+        if (!tagKey || !this.config.measurement) {
+            console.log('🏷️ Missing tagKey or measurement, returning early');
+            targetSelect.innerHTML = '<option value="">Select value...</option>';
+            targetSelect.disabled = true;
+            return;
+        }
+        
+        targetSelect.innerHTML = '<option value="">Loading values...</option>';
+        targetSelect.disabled = false;
+        
+        try {
+            // Check if Queries module is available
+            console.log('🏷️ Checking Queries module availability:', typeof Queries, !!window.Queries);
+            
+            // Query InfluxDB for tag values
+            const retentionPolicy = this.config.retentionPolicy || 'raw';
+            const query = `SHOW TAG VALUES FROM "${retentionPolicy}"."${this.config.measurement}" WITH KEY = "${tagKey}"`;
+            
+            console.log('🏷️ Loading tag values with query:', query);
+            console.log('🏷️ Current config:', {
+                datasourceId: GrafanaConfig.currentDatasourceId,
+                datasourceType: GrafanaConfig.selectedDatasourceType,
+                retentionPolicy,
+                measurement: this.config.measurement
+            });
+            
+            // Use the proper query system
+            if (typeof Queries !== 'undefined' && Queries.executeQueryDirect) {
+                console.log('🏷️ Executing query via Queries.executeQueryDirect...');
+                const result = await Queries.executeQueryDirect(query, {
+                    datasourceId: GrafanaConfig.currentDatasourceId,
+                    datasourceType: GrafanaConfig.selectedDatasourceType,
+                    timeout: 5000
+                });
+                
+                console.log('🏷️ Tag values query result:', result);
+                console.log('🏷️ Result structure check:', {
+                    hasResult: !!result,
+                    hasResults: !!(result && result.results),
+                    hasA: !!(result && result.results && result.results.A),
+                    hasSeries: !!(result && result.results && result.results.A && result.results.A.series)
+                });
+                
+                // Handle both Grafana wrapped results (results.A) and direct InfluxDB results
+                let values = null;
+                
+                if (result && result.results) {
+                    // Check for Grafana frames format (results.A.frames)
+                    if (result.results.A && result.results.A.frames && result.results.A.frames[0]) {
+                        const frame = result.results.A.frames[0];
+                        if (frame.data && frame.data.values && frame.data.values[0]) {
+                            values = frame.data.values[0]; // Values are in the first (and only) column
+                            console.log('🏷️ Found values in Grafana frames format');
+                        }
+                    }
+                    // Check for Grafana series format (results.A.series)
+                    else if (result.results.A && result.results.A.series) {
+                        const series = result.results.A.series[0];
+                        if (series && series.values) {
+                            values = series.values.map(row => row[1]); // Tag values are in second column
+                            console.log('🏷️ Found values in results.A series format');
+                        }
+                    } 
+                    // Check for direct InfluxDB format (results[0].series)
+                    else if (Array.isArray(result.results) && result.results[0] && result.results[0].series) {
+                        const series = result.results[0].series[0];
+                        if (series && series.values) {
+                            values = series.values.map(row => row[1]); // Tag values are in second column
+                            console.log('🏷️ Found values in direct InfluxDB format');
+                        }
+                    }
+                }
+                
+                console.log('🏷️ Extracted values:', values);
+                
+                if (values && values.length > 0) {
+                    targetSelect.innerHTML = '<option value="">Select value...</option>';
+                    values.forEach(value => {
+                        const option = document.createElement('option');
+                        option.value = value;
+                        option.textContent = value;
+                        targetSelect.appendChild(option);
+                    });
+                    
+                    console.log('🏷️ Successfully loaded', values.length, 'values for tag:', tagKey);
+                } else {
+                    console.log('🏷️ No values found');
+                    console.log('🏷️ Full result structure:', JSON.stringify(result, null, 2));
+                    targetSelect.innerHTML = '<option value="">No values found</option>';
+                }
+            } else {
+                console.error('❌ Queries module not available:', { 
+                    typeofQueries: typeof Queries, 
+                    hasExecuteQueryDirect: !!(window.Queries && window.Queries.executeQueryDirect),
+                    windowQueries: !!window.Queries
+                });
+                targetSelect.innerHTML = '<option value="">Query system unavailable</option>';
+            }
+        } catch (error) {
+            console.error('❌ Failed to load tag values for', tagKey, ':', error);
+            console.error('❌ Error details:', {
+                message: error.message,
+                stack: error.stack,
+                name: error.name
+            });
+            targetSelect.innerHTML = '<option value="">Error loading values</option>';
+        }
+    },
+
+    // Generate WHERE clause from tag filters
+    generateWhereClause() {
+        let whereConditions = [];
+        
+        // Add tag filters
+        this.config.tagFilters.forEach(filter => {
+            if (filter.tagKey && filter.tagValue) {
+                whereConditions.push(`"${filter.tagKey}" = '${filter.tagValue}'`);
+            }
+        });
+        
+        if (whereConditions.length > 0) {
+            return ' AND ' + whereConditions.join(' AND ');
+        }
+        
+        return '';
+    },
+
+    // Generate GROUP BY clause
+    generateGroupByClause() {
+        let groupByParts = [];
+        
+        // Add time grouping
+        if (this.config.groupByTime) {
+            groupByParts.push(`time(${this.config.timeGroupInterval})`);
+        }
+        
+        // Add tag grouping
+        if (this.config.groupByTags && this.config.groupByTagsList.length > 0) {
+            this.config.groupByTagsList.forEach(tag => {
+                groupByParts.push(`"${tag}"`);
+            });
+        }
+        
+        if (groupByParts.length > 0) {
+            return ' GROUP BY ' + groupByParts.join(', ');
+        }
+        
+        return '';
     }
 };
 
 // Global functions for HTML event handlers
+
+// Tag filtering functions
+function onTagKeyChange(selectElement) {
+    const tagKey = selectElement.value;
+    const tagFilterItem = selectElement.closest('.tag-filter-item');
+    const tagValueSelect = tagFilterItem.querySelector('.tag-value-select');
+    
+    if (tagKey) {
+        Analytics.loadTagValues(tagKey, tagValueSelect);
+    } else {
+        tagValueSelect.innerHTML = '<option value="">Select value...</option>';
+        tagValueSelect.disabled = true;
+    }
+    
+    // Update the Analytics config
+    updateTagFiltersConfig();
+}
+
+function addTagFilter() {
+    const container = document.getElementById('tagFiltersContainer');
+    const newFilter = document.createElement('div');
+    newFilter.className = 'tag-filter-item';
+    newFilter.innerHTML = `
+        <select class="tag-key-select select-input" onchange="onTagKeyChange(this)">
+            <option value="">Select tag...</option>
+        </select>
+        <select class="tag-value-select select-input" disabled>
+            <option value="">Select value...</option>
+        </select>
+        <button type="button" class="icon-button tag-filter-remove" onclick="removeTagFilter(this)" title="Remove filter">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+        </button>
+    `;
+    
+    container.appendChild(newFilter);
+    
+    // Update the new tag key select with available tags
+    if (Analytics.config.measurement && Analytics.config.field) {
+        Analytics.loadTagsForField(Analytics.config.measurement, Analytics.config.field);
+    }
+}
+
+function removeTagFilter(buttonElement) {
+    const tagFilterItem = buttonElement.closest('.tag-filter-item');
+    const container = document.getElementById('tagFiltersContainer');
+    
+    // Don't remove the last filter item
+    if (container.children.length > 1) {
+        tagFilterItem.remove();
+        updateTagFiltersConfig();
+    } else {
+        // Reset the last remaining filter
+        const tagKeySelect = tagFilterItem.querySelector('.tag-key-select');
+        const tagValueSelect = tagFilterItem.querySelector('.tag-value-select');
+        tagKeySelect.value = '';
+        tagValueSelect.innerHTML = '<option value="">Select value...</option>';
+        tagValueSelect.disabled = true;
+        updateTagFiltersConfig();
+    }
+}
+
+function updateTagFiltersConfig() {
+    const tagFilterItems = document.querySelectorAll('.tag-filter-item');
+    const tagFilters = [];
+    
+    tagFilterItems.forEach(item => {
+        const tagKey = item.querySelector('.tag-key-select').value;
+        const tagValue = item.querySelector('.tag-value-select').value;
+        
+        if (tagKey && tagValue) {
+            tagFilters.push({ tagKey, tagValue });
+        }
+    });
+    
+    Analytics.config.tagFilters = tagFilters;
+    Analytics.saveConfiguration();
+}
+
+function onGroupByChange() {
+    const groupByTime = document.getElementById('groupByTime').checked;
+    const groupByTags = document.getElementById('groupByTags').checked;
+    
+    document.getElementById('timeGroupInterval').disabled = !groupByTime;
+    document.getElementById('groupByTagsSelect').disabled = !groupByTags;
+    
+    Analytics.config.groupByTime = groupByTime;
+    Analytics.config.groupByTags = groupByTags;
+    Analytics.saveConfiguration();
+}
+
 function exportAnalysisResults() {
     if (Analytics.currentResults) {
         const data = JSON.stringify(Analytics.currentResults, null, 2);

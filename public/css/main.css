@@ -5193,17 +5193,25 @@ body:has(#analyticsPanel.active) .sidebar {
     bottom: auto !important;
     overflow-y: auto !important;
     overflow-x: hidden !important;
-    padding: 8px 12px !important;
+    padding: 4px 8px !important; /* Much smaller padding */
     height: auto !important;
 }
 
 #analyticsPanel .section-header {
-    margin-bottom: 12px;
-    margin-top: 12px;
+    margin-bottom: 2px;
+    margin-top: 3px;
+    font-size: 11px; /* Smaller font */
+    font-weight: 600;
 }
 
 #analyticsPanel .section-header:first-child {
     margin-top: 0;
+}
+
+#analyticsPanel .section-header h4 {
+    font-size: 11px;
+    margin: 0;
+    line-height: 1.2;
 }
 
 /* Reduce spacing after Time Range specifically */
@@ -5213,7 +5221,7 @@ body:has(#analyticsPanel.active) .sidebar {
 }
 
 #analyticsPanel .form-section {
-    margin-bottom: 16px;
+    margin-bottom: 3px;
     clear: both;
 }
 
@@ -5271,15 +5279,20 @@ body:has(#analyticsPanel.active) .sidebar {
 
 #analyticsPanel .form-group label {
     display: block;
-    margin-bottom: 4px;
-    font-size: 12px;
+    margin-bottom: 1px;
+    font-size: 10px;
     color: #cccccc;
+    line-height: 1.2;
 }
 
 #analyticsPanel select,
 #analyticsPanel input {
     width: 100%;
-    margin-bottom: 8px;
+    margin-bottom: 2px;
+    padding: 2px 6px; /* Even smaller padding */
+    height: 24px; /* Smaller height */
+    font-size: 11px; /* Smaller font */
+    line-height: 1.2;
 }
 
 #analyticsPanel .form-actions {
@@ -5310,7 +5323,7 @@ body:has(#analyticsPanel.active) .sidebar {
 
 /* Ensure proper spacing for all form groups in analytics */
 #analyticsPanel .form-group {
-    margin-bottom: 16px;
+    margin-bottom: 3px;
     clear: both;
 }
 
@@ -5330,4 +5343,212 @@ body:has(#analyticsPanel.active) .sidebar {
 
 #analyticsPanel .icon-button {
     z-index: auto;
+}
+
+/* AI Connections section specific styling */
+#analyticsPanel .section-wrapper {
+    margin-bottom: 6px;
+    max-height: none !important; /* Override the 50% height limit */
+    overflow: visible !important;
+    display: block !important;
+}
+
+#analyticsPanel .section-scrollable {
+    max-height: 80px; /* Even smaller to save more space */
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #454545 #252526;
+}
+
+#analyticsPanel .section-scrollable::-webkit-scrollbar {
+    width: 6px;
+}
+
+#analyticsPanel .section-scrollable::-webkit-scrollbar-track {
+    background: #252526;
+}
+
+#analyticsPanel .section-scrollable::-webkit-scrollbar-thumb {
+    background: #454545;
+    border-radius: 3px;
+}
+
+#analyticsPanel .section-scrollable::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}
+
+/* Ensure AI connection items have proper spacing */
+#analyticsPanel .ai-connection-item {
+    padding: 4px 6px;
+    margin-bottom: 2px;
+    min-height: 32px; /* Smaller minimum height */
+    font-size: 10px;
+}
+
+#analyticsPanel .ai-connection-item .connection-info {
+    line-height: 1.3;
+}
+
+#analyticsPanel .ai-connection-item .connection-name {
+    font-size: 10px;
+    margin-bottom: 1px;
+    line-height: 1.2;
+}
+
+#analyticsPanel .ai-connection-item .connection-url {
+    font-size: 9px;
+    opacity: 0.8;
+    line-height: 1.2;
+}
+
+/* Tag filtering and grouping styling */
+#analyticsPanel .tag-filter-item {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    margin-bottom: 2px;
+    flex-wrap: wrap;
+}
+
+#analyticsPanel .tag-filter-item select {
+    flex: 1;
+    min-width: 100px;
+    margin-bottom: 0;
+}
+
+#analyticsPanel .tag-filter-item .tag-filter-remove {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 4px;
+    border-radius: 3px;
+    cursor: pointer;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#analyticsPanel .tag-filter-item .tag-filter-remove:hover {
+    background: #c82333;
+}
+
+#analyticsPanel .groupby-options {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+#analyticsPanel .groupby-options .form-group {
+    margin-bottom: 0;
+}
+
+#analyticsPanel .groupby-options label {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-bottom: 1px;
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+#analyticsPanel .groupby-options input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+#analyticsPanel .groupby-options select {
+    margin-top: 4px;
+}
+
+#analyticsPanel select[multiple] {
+    height: 80px;
+    padding: 4px;
+}
+
+#analyticsPanel select[multiple] option {
+    padding: 2px 4px;
+    margin: 1px 0;
+}
+
+/* Responsive layout for tag filters on narrow sidebars */
+@media (max-width: 320px) {
+    #analyticsPanel .tag-filter-item {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    #analyticsPanel .tag-filter-item select {
+        margin-bottom: 4px;
+    }
+}
+
+/* Style Add Tag Filter button to match app design and reduce size */
+#analyticsPanel .secondary-button {
+    height: 26px !important;
+    font-size: 10px !important;
+    padding: 4px 8px !important;
+    margin-top: 4px !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background-color: #3c3c3c;
+    border: 1px solid #2d2d30;
+    color: #cccccc;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#analyticsPanel .secondary-button:hover {
+    background-color: #37373d;
+    border-color: #007acc;
+}
+
+#analyticsPanel .secondary-button svg {
+    width: 12px;
+    height: 12px;
+}
+
+/* Make Analysis Type tab buttons smaller and more compact */
+#analyticsPanel .analysis-tabs {
+    margin-bottom: 8px; /* Reduced from 16px */
+    padding: 2px; /* Reduced from 4px */
+}
+
+#analyticsPanel .tab-button {
+    padding: 4px 6px !important; /* Much smaller padding */
+    font-size: 9px !important; /* Smaller font */
+    line-height: 1.2;
+    min-height: 22px; /* Smaller height */
+    border-radius: 2px;
+}
+
+/* Reduce excessive vertical space before run analysis button */
+#analyticsPanel .form-actions {
+    margin-top: 8px !important; /* Reduced from 24px */
+    margin-bottom: 8px; /* Reduced from 16px */
+}
+
+/* Reduce space in slider container (alert threshold area) */
+#analyticsPanel .slider-container {
+    margin-bottom: 8px !important; /* Reduced from 16px */
+}
+
+/* Make the analysis options sections more compact */
+#analyticsPanel .analysis-options {
+    margin-bottom: 8px !important; /* Reduced from 16px */
+}
+
+/* Reduce spacing in analysis type section */
+#analyticsPanel .analysis-type-section {
+    margin-bottom: 8px !important; /* Reduced from 16px */
+}
+
+#analyticsPanel .analysis-type-section .form-group {
+    margin-bottom: 6px !important; /* Reduced from 12px */
 }

@@ -74,7 +74,28 @@ const TimeSeriesProcessor = {
         
         query += ` FROM "${retentionPolicy}"."${config.measurement}"`;
         query += ` WHERE ${whereClause}`;
-        query += ` GROUP BY time(${interval}) fill(none)`;
+        
+        // Add tag filter conditions
+        if (typeof Analytics !== 'undefined') {
+            query += Analytics.generateWhereClause();
+        }
+        
+        // Generate GROUP BY clause with time and tag grouping
+        let groupByClause = '';
+        if (typeof Analytics !== 'undefined') {
+            const analyticsGroupBy = Analytics.generateGroupByClause();
+            if (analyticsGroupBy) {
+                groupByClause = analyticsGroupBy;
+            } else {
+                // Default time grouping if no custom grouping
+                groupByClause = ` GROUP BY time(${interval})`;
+            }
+        } else {
+            // Default time grouping if Analytics not available
+            groupByClause = ` GROUP BY time(${interval})`;
+        }
+        
+        query += groupByClause + ' fill(none)';
         query += ` ORDER BY time ASC`;
         
         return query;
