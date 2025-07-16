@@ -17,7 +17,7 @@ const { spawn } = require('child_process');
 const net = require('net');
 
 // Set app name early for macOS menu bar
-app.setName('Grafana Query IDE');
+app.setName('Time Buddy');
 
 // Debug: Log user data paths
 console.log('User data path:', app.getPath('userData'));
@@ -425,13 +425,13 @@ function createMenu() {
             label: 'Help',
             submenu: [
                 {
-                    label: 'About Grafana Query IDE',
+                    label: 'About Time Buddy',
                     click: () => {
                         dialog.showMessageBox(mainWindow, {
                             type: 'info',
-                            title: 'About Grafana Query IDE',
-                            message: 'Grafana Query IDE',
-                            detail: 'A powerful desktop IDE for executing InfluxQL and PromQL queries through the Grafana API.\n\nVersion: 0.0.1\nBuilt with Electron'
+                            title: 'About Time Buddy',
+                            message: 'Time Buddy',
+                            detail: 'Your time series metric friend\n\nA powerful desktop IDE for executing InfluxQL and PromQL queries through the Grafana API.\n\nVersion: 0.1.0\nBuilt with Electron'
                         });
                     }
                 },

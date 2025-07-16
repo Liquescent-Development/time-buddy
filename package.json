@@ -1,7 +1,7 @@
 {
-    "name": "grafana-query-ide",
+    "name": "time-buddy",
     "version": "0.1.0",
-    "description": "Desktop IDE for executing InfluxQL and PromQL queries via Grafana API",
+    "description": "Your time series metric friend - Desktop IDE for executing InfluxQL and PromQL queries via Grafana API",
     "main": "main.js",
     "homepage": "./",
     "scripts": {
@@ -51,8 +51,8 @@
         "node": ">=14.0.0"
     },
     "build": {
-        "appId": "com.grafana.query-ide",
-        "productName": "Grafana Query IDE",
+        "appId": "com.timebuddy.app",
+        "productName": "Time Buddy",
         "directories": {
             "output": "dist"
         },
