@@ -534,6 +534,17 @@ function onTabDatasourceChange() {
     Interface.setTabDatasource(activeTab, select.value);
 }
 
+// Analytics datasource selector
+function onAnalyticsDatasourceChange() {
+    const select = document.getElementById('analyticsDatasource');
+    if (!select || !select.value) return;
+    
+    // Update Analytics datasource and reload data
+    if (typeof Analytics !== 'undefined') {
+        Analytics.setDatasource(select.value);
+    }
+}
+
 // Legacy function compatibility
 function toggleSchemaExplorer() {
     Interface.switchSidebarView('explorer');

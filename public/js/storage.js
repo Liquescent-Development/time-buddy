@@ -110,6 +110,23 @@ const Storage = {
         
         return clearedCount;
     },
+    
+    // Clear all schema cache or specific datasource cache
+    clearSchemaFromStorage(datasourceId = null) {
+        if (datasourceId) {
+            // Clear specific datasource cache
+            const cache = this.getSavedSchemaCache();
+            if (cache[datasourceId]) {
+                delete cache[datasourceId];
+                localStorage.setItem('grafanaSchemaCache', JSON.stringify(cache));
+                console.log(`DEBUG: Cleared schema cache for datasource ${datasourceId}`);
+            }
+        } else {
+            // Clear all schema cache
+            localStorage.removeItem('grafanaSchemaCache');
+            console.log('DEBUG: Cleared all schema cache from storage');
+        }
+    },
 
     // Debug function to inspect and recover localStorage data
     debugLocalStorage() {

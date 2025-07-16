@@ -19,10 +19,84 @@ const Schema = {
     isLoadingFieldTags: false,
     isLoadingTagValues: false,
     
+    // Computed property to indicate if schema is loaded
+    get loadedSchema() {
+        if (!this.currentDatasourceId) return null;
+        
+        if (this.currentDatasourceType === 'influxdb') {
+            return {
+                measurements: this.influxMeasurements.length > 0 ? 
+                    this.influxMeasurements.reduce((acc, measurement) => {
+                        acc[measurement] = {
+                            fields: this.influxFields[measurement] || {},
+                            tags: this.influxTags[measurement] || {}
+                        };
+                        return acc;
+                    }, {}) : null
+            };
+        } else if (this.currentDatasourceType === 'prometheus') {
+            return {
+                metrics: this.prometheusMetrics,
+                labels: this.prometheusLabels
+            };
+        }
+        
+        return null;
+    },
+    
     // Cache management
     schemaCache: {}, // Cache schema data per datasource: { datasourceId: { type, data, timestamp } }
     cacheExpiry: 5 * 60 * 1000, // 5 minutes cache expiry
     lastDatasourceId: null, // Track last loaded datasource to avoid redundant loads
+    
+    // Clear all cached schema data
+    clearSchemaCache() {
+        console.log('🗑️ Clearing all schema cache data');
+        this.schemaCache = {};
+        this.lastDatasourceId = null;
+        
+        // Clear persistent storage cache
+        if (typeof Storage !== 'undefined') {
+            Storage.clearSchemaFromStorage();
+        }
+        
+        // Clear in-memory data
+        this.influxMeasurements = [];
+        this.influxRetentionPolicies = [];
+        this.influxFields = {};
+        this.influxTags = {};
+        this.influxTagValues = {};
+        this.prometheusMetrics = [];
+        this.prometheusLabels = {};
+        
+        console.log('✅ Schema cache cleared');
+    },
+    
+    // Clear cache for specific datasource
+    clearDatasourceCache(datasourceId) {
+        if (this.schemaCache[datasourceId]) {
+            console.log('🗑️ Clearing cache for datasource:', datasourceId);
+            delete this.schemaCache[datasourceId];
+            
+            // Clear persistent storage cache for this datasource
+            if (typeof Storage !== 'undefined') {
+                Storage.clearSchemaFromStorage(datasourceId);
+            }
+            
+            // If this is the current datasource, clear in-memory data
+            if (this.currentDatasourceId === datasourceId) {
+                this.influxMeasurements = [];
+                this.influxRetentionPolicies = [];
+                this.influxFields = {};
+                this.influxTags = {};
+                this.influxTagValues = {};
+                this.prometheusMetrics = [];
+                this.prometheusLabels = {};
+            }
+            
+            console.log('✅ Cache cleared for datasource:', datasourceId);
+        }
+    },
     
     // Initialize schema explorer
     initialize() {
@@ -581,9 +655,18 @@ const Schema = {
     },
     
     // Load just fields and tags for a measurement (for tree expansion)
-    async loadMeasurementFieldsAndTags(measurement, retentionPolicy = 'autogen') {
+    async loadMeasurementFieldsAndTags(measurement, retentionPolicy = 'autogen', forceReload = false) {
         try {
-            console.log(`Loading fields and tags for measurement: ${measurement}, retention policy: ${retentionPolicy}`);
+            console.log(`Loading fields and tags for measurement: ${measurement}, retention policy: ${retentionPolicy}, force: ${forceReload}`);
+            
+            // Check if we already have data and don't need to force reload
+            if (!forceReload && this.influxFields[measurement] && this.influxFields[measurement].length > 0) {
+                console.log('Using cached fields and tags for measurement:', measurement);
+                return {
+                    fields: this.influxFields[measurement] || [],
+                    tags: this.influxTags[measurement] || []
+                };
+            }
             
             // Get field keys - try without retention policy first
             let fieldsQuery = `SHOW FIELD KEYS FROM "${measurement}"`;
@@ -652,6 +735,30 @@ const Schema = {
                 tags: []
             };
         }
+    },
+    
+    // Force reload fields and tags for a specific measurement
+    async forceReloadMeasurement(measurement, retentionPolicy = 'autogen') {
+        console.log('🔄 Force reloading fields and tags for measurement:', measurement);
+        
+        // Clear cached data for this measurement
+        delete this.influxFields[measurement];
+        delete this.influxTags[measurement];
+        
+        // Clear any tag values associated with this measurement
+        Object.keys(this.influxTagValues).forEach(key => {
+            if (key.startsWith(`${measurement}:`)) {
+                delete this.influxTagValues[key];
+            }
+        });
+        
+        // Reload with force flag
+        const result = await this.loadMeasurementFieldsAndTags(measurement, retentionPolicy, true);
+        
+        // Re-render the UI to show fresh data
+        this.renderSchemaUI();
+        
+        return result;
     },
     
     // Execute InfluxDB schema query using direct proxy endpoint
@@ -1157,6 +1264,21 @@ const Schema = {
         container.innerHTML = html;
     },
     
+    // Refresh schema cache
+    async refreshSchema() {
+        console.log('🔄 Refreshing schema cache...');
+        
+        // Clear cache for current datasource
+        if (this.currentDatasourceId) {
+            this.clearDatasourceCache(this.currentDatasourceId);
+        }
+        
+        // Force reload schema
+        await this.loadSchemaIfNeeded(true);
+        
+        console.log('✅ Schema cache refreshed');
+    },
+    
     // Render Prometheus schema as a tree
     renderPrometheusSchema() {
         let html = '<div class="schema-tree">';
@@ -1486,14 +1608,13 @@ const Schema = {
         }
     },
     
-    // Refresh schema (force reload)
-    async refreshSchema() {
-        console.log('Manual schema refresh requested');
-        await this.loadSchemaIfNeeded(true); // Force reload
-    }
 };
 
 // Global functions for HTML onclick handlers
+function refreshSchema() {
+    Schema.refreshSchema();
+}
+
 function toggleTreeNode(header) {
     const icon = header.querySelector('.tree-node-icon');
     const content = header.nextElementSibling;
@@ -1606,7 +1727,9 @@ async function toggleInfluxMeasurement(header, measurement, retentionPolicy) {
         icon.textContent = '▼';
         
         // Check if fields are already loaded
-        if (!Schema.influxFields[measurement] || content.innerHTML.includes('Click to load fields')) {
+        if (!Schema.influxFields[measurement] || content.innerHTML.includes('Click arrow to load fields')) {
+            console.log('🔄 Loading fields for measurement:', measurement, 'retention policy:', retentionPolicy);
+            
             // Show loading state
             content.innerHTML = '<div class="tree-item-empty">Loading fields...</div>';
             

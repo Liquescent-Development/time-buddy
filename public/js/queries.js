@@ -410,6 +410,96 @@ const Queries = {
             
             return false;
         });
+    },
+
+    // Execute a query programmatically and return the result
+    // Used by Analytics and other modules that need to execute queries without updating the UI
+    async executeQueryDirect(query, options = {}) {
+        const datasourceId = options.datasourceId || GrafanaConfig.currentDatasourceId;
+        const datasourceType = options.datasourceType || GrafanaConfig.selectedDatasourceType || 'prometheus';
+        const timeout = options.timeout || 30000;
+        
+        if (!datasourceId) {
+            throw new Error('No datasource ID provided');
+        }
+        
+        if (!query) {
+            throw new Error('No query provided');
+        }
+        
+        try {
+            // Use a fixed time range for metadata queries like SHOW TAG VALUES
+            const now = Date.now();
+            const fromTime = now - (24 * 60 * 60 * 1000); // 24 hours ago
+            const toTime = now;
+            
+            let requestBody;
+            let urlParams = '';
+            
+            if (datasourceType === 'influxdb') {
+                const requestId = 'KAI';
+                urlParams = '?ds_type=influxdb&requestId=' + requestId;
+                
+                requestBody = {
+                    queries: [{
+                        refId: 'A',
+                        datasource: {
+                            uid: datasourceId,
+                            type: 'influxdb'
+                        },
+                        query: query,
+                        rawQuery: true,
+                        resultFormat: 'time_series',
+                        requestId: requestId,
+                        utcOffsetSec: -25200, // PST offset
+                        datasourceId: null,
+                        intervalMs: 15000,
+                        maxDataPoints: 1000
+                    }],
+                    from: fromTime.toString(),
+                    to: toTime.toString()
+                };
+            } else {
+                // Prometheus query format
+                const requestId = Math.random().toString(36).substr(2, 9);
+                urlParams = '?ds_type=prometheus&requestId=' + requestId;
+                
+                requestBody = {
+                    queries: [{
+                        refId: 'A',
+                        datasource: { uid: datasourceId },
+                        expr: query,
+                        queryType: 'timeSeriesQuery',
+                        utcOffsetSec: -25200,
+                        datasourceId: datasourceId,
+                        intervalMs: 15000,
+                        maxDataPoints: 1000
+                    }],
+                    from: fromTime.toString(),
+                    to: toTime.toString()
+                };
+            }
+            
+            const response = await API.makeApiRequest('/api/ds/query' + urlParams, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(requestBody)
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error('Query failed: ' + response.statusText + ' - ' + errorText);
+            }
+            
+            const data = await response.json();
+            return data;
+            
+        } catch (error) {
+            console.error('Direct query error:', error);
+            throw error;
+        }
     }
 };
 
