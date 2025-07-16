@@ -4,8 +4,8 @@
 const AIAnalytics = {
     // Configuration
     config: {
-        maxDataPoints: 1000,
-        defaultTimeout: 120000, // 2 minutes to match Ollama timeout
+        maxDataPoints: 100000, // High resolution for comprehensive AI analysis
+        defaultTimeout: 600000, // 10 minutes default, configurable per connection
         retryAttempts: 2
     },
 
@@ -36,11 +36,30 @@ const AIAnalytics = {
         - Data Points Count: {dataPointsCount}
 
         ANALYSIS REQUIREMENTS:
-        1. Calculate anomaly scores (0-1) for each suspicious point
+        1. Calculate anomaly scores (0-1) for each suspicious point based on statistical deviation
         2. Identify anomaly types: spike, drop, drift, seasonal_deviation, outlier
-        3. Determine severity levels: low, medium, high, critical
+        3. Determine severity levels based on score ranges:
+           - critical: score >= 0.9 (extreme outliers, >4 sigma)
+           - high: score >= 0.7 (significant outliers, 3-4 sigma) 
+           - medium: score >= 0.5 (moderate outliers, 2-3 sigma)
+           - low: score >= 0.3 (mild outliers, 1.5-2 sigma)
         4. Provide statistical explanations for each anomaly
         5. Consider business context and typical system behavior patterns
+        
+        **CRITICAL ANTI-BIAS REQUIREMENTS:**
+        6. MANDATORY: Analyze the ENTIRE time series equally - do NOT focus only on recent data
+        7. FORBIDDEN: Clustering all anomalies at the end of the time series
+        8. REQUIRED: Find anomalies distributed across the FULL time period if they exist
+        9. VERIFICATION: Before finalizing, check that anomalies span multiple days/periods, not just the last few hours
+        10. TEMPORAL BALANCE: If you find 10 anomalies, they should be spread across the time range, NOT all in the final 1% of data
+        11. ALWAYS include severity_distribution in summary with actual counts from anomalies
+        
+        **MANDATORY TEMPORAL DISTRIBUTION:**
+        12. FORBIDDEN: Finding all anomalies in timestamps after 2025-07-16T06:00:00Z (recent bias)
+        13. REQUIRED: If analyzing 30 days of data, anomalies must span across multiple days, not just the final day
+        14. ENFORCEMENT: Actively search for anomalies in the first 80% of the time series, not just the last 20%
+        15. VALIDATION: The earliest anomaly timestamp should be within the first 50% of the time range
+        16. BALANCE CHECK: Maximum 30% of anomalies can be in the final 10% of the time series
 
         RESPONSE FORMAT (JSON only):
         {
@@ -400,9 +419,46 @@ const AIAnalytics = {
         return processed;
     },
 
-    // Format data points for AI prompt
+    // Format data points for AI prompt with temporal balance
     formatDataPoints(data) {
-        return data.slice(-50).map(point => 
+        if (data.length <= 100) {
+            // Small dataset: include all points
+            return data.map(point => 
+                `${point.timestamp}: ${point.value}`
+            ).join('\n');
+        }
+        
+        // Large dataset: sample across entire time range to avoid recency bias
+        const samples = [];
+        const sampleSize = 100;
+        
+        // Take samples from beginning (40%), middle (30%), and end (30%)
+        const beginningCount = Math.floor(sampleSize * 0.4);
+        const middleCount = Math.floor(sampleSize * 0.3);
+        const endCount = sampleSize - beginningCount - middleCount;
+        
+        // Beginning samples
+        for (let i = 0; i < beginningCount && i < data.length; i++) {
+            const index = Math.floor((i / beginningCount) * (data.length * 0.33));
+            if (data[index]) samples.push(data[index]);
+        }
+        
+        // Middle samples
+        const middleStart = Math.floor(data.length * 0.33);
+        const middleEnd = Math.floor(data.length * 0.67);
+        for (let i = 0; i < middleCount; i++) {
+            const index = middleStart + Math.floor((i / middleCount) * (middleEnd - middleStart));
+            if (data[index]) samples.push(data[index]);
+        }
+        
+        // End samples
+        const endStart = Math.floor(data.length * 0.67);
+        for (let i = 0; i < endCount; i++) {
+            const index = endStart + Math.floor((i / endCount) * (data.length - endStart));
+            if (data[index]) samples.push(data[index]);
+        }
+        
+        return samples.map(point => 
             `${point.timestamp}: ${point.value}`
         ).join('\n');
     },
@@ -586,6 +642,9 @@ const AIAnalytics = {
             throw new Error('Ollama service not available');
         }
         
+        // Use custom timeout from config if available, otherwise use default
+        const customTimeout = config.timeout || this.config.defaultTimeout;
+        
         const response = await OllamaService.generateResponse(
             prompt,
             this.prompts.systemPrompt,
@@ -594,7 +653,8 @@ const AIAnalytics = {
                 num_predict: config.numPredict === -1 ? -1 : (config.numPredict || 4096),
                 num_ctx: config.numCtx || 8192,
                 top_p: 0.9
-            }
+            },
+            customTimeout
         );
         
         return response;
@@ -612,6 +672,9 @@ const AIAnalytics = {
             
             // Try to parse JSON response
             const parsed = JSON.parse(responseText);
+            
+            // Validate and fix severity distribution
+            this.validateAndFixSeverityDistribution(parsed);
             
             // Add metadata and original time series data
             parsed.metadata = {
@@ -649,6 +712,64 @@ const AIAnalytics = {
             
             throw new Error(`AI returned invalid JSON response. This usually means the response was truncated due to token limits. Try increasing 'Response Tokens (num_predict)' in settings. Error: ${error.message}`);
         }
+    },
+
+    // Validate and fix severity distribution in AI response
+    validateAndFixSeverityDistribution(parsed) {
+        // Only apply to anomaly detection results
+        if (!parsed.anomalies || !Array.isArray(parsed.anomalies)) {
+            return;
+        }
+
+        console.log('🔍 Validating severity distribution...');
+        
+        // Check if summary exists, create if missing
+        if (!parsed.summary) {
+            parsed.summary = {};
+        }
+
+        // Get existing severity distribution or create empty one
+        let distribution = parsed.summary.severity_distribution || {};
+        
+        // Calculate expected distribution from individual anomalies
+        const calculatedDistribution = parsed.anomalies.reduce((acc, anomaly) => {
+            const severity = anomaly.severity || 'unknown';
+            acc[severity] = (acc[severity] || 0) + 1;
+            return acc;
+        }, {});
+
+        // Check if existing distribution matches calculated distribution
+        const defaultLevels = ['critical', 'high', 'medium', 'low'];
+        let needsUpdate = false;
+
+        // Ensure all severity levels are represented
+        defaultLevels.forEach(level => {
+            const existing = distribution[level] || 0;
+            const calculated = calculatedDistribution[level] || 0;
+            
+            if (existing !== calculated) {
+                needsUpdate = true;
+            }
+        });
+
+        // Update distribution if needed
+        if (needsUpdate || Object.keys(distribution).length === 0) {
+            console.log('🔄 Fixing severity distribution mismatch');
+            console.log('📊 Calculated from anomalies:', calculatedDistribution);
+            console.log('📊 Previous distribution:', distribution);
+            
+            // Create corrected distribution with all levels
+            const correctedDistribution = { critical: 0, high: 0, medium: 0, low: 0 };
+            Object.assign(correctedDistribution, calculatedDistribution);
+            
+            parsed.summary.severity_distribution = correctedDistribution;
+            console.log('✅ Updated severity distribution:', correctedDistribution);
+        } else {
+            console.log('✅ Severity distribution is valid');
+        }
+
+        // Update total anomalies count
+        parsed.summary.total_anomalies = parsed.anomalies.length;
     },
 
 

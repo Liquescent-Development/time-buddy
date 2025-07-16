@@ -4,7 +4,7 @@
 const TimeSeriesProcessor = {
     // Configuration
     config: {
-        maxDataPoints: 1000,
+        maxDataPoints: 100000, // High resolution for comprehensive AI analytics
         minDataPoints: 10,
         defaultAggregation: 'mean',
         timeoutMs: 60000 // 1 minute for data fetching
@@ -37,6 +37,9 @@ const TimeSeriesProcessor = {
 
     // Build optimal query for analysis
     buildOptimalQuery(config, maxPoints) {
+        console.log('🔍 TimeSeriesProcessor.buildOptimalQuery received config:', config);
+        console.log('🏷️ TimeSeriesProcessor tags received:', config.tags);
+        
         const timeRange = this.parseTimeRange(config.timeRange);
         const optimalInterval = this.calculateOptimalInterval(timeRange, maxPoints);
         
@@ -45,7 +48,10 @@ const TimeSeriesProcessor = {
         
         // Build tag filters
         const tagFilters = this.buildTagFilters(config.tags);
+        console.log('🏷️ TimeSeriesProcessor built tagFilters:', tagFilters);
+        
         const whereClause = this.buildWhereClause(config.timeRange, tagFilters);
+        console.log('🏷️ TimeSeriesProcessor built whereClause:', whereClause);
         
         // Construct the query
         let query;
@@ -74,11 +80,6 @@ const TimeSeriesProcessor = {
         
         query += ` FROM "${retentionPolicy}"."${config.measurement}"`;
         query += ` WHERE ${whereClause}`;
-        
-        // Add tag filter conditions
-        if (typeof Analytics !== 'undefined') {
-            query += Analytics.generateWhereClause();
-        }
         
         // Generate GROUP BY clause with time and tag grouping
         let groupByClause = '';
@@ -256,7 +257,7 @@ const TimeSeriesProcessor = {
                     utcOffsetSec: new Date().getTimezoneOffset() * -60,
                     datasourceId: parseInt(GrafanaConfig.selectedDatasourceNumericId) || null,
                     intervalMs: 15000,
-                    maxDataPoints: 1000
+                    maxDataPoints: 100000
                 }],
                 from: fromTime.toString(),
                 to: now.toString()
@@ -281,7 +282,7 @@ const TimeSeriesProcessor = {
                     adhocFilters: [],
                     datasourceId: parseInt(GrafanaConfig.selectedDatasourceNumericId) || null,
                     intervalMs: 15000,
-                    maxDataPoints: 1000
+                    maxDataPoints: 100000
                 }],
                 from: fromTime.toString(),
                 to: now.toString()
@@ -534,7 +535,7 @@ const TimeSeriesProcessor = {
 
     // Calculate Prometheus step size
     calculatePrometheusStep(timeRangeSeconds) {
-        const maxPoints = 1000;
+        const maxPoints = 100000; // High resolution for AI analytics
         const stepSeconds = Math.max(15, Math.floor(timeRangeSeconds / maxPoints));
         return `${stepSeconds}s`;
     },

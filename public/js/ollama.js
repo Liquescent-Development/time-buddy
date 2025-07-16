@@ -6,7 +6,7 @@ const OllamaService = {
     config: {
         endpoint: null, // User-provided endpoint
         model: 'llama3.1:8b-instruct-q4_K_M', // Default recommended model
-        timeout: 120000, // 2 minute timeout for AI analysis
+        timeout: 600000, // 10 minute default timeout for AI analysis (configurable per connection)
         connectionTimeout: 5000, // 5 second timeout for connection tests
         maxRetries: 3,
         retryDelay: 1000 // 1 second initial retry delay
@@ -119,7 +119,7 @@ const OllamaService = {
     },
 
     // Core inference method with retry logic
-    async generateResponse(prompt, systemPrompt = null, options = {}) {
+    async generateResponse(prompt, systemPrompt = null, options = {}, customTimeout = null) {
         if (!this.isConnected) {
             throw new Error('Ollama service not connected. Please initialize first.');
         }
@@ -149,10 +149,11 @@ const OllamaService = {
         for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
             try {
                 const abortController = this.createAbortController();
+                const timeoutMs = customTimeout || this.config.timeout;
                 const timeoutId = setTimeout(() => {
-                    console.log(`⏰ Request timeout after ${this.config.timeout}ms on attempt ${attempt}`);
+                    console.log(`⏰ Request timeout after ${timeoutMs}ms on attempt ${attempt}`);
                     abortController.abort();
-                }, this.config.timeout);
+                }, timeoutMs);
                 
                 const response = await fetch(`${this.config.endpoint}/api/generate`, {
                     method: 'POST',
@@ -194,8 +195,9 @@ const OllamaService = {
                 
                 // Handle different error types
                 if (error.name === 'AbortError') {
-                    console.warn(`⏰ Request timed out on attempt ${attempt} after ${this.config.timeout}ms`);
-                    lastError = new Error(`Request timed out after ${this.config.timeout / 1000} seconds`);
+                    const timeoutMs = customTimeout || this.config.timeout;
+                    console.warn(`⏰ Request timed out on attempt ${attempt} after ${timeoutMs}ms`);
+                    lastError = new Error(`Request timed out after ${timeoutMs / 1000} seconds`);
                 } else {
                     console.warn(`🔄 Generation attempt ${attempt} failed:`, error.message);
                 }

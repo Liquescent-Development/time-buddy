@@ -667,7 +667,24 @@ const AnalyticsVisualizer = {
         const container = document.getElementById('severityChart');
         if (!container) return;
 
-        const distribution = results.summary?.severity_distribution || {};
+        // Get severity distribution from AI summary, or calculate from individual anomalies as fallback
+        let distribution = results.summary?.severity_distribution || {};
+        
+        // If no distribution provided by AI, calculate from individual anomalies
+        if (Object.keys(distribution).length === 0 && results.anomalies && results.anomalies.length > 0) {
+            console.log('🔄 Calculating severity distribution from individual anomalies as fallback');
+            distribution = results.anomalies.reduce((acc, anomaly) => {
+                const severity = anomaly.severity || 'unknown';
+                acc[severity] = (acc[severity] || 0) + 1;
+                return acc;
+            }, {});
+            console.log('📊 Calculated severity distribution:', distribution);
+        }
+        
+        // Ensure all severity levels are represented (even with 0 counts)
+        const defaultDistribution = { critical: 0, high: 0, medium: 0, low: 0 };
+        distribution = { ...defaultDistribution, ...distribution };
+        
         const total = Object.values(distribution).reduce((a, b) => a + b, 0);
         
         let html = '<div class="severity-bars">';

@@ -8,6 +8,7 @@ const Analytics = {
         selectedModel: 'llama3.1:8b-instruct-q4_K_M',
         numPredict: -1, // -1 means infinite (Ollama default)
         numCtx: 8192,
+        timeout: 600000, // 10 minutes default timeout in milliseconds
         analysisType: 'anomaly',
         retentionPolicy: 'raw',
         measurement: '',
@@ -96,6 +97,15 @@ const Analytics = {
                 this.config.numCtx = parseInt(e.target.value);
                 this.saveConfiguration();
                 console.log('🎛️ Context size (num_ctx) updated:', this.config.numCtx);
+            });
+        }
+
+        const aiTimeout = document.getElementById('aiTimeout');
+        if (aiTimeout) {
+            aiTimeout.addEventListener('change', (e) => {
+                this.config.timeout = parseInt(e.target.value) * 1000; // Convert to milliseconds
+                this.saveConfiguration();
+                console.log('🎛️ Analysis timeout updated:', this.config.timeout);
             });
         }
 
@@ -268,6 +278,9 @@ const Analytics = {
 
         const aiContextSize = document.getElementById('aiContextSize');
         if (aiContextSize) aiContextSize.value = this.config.numCtx;
+
+        const aiTimeout = document.getElementById('aiTimeout');
+        if (aiTimeout) aiTimeout.value = Math.floor((this.config.timeout || 600000) / 1000); // Convert from ms to seconds
 
         const retentionPolicy = document.getElementById('analyticsRetentionPolicy');
         if (retentionPolicy) retentionPolicy.value = this.config.retentionPolicy;
@@ -491,11 +504,13 @@ const Analytics = {
             const aiModel = document.getElementById('aiModel');
             const aiResponseTokens = document.getElementById('aiResponseTokens');
             const aiContextSize = document.getElementById('aiContextSize');
+            const aiTimeout = document.getElementById('aiTimeout');
 
             if (aiEndpoint) aiEndpoint.value = this.config.ollamaEndpoint;
             if (aiModel) aiModel.value = this.config.selectedModel;
             if (aiResponseTokens) aiResponseTokens.value = this.config.numPredict;
             if (aiContextSize) aiContextSize.value = this.config.numCtx;
+            if (aiTimeout) aiTimeout.value = Math.floor((this.config.timeout || 600000) / 1000); // Convert from ms to seconds
 
             this.toggleCustomModelField();
             dialog.style.display = 'block';
@@ -531,6 +546,7 @@ const Analytics = {
         const customModelName = document.getElementById('customModelName');
         const aiResponseTokens = document.getElementById('aiResponseTokens');
         const aiContextSize = document.getElementById('aiContextSize');
+        const aiTimeout = document.getElementById('aiTimeout');
 
         if (aiEndpoint) this.config.ollamaEndpoint = aiEndpoint.value;
         
@@ -544,6 +560,7 @@ const Analytics = {
         
         if (aiResponseTokens) this.config.numPredict = parseInt(aiResponseTokens.value);
         if (aiContextSize) this.config.numCtx = parseInt(aiContextSize.value);
+        if (aiTimeout) this.config.timeout = parseInt(aiTimeout.value) * 1000; // Convert to milliseconds
 
         this.saveConfiguration();
         this.updateAiConnectionCard();
@@ -1008,6 +1025,16 @@ const Analytics = {
             // Validate configuration
             this.validateAnalysisConfig();
 
+            // Convert tagFilters to tags object format
+            console.log('🏷️ Analytics.config.tagFilters:', this.config.tagFilters);
+            const tags = {};
+            this.config.tagFilters.forEach(filter => {
+                if (filter.tagKey && filter.tagValue) {
+                    tags[filter.tagKey] = filter.tagValue;
+                }
+            });
+            console.log('🏷️ Analytics converted tags object:', tags);
+
             // Execute AI analysis using the AI Analytics engine
             const results = await AIAnalytics.executeAnalysis({
                 analysisType: this.config.analysisType,
@@ -1015,14 +1042,15 @@ const Analytics = {
                 measurement: this.config.measurement,
                 field: this.config.field,
                 timeRange: this.config.timeRange,
-                tags: this.config.tags,
+                tags: tags,
                 sensitivity: this.config.sensitivity,
                 alertThreshold: this.config.alertThreshold,
                 forecastHorizon: this.config.forecastHorizon,
                 confidenceLevel: this.config.confidenceLevel,
                 trendDepth: this.config.trendDepth,
                 numPredict: this.config.numPredict,
-                numCtx: this.config.numCtx
+                numCtx: this.config.numCtx,
+                timeout: this.config.timeout // Pass configurable timeout
             });
 
             // Store results for export
@@ -1133,6 +1161,91 @@ const Analytics = {
                 </div>
             </div>
         `;
+    },
+
+    // Save analysis to local storage
+    saveAnalysis() {
+        if (!this.currentResults) {
+            this.showError('No analysis results to save');
+            return;
+        }
+
+        // Create a unique ID for this analysis
+        const analysisId = Date.now().toString();
+        
+        // Create the saved analysis object
+        const savedAnalysis = {
+            id: analysisId,
+            timestamp: new Date().toISOString(),
+            config: {
+                analysisType: this.config.analysisType,
+                measurement: this.config.measurement,
+                field: this.config.field,
+                timeRange: this.config.timeRange,
+                tags: this.config.tags,
+                model: this.config.selectedModel
+            },
+            results: this.currentResults,
+            metadata: {
+                datasource: GrafanaConfig.currentDatasourceName || 'Unknown',
+                connection: GrafanaConfig.currentConnectionName || 'Unknown'
+            }
+        };
+
+        // Get existing saved analyses
+        const savedAnalyses = JSON.parse(localStorage.getItem('savedAiAnalyses') || '[]');
+        
+        // Add the new analysis
+        savedAnalyses.unshift(savedAnalysis); // Add to beginning
+        
+        // Limit to 50 saved analyses
+        if (savedAnalyses.length > 50) {
+            savedAnalyses.pop();
+        }
+        
+        // Save to localStorage
+        try {
+            localStorage.setItem('savedAiAnalyses', JSON.stringify(savedAnalyses));
+            
+            // Show success message
+            this.showSuccessMessage('Analysis saved successfully!');
+            
+            // Update saved analyses UI if it's open
+            if (document.getElementById('savedAnalysesPanel')) {
+                this.loadSavedAnalyses();
+            }
+        } catch (error) {
+            console.error('Failed to save analysis:', error);
+            this.showError('Failed to save analysis. Storage may be full.');
+        }
+    },
+
+    // Show success message
+    showSuccessMessage(message) {
+        // Create a temporary success notification
+        const notification = document.createElement('div');
+        notification.className = 'success-notification';
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #4CAF50;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 10000;
+            animation: slideIn 0.3s ease-out;
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Remove after 3 seconds
+        setTimeout(() => {
+            notification.style.animation = 'slideOut 0.3s ease-out';
+            setTimeout(() => document.body.removeChild(notification), 300);
+        }, 3000);
     },
 
     // Export results
@@ -1256,6 +1369,7 @@ const Analytics = {
                         </div>
                     </div>
                     <div class="modal-footer">
+                        <button class="secondary-button" onclick="Analytics.saveAnalysis()">💾 Save Analysis</button>
                         <button class="secondary-button" onclick="Analytics.exportResults('json')">📄 Export JSON</button>
                         <button class="secondary-button" onclick="Analytics.exportResults('csv')">📊 Export CSV</button>
                         <button class="primary-button" onclick="Analytics.closeResultsModal()">Close</button>
@@ -1329,6 +1443,121 @@ const Analytics = {
         const modalContainer = document.createElement('div');
         modalContainer.innerHTML = errorHtml;
         document.body.appendChild(modalContainer.firstElementChild);
+    },
+
+    // Show saved analyses modal
+    showSavedAnalyses() {
+        const modal = document.getElementById('savedAnalysesModal');
+        if (modal) {
+            modal.style.display = 'block';
+            this.loadSavedAnalyses();
+        }
+    },
+
+    // Close saved analyses modal
+    closeSavedAnalyses() {
+        const modal = document.getElementById('savedAnalysesModal');
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    },
+
+    // Load saved analyses from localStorage
+    loadSavedAnalyses() {
+        const panel = document.getElementById('savedAnalysesPanel');
+        if (!panel) return;
+
+        const savedAnalyses = JSON.parse(localStorage.getItem('savedAiAnalyses') || '[]');
+
+        if (savedAnalyses.length === 0) {
+            panel.innerHTML = '<div class="no-saved-analyses">No saved analyses yet. Run an analysis and save it to see it here.</div>';
+            return;
+        }
+
+        let html = '<div class="saved-analyses-list">';
+        
+        savedAnalyses.forEach(analysis => {
+            const date = new Date(analysis.timestamp);
+            const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+            
+            html += `
+                <div class="saved-analysis-item" data-id="${analysis.id}">
+                    <div class="saved-analysis-header">
+                        <div class="saved-analysis-title">
+                            ${analysis.config.analysisType.charAt(0).toUpperCase() + analysis.config.analysisType.slice(1)} Analysis
+                        </div>
+                        <div class="saved-analysis-timestamp">${formattedDate}</div>
+                    </div>
+                    <div class="saved-analysis-info">
+                        <strong>Data:</strong> ${analysis.config.measurement}.${analysis.config.field} | 
+                        <strong>Time:</strong> ${analysis.config.timeRange} | 
+                        <strong>Model:</strong> ${analysis.config.model}
+                    </div>
+                    <div class="saved-analysis-actions">
+                        <button class="secondary-button" onclick="Analytics.viewSavedAnalysis('${analysis.id}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                            </svg>
+                            View
+                        </button>
+                        <button class="secondary-button" onclick="Analytics.deleteSavedAnalysis('${analysis.id}')">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                            </svg>
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        panel.innerHTML = html;
+    },
+
+    // View a saved analysis
+    viewSavedAnalysis(analysisId) {
+        const savedAnalyses = JSON.parse(localStorage.getItem('savedAiAnalyses') || '[]');
+        const analysis = savedAnalyses.find(a => a.id === analysisId);
+        
+        if (!analysis) {
+            this.showError('Analysis not found');
+            return;
+        }
+
+        // Close saved analyses modal
+        this.closeSavedAnalyses();
+        
+        // Update current results
+        this.currentResults = analysis.results;
+        
+        // Update config to match saved analysis
+        this.config.analysisType = analysis.config.analysisType;
+        this.config.measurement = analysis.config.measurement;
+        this.config.field = analysis.config.field;
+        this.config.timeRange = analysis.config.timeRange;
+        this.config.tags = analysis.config.tags || {};
+        
+        // Show results modal
+        this.showResultsModal(analysis.results);
+    },
+
+    // Delete a saved analysis
+    deleteSavedAnalysis(analysisId) {
+        if (!confirm('Are you sure you want to delete this analysis?')) {
+            return;
+        }
+
+        let savedAnalyses = JSON.parse(localStorage.getItem('savedAiAnalyses') || '[]');
+        savedAnalyses = savedAnalyses.filter(a => a.id !== analysisId);
+        
+        localStorage.setItem('savedAiAnalyses', JSON.stringify(savedAnalyses));
+        
+        // Reload the list
+        this.loadSavedAnalyses();
+        
+        // Show success message
+        this.showSuccessMessage('Analysis deleted successfully');
     },
 
     // Close error modal
@@ -1744,6 +1973,11 @@ const Analytics = {
                         targetSelect.appendChild(option);
                     });
                     
+                    // Add event listener to ensure updateTagFiltersConfig is called when value changes
+                    targetSelect.removeEventListener('change', updateTagFiltersConfig);
+                    targetSelect.addEventListener('change', updateTagFiltersConfig);
+                    console.log('🏷️ Added change event listener to tag value select');
+                    
                     console.log('🏷️ Successfully loaded', values.length, 'values for tag:', tagKey);
                 } else {
                     console.log('🏷️ No values found');
@@ -1838,7 +2072,7 @@ function addTagFilter() {
         <select class="tag-key-select select-input" onchange="onTagKeyChange(this)">
             <option value="">Select tag...</option>
         </select>
-        <select class="tag-value-select select-input" disabled>
+        <select class="tag-value-select select-input" disabled onchange="updateTagFiltersConfig()">
             <option value="">Select value...</option>
         </select>
         <button type="button" class="icon-button tag-filter-remove" onclick="removeTagFilter(this)" title="Remove filter">
@@ -1876,18 +2110,21 @@ function removeTagFilter(buttonElement) {
 }
 
 function updateTagFiltersConfig() {
+    console.log('🏷️ updateTagFiltersConfig called');
     const tagFilterItems = document.querySelectorAll('.tag-filter-item');
     const tagFilters = [];
     
     tagFilterItems.forEach(item => {
         const tagKey = item.querySelector('.tag-key-select').value;
         const tagValue = item.querySelector('.tag-value-select').value;
+        console.log('🏷️ Found tag filter item:', { tagKey, tagValue });
         
         if (tagKey && tagValue) {
             tagFilters.push({ tagKey, tagValue });
         }
     });
     
+    console.log('🏷️ Final tagFilters array:', tagFilters);
     Analytics.config.tagFilters = tagFilters;
     Analytics.saveConfiguration();
 }
