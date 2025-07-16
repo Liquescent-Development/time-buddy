@@ -1,0 +1,221 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # Job to determine if we should create a release (only on main branch pushes)
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      should-release: ${{ steps.check.outputs.should-release }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check if should release
+        id: check
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "should-release=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-release=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Get version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+  # Build job for all platforms
+  build:
+    needs: check-release
+    strategy:
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build Electron app
+        run: |
+          if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
+            npm run build-mac
+          elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            npm run build-win
+          else
+            npm run build-linux
+          fi
+        shell: bash
+      
+      - name: List build artifacts (Debug)
+        run: |
+          echo "Contents of dist directory:"
+          ls -la dist/ || echo "No dist directory found"
+        shell: bash
+      
+      - name: Upload macOS artifacts
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: macos-builds
+          path: |
+            dist/*.dmg
+            dist/*.dmg.blockmap
+          retention-days: 30
+      
+      - name: Upload Windows artifacts
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-builds
+          path: |
+            dist/*.exe
+            dist/*.exe.blockmap
+          retention-days: 30
+      
+      - name: Upload Linux artifacts
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: linux-builds
+          path: |
+            dist/*.AppImage
+            dist/*.AppImage.blockmap
+          retention-days: 30
+
+  # Release job (only runs on main branch pushes)
+  release:
+    needs: [check-release, build]
+    if: needs.check-release.outputs.should-release == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: ./artifacts
+      
+      - name: List downloaded artifacts (Debug)
+        run: |
+          echo "Downloaded artifacts:"
+          find ./artifacts -type f -name "*" | head -20
+      
+      - name: Check if tag exists
+        id: check-tag
+        run: |
+          if git rev-parse "v${{ needs.check-release.outputs.version }}" >/dev/null 2>&1; then
+            echo "tag-exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "tag-exists=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Create and push tag
+        if: steps.check-tag.outputs.tag-exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ needs.check-release.outputs.version }}" -m "Release v${{ needs.check-release.outputs.version }}"
+          git push origin "v${{ needs.check-release.outputs.version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create Release
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ needs.check-release.outputs.version }}
+          release_name: Grafana Query IDE v${{ needs.check-release.outputs.version }}
+          body: |
+            ## Grafana Query IDE v${{ needs.check-release.outputs.version }}
+            
+            ### Downloads
+            - **macOS**: Download the `.dmg` file for Intel or Apple Silicon Macs
+            - **Windows**: Download the `.exe` installer
+            - **Linux**: Download the `.AppImage` file
+            
+            ### Installation Instructions
+            
+            **macOS:**
+            1. Download the appropriate `.dmg` file for your Mac
+            2. Open the downloaded file and drag the app to Applications
+            3. Right-click the app and select "Open" the first time (required for unsigned apps)
+            
+            **Windows:**
+            1. Download the `.exe` installer
+            2. Run the installer and follow the setup wizard
+            
+            **Linux:**
+            1. Download the `.AppImage` file
+            2. Make it executable: `chmod +x Grafana-Query-IDE-*.AppImage`
+            3. Run the file: `./Grafana-Query-IDE-*.AppImage`
+            
+            ### What's New
+            See the commit history for detailed changes in this release.
+          draft: false
+          prerelease: false
+      
+      - name: Upload macOS Intel DMG
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./artifacts/macos-builds/Grafana Query IDE-${{ needs.check-release.outputs.version }}.dmg
+          asset_name: Grafana-Query-IDE-${{ needs.check-release.outputs.version }}-mac-intel.dmg
+          asset_content_type: application/octet-stream
+        continue-on-error: true
+      
+      - name: Upload macOS Apple Silicon DMG
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./artifacts/macos-builds/Grafana Query IDE-${{ needs.check-release.outputs.version }}-arm64.dmg
+          asset_name: Grafana-Query-IDE-${{ needs.check-release.outputs.version }}-mac-apple-silicon.dmg
+          asset_content_type: application/octet-stream
+        continue-on-error: true
+      
+      - name: Upload Windows EXE
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./artifacts/windows-builds/Grafana Query IDE Setup ${{ needs.check-release.outputs.version }}.exe
+          asset_name: Grafana-Query-IDE-${{ needs.check-release.outputs.version }}-windows-setup.exe
+          asset_content_type: application/octet-stream
+        continue-on-error: true
+      
+      - name: Upload Linux AppImage
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: ./artifacts/linux-builds/Grafana Query IDE-${{ needs.check-release.outputs.version }}.AppImage
+          asset_name: Grafana-Query-IDE-${{ needs.check-release.outputs.version }}-linux.AppImage
+          asset_content_type: application/octet-stream
+        continue-on-error: true
