@@ -1,0 +1,98 @@
+# Authors
+
+This file lists the contributors to the Grafana Query IDE project.
+
+## Project Lead & Primary Developer
+
+* **Richard Kiene** - Project founder, lead developer, and maintainer
+  - Core application architecture and design
+  - VS Code-like interface implementation
+  - PromQL and InfluxQL syntax highlighting and autocomplete
+  - Grafana API integration and proxy server
+  - Connection management and secure authentication
+  - Schema explorer and data visualization
+  - Query history and variable systems
+  - Cross-platform Electron application setup
+  - AI/ML analytics integration with Ollama
+  - Time series preprocessing and anomaly detection
+  - Production build configuration and deployment
+
+## Design & Branding
+
+* **Richard Kiene** - User interface design and branding
+  - Time Buddy mascot and logo design
+  - Application icons and visual identity
+  - User experience design and workflow optimization
+
+## Technical Contributors
+
+* **Richard Kiene** - Core development and architecture
+  - JavaScript/Node.js backend development
+  - Electron desktop application framework
+  - Express.js proxy server implementation
+  - CodeMirror editor integration
+  - Chart.js visualization components
+  - GitHub Actions CI/CD pipeline
+  - Multi-platform build and release automation
+
+## AI/ML Analytics
+
+* **Richard Kiene** - AI-powered anomaly detection system
+  - Ollama LLM integration for time series analysis
+  - Visual analysis mode with chart-based insights
+  - Intelligent data subsampling algorithms
+  - Multi-modal AI model support (Llama, Gemma, etc.)
+  - Saved analysis tracking and management
+
+## Quality Assurance & Testing
+
+* **Richard Kiene** - Quality assurance and testing
+  - Manual testing across all supported platforms
+  - User acceptance testing and feedback integration
+  - Performance optimization and bug fixes
+
+## Documentation
+
+* **Richard Kiene** - Technical documentation and user guides
+  - README.md and project documentation
+  - Code comments and architectural documentation
+  - User guides and troubleshooting documentation
+
+---
+
+## How to Contribute
+
+We welcome contributions from the community! If you'd like to contribute to this project:
+
+1. **Fork the repository** on GitHub
+2. **Create a feature branch** for your changes
+3. **Make your changes** with clear commit messages
+4. **Add tests** if applicable
+5. **Submit a pull request** with a detailed description
+
+### Areas for Contribution
+
+- Additional query language support (LogQL, SQL variants)
+- New AI models and analysis algorithms
+- Enhanced visualizations and chart types
+- Performance optimizations
+- Bug fixes and user experience improvements
+- Documentation improvements
+- Internationalization and localization
+
+### Recognition
+
+All contributors who submit accepted pull requests will be added to this AUTHORS file with appropriate attribution for their contributions.
+
+---
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPLv3).
+See the [LICENSE](LICENSE) file for the full license text.
+
+## Contact
+
+For questions about contributing or project governance, please:
+- Open an issue on GitHub: https://github.com/Liquescent-Development/grafana-query-ide/issues
+- Start a discussion: https://github.com/Liquescent-Development/grafana-query-ide/discussions
