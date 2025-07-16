@@ -56,6 +56,14 @@
         "directories": {
             "output": "dist"
         },
+        "publish": [
+            {
+                "provider": "github",
+                "owner": "Liquescent-Development",
+                "repo": "grafana-query-ide",
+                "publishAutoUpdate": true
+            }
+        ],
         "files": [
             "main.js",
             "preload.js",
