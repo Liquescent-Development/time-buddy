@@ -9,6 +9,7 @@ const Analytics = {
         numPredict: -1, // -1 means infinite (Ollama default)
         numCtx: 8192,
         timeout: 600000, // 10 minutes default timeout in milliseconds
+        useVisualMode: false, // User-controlled visual analysis mode
         analysisType: 'anomaly',
         retentionPolicy: 'raw',
         measurement: '',
@@ -106,6 +107,15 @@ const Analytics = {
                 this.config.timeout = parseInt(e.target.value) * 1000; // Convert to milliseconds
                 this.saveConfiguration();
                 console.log('🎛️ Analysis timeout updated:', this.config.timeout);
+            });
+        }
+
+        const useVisualMode = document.getElementById('useVisualMode');
+        if (useVisualMode) {
+            useVisualMode.addEventListener('change', (e) => {
+                this.config.useVisualMode = e.target.checked;
+                this.saveConfiguration();
+                console.log('🎛️ Visual analysis mode:', this.config.useVisualMode ? 'enabled' : 'disabled');
             });
         }
 
@@ -261,6 +271,91 @@ const Analytics = {
         localStorage.setItem('analytics_config', JSON.stringify(this.config));
     },
 
+    // Fetch available models from Ollama
+    async fetchAvailableModels() {
+        try {
+            const response = await fetch(`${this.config.ollamaEndpoint}/api/tags`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const data = await response.json();
+            return data.models || [];
+        } catch (error) {
+            console.error('Failed to fetch models from Ollama:', error);
+            return [];
+        }
+    },
+
+    // Get model capabilities
+    async getModelCapabilities(modelName) {
+        try {
+            const response = await fetch(`${this.config.ollamaEndpoint}/api/show`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: modelName })
+            });
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            const data = await response.json();
+            return data.capabilities || [];
+        } catch (error) {
+            console.error('Failed to get model capabilities:', error);
+            return [];
+        }
+    },
+
+    // Update model selection dropdown
+    async updateModelSelection() {
+        const modelSelect = document.getElementById('aiModel');
+        if (!modelSelect) return;
+
+        const models = await this.fetchAvailableModels();
+        
+        if (models.length === 0) {
+            // Fallback to default options if API fails
+            modelSelect.innerHTML = `
+                <option value="llama3.1:8b-instruct-q4_K_M">Llama 3.1 8B (Default)</option>
+                <option value="custom">Custom Model...</option>
+            `;
+            return;
+        }
+
+        // Clear existing options
+        modelSelect.innerHTML = '';
+
+        // Add fetched models
+        for (const model of models) {
+            const option = document.createElement('option');
+            option.value = model.name;
+            
+            // Format display name
+            let displayName = model.name;
+            if (model.details) {
+                const size = model.details.parameter_size || '';
+                const family = model.details.family || '';
+                displayName = `${model.name} (${size}${family ? ' - ' + family : ''})`;
+            }
+            
+            option.textContent = displayName;
+            
+            // Check if this is the currently selected model
+            if (model.name === this.config.selectedModel) {
+                option.selected = true;
+            }
+            
+            modelSelect.appendChild(option);
+        }
+
+        // Add custom option
+        const customOption = document.createElement('option');
+        customOption.value = 'custom';
+        customOption.textContent = 'Custom Model...';
+        modelSelect.appendChild(customOption);
+
+        console.log(`📋 Loaded ${models.length} models from Ollama`);
+    },
+
     // Update UI elements with current state
     updateUI() {
         // Update AI connection card display
@@ -270,8 +365,8 @@ const Analytics = {
         const aiEndpoint = document.getElementById('aiEndpoint');
         if (aiEndpoint) aiEndpoint.value = this.config.ollamaEndpoint;
 
-        const aiModel = document.getElementById('aiModel');
-        if (aiModel) aiModel.value = this.config.selectedModel;
+        // Update model selection dynamically
+        this.updateModelSelection();
 
         const aiResponseTokens = document.getElementById('aiResponseTokens');
         if (aiResponseTokens) aiResponseTokens.value = this.config.numPredict;
@@ -281,6 +376,9 @@ const Analytics = {
 
         const aiTimeout = document.getElementById('aiTimeout');
         if (aiTimeout) aiTimeout.value = Math.floor((this.config.timeout || 600000) / 1000); // Convert from ms to seconds
+
+        const useVisualMode = document.getElementById('useVisualMode');
+        if (useVisualMode) useVisualMode.checked = this.config.useVisualMode;
 
         const retentionPolicy = document.getElementById('analyticsRetentionPolicy');
         if (retentionPolicy) retentionPolicy.value = this.config.retentionPolicy;
@@ -501,16 +599,17 @@ const Analytics = {
         if (dialog) {
             // Update dialog values with current config
             const aiEndpoint = document.getElementById('aiEndpoint');
-            const aiModel = document.getElementById('aiModel');
             const aiResponseTokens = document.getElementById('aiResponseTokens');
             const aiContextSize = document.getElementById('aiContextSize');
             const aiTimeout = document.getElementById('aiTimeout');
 
             if (aiEndpoint) aiEndpoint.value = this.config.ollamaEndpoint;
-            if (aiModel) aiModel.value = this.config.selectedModel;
             if (aiResponseTokens) aiResponseTokens.value = this.config.numPredict;
             if (aiContextSize) aiContextSize.value = this.config.numCtx;
             if (aiTimeout) aiTimeout.value = Math.floor((this.config.timeout || 600000) / 1000); // Convert from ms to seconds
+
+            // Update model selection dynamically when dialog opens
+            this.updateModelSelection();
 
             this.toggleCustomModelField();
             dialog.style.display = 'block';
@@ -1050,7 +1149,9 @@ const Analytics = {
                 trendDepth: this.config.trendDepth,
                 numPredict: this.config.numPredict,
                 numCtx: this.config.numCtx,
-                timeout: this.config.timeout // Pass configurable timeout
+                timeout: this.config.timeout, // Pass configurable timeout
+                useVisualMode: this.config.useVisualMode, // Pass user's visual mode preference
+                ollamaEndpoint: this.config.ollamaEndpoint // Pass Ollama endpoint for API calls
             });
 
             // Store results for export

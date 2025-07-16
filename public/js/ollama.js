@@ -119,7 +119,7 @@ const OllamaService = {
     },
 
     // Core inference method with retry logic
-    async generateResponse(prompt, systemPrompt = null, options = {}, customTimeout = null) {
+    async generateResponse(prompt, systemPrompt = null, options = {}, customTimeout = null, imageData = null) {
         if (!this.isConnected) {
             throw new Error('Ollama service not connected. Please initialize first.');
         }
@@ -138,12 +138,35 @@ const OllamaService = {
             }
         };
 
+        // Add image data for vision models
+        if (imageData) {
+            // Convert base64 image to the format expected by Ollama
+            const base64Data = imageData.replace(/^data:image\/[a-z]+;base64,/, '');
+            requestBody.images = [base64Data];
+            console.log('📸 Adding image data for vision model analysis');
+            console.log('🖼️ Image data preview (first 100 chars):', imageData.substring(0, 100) + '...');
+            console.log('📏 Image data length:', imageData.length);
+        }
+
         console.log('🧠 Generating AI response...', {
             model: this.config.model,
             promptLength: prompt.length,
             hasSystem: !!systemPrompt,
+            hasImages: !!imageData,
             options: requestBody.options
         });
+        
+        // Debug: Log the full prompt being sent
+        console.log('📝 Full prompt being sent to model:');
+        console.log('===== PROMPT START =====');
+        console.log(prompt);
+        console.log('===== PROMPT END =====');
+        if (systemPrompt) {
+            console.log('🎯 System prompt:');
+            console.log('===== SYSTEM PROMPT START =====');
+            console.log(systemPrompt);
+            console.log('===== SYSTEM PROMPT END =====');
+        }
 
         let lastError;
         for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {
@@ -220,14 +243,20 @@ const OllamaService = {
     // Validate and parse JSON response from AI
     parseJsonResponse(response) {
         try {
-            // Try to extract JSON from response (handles cases where model adds extra text)
-            const jsonMatch = response.match(/\{[\s\S]*\}/);
+            // Strip markdown code blocks if present (common with Gemma and other models)
+            let cleanResponse = response;
+            
+            // Remove markdown code blocks (```json ... ``` or ``` ... ```)
+            cleanResponse = cleanResponse.replace(/```(?:json)?\s*\n?/g, '').replace(/```\s*$/g, '');
+            
+            // Try to extract JSON from cleaned response
+            const jsonMatch = cleanResponse.match(/\{[\s\S]*\}/);
             if (jsonMatch) {
                 return JSON.parse(jsonMatch[0]);
             }
             
-            // If no JSON found, try parsing the entire response
-            return JSON.parse(response);
+            // If no JSON found, try parsing the entire cleaned response
+            return JSON.parse(cleanResponse);
             
         } catch (error) {
             console.error('Failed to parse JSON response:', error);

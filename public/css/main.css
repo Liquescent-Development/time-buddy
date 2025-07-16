@@ -5666,3 +5666,114 @@ body:has(#analyticsPanel.active) .sidebar {
     padding: 32px;
     font-style: italic;
 }
+
+/* Visual analysis options styling - match existing analytics panel styling */
+#analyticsPanel .visual-analysis-options {
+    margin-bottom: 4px !important;
+    clear: both;
+}
+
+#analyticsPanel .visual-analysis-options .form-group {
+    margin-bottom: 4px !important;
+}
+
+#analyticsPanel .visual-analysis-options .form-group label {
+    display: flex;
+    align-items: center;
+    margin-bottom: 1px;
+    font-size: 10px;
+    color: #cccccc;
+    line-height: 1.2;
+}
+
+#analyticsPanel .visual-analysis-options input[type="checkbox"] {
+    width: auto !important;
+    margin: 0 !important;
+    margin-right: 8px !important;
+    accent-color: #007acc;
+    transform: scale(0.8);
+}
+
+/* Reduce spacing in analysis options to make room for connections list */
+#analyticsPanel .analysis-options {
+    margin-bottom: 4px !important;
+}
+
+#analyticsPanel .analysis-options .form-group {
+    margin-bottom: 4px !important;
+}
+
+#analyticsPanel .slider-container {
+    margin-bottom: 4px !important;
+}
+
+/* Reduce spacing around alert threshold slider */
+#analyticsPanel .slider-container input[type="range"] {
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
+}
+
+#analyticsPanel .slider-value {
+    margin-top: 2px !important;
+    margin-bottom: 2px !important;
+}
+
+/* Reduce spacing before Run Analysis button */
+#analyticsPanel .form-actions {
+    margin-top: 2px !important;
+    padding-top: 0px !important;
+}
+
+/* Make Add Tag Filter button smaller and more compact */
+#analyticsPanel .secondary-button {
+    padding: 4px 8px !important;
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+    margin-top: 4px !important;
+    margin-bottom: 4px !important;
+}
+
+#analyticsPanel .secondary-button svg {
+    width: 12px !important;
+    height: 12px !important;
+}
+
+/* Checkbox styling for analytics options */
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 13px;
+    color: #cccccc;
+    margin-bottom: 8px;
+}
+
+.checkbox-label input[type="checkbox"] {
+    margin-right: 8px;
+    width: 16px;
+    height: 16px;
+    accent-color: #007acc;
+}
+
+.checkbox-text {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.checkbox-text svg {
+    color: #007acc;
+    opacity: 0.8;
+}
+
+.checkbox-label:hover .checkbox-text svg {
+    opacity: 1;
+}
+
+.help-text {
+    font-size: 11px;
+    color: #858585;
+    margin-top: 4px;
+    margin-left: 24px;
+    line-height: 1.3;
+}

@@ -407,6 +407,16 @@
                                     </button>
                                 </div>
 
+                                <!-- Visual Analysis Options -->
+                                <div class="visual-analysis-options">
+                                    <div class="form-group">
+                                        <label>
+                                            <input type="checkbox" id="useVisualMode" />
+                                            Visual Analysis Mode
+                                        </label>
+                                    </div>
+                                </div>
+
                                     <!-- Anomaly Detection Options -->
                                     <div id="anomalyOptions" class="analysis-options active">
                                         <div class="form-group">
@@ -682,13 +692,7 @@
                 <div class="form-group">
                     <label for="aiModel">Default Model</label>
                     <select id="aiModel">
-                        <option value="llama3.1:8b-instruct-q4_K_M" selected>Llama 3.1 8B (Recommended)</option>
-                        <option value="llama3:8b-instruct-q4_K_M">Llama 3 8B</option>
-                        <option value="llama3:13b-instruct-q4_K_M">Llama 3 13B</option>
-                        <option value="llama3:70b-instruct-q4_K_M">Llama 3 70B</option>
-                        <option value="mistral:7b-instruct-q4_K_M">Mistral 7B</option>
-                        <option value="codellama:7b-instruct-q4_K_M">Code Llama 7B</option>
-                        <option value="custom">Custom Model...</option>
+                        <option value="">Loading models...</option>
                     </select>
                 </div>
                 <div class="form-group" id="customModelGroup" style="display: none;">

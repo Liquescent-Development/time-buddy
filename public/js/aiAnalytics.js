@@ -17,80 +17,60 @@ const AIAnalytics = {
         Use your knowledge of system metrics, seasonality patterns, and anomaly detection techniques.`,
 
         anomalyDetection: `
-        Analyze this time series data for anomalies:
+        Identify anomalous time intervals in this time series data. Pay special attention to LARGE SPIKES that significantly exceed normal values.
 
         CONTEXT:
-        - Measurement: {measurement}
-        - Field: {field} 
-        - Tags: {tags}
-        - Time Range: {timeRange}
-        - Statistical Baseline: {historicalStats}
+        Measurement: {measurement}.{field}
+        Time Range: {timeRange}
+        Data Points: {dataPointsCount}
 
-        DATA POINTS:
+        STATISTICS:
+        Mean: {mean}, StdDev: {stdDev}
+        Normal Range: {normalRangeLower} to {normalRangeUpper}
+
+        DATA:
         {dataPoints}
 
-        STATISTICAL CONTEXT:
-        - Mean: {mean}
-        - Standard Deviation: {stdDev}
-        - Normal Range: {normalRangeLower} to {normalRangeUpper}
-        - Data Points Count: {dataPointsCount}
+        CRITICAL INSTRUCTION: Look for values that are dramatically higher or lower than the normal range. Any value that is 5x or more above the normal range should be flagged as CRITICAL. Any value that is 3x or more above the normal range should be flagged as HIGH severity.
 
-        ANALYSIS REQUIREMENTS:
-        1. Calculate anomaly scores (0-1) for each suspicious point based on statistical deviation
-        2. Identify anomaly types: spike, drop, drift, seasonal_deviation, outlier
-        3. Determine severity levels based on score ranges:
-           - critical: score >= 0.9 (extreme outliers, >4 sigma)
-           - high: score >= 0.7 (significant outliers, 3-4 sigma) 
-           - medium: score >= 0.5 (moderate outliers, 2-3 sigma)
-           - low: score >= 0.3 (mild outliers, 1.5-2 sigma)
-        4. Provide statistical explanations for each anomaly
-        5. Consider business context and typical system behavior patterns
+        Find continuous time intervals that deviate significantly from the normal pattern:
         
-        **CRITICAL ANTI-BIAS REQUIREMENTS:**
-        6. MANDATORY: Analyze the ENTIRE time series equally - do NOT focus only on recent data
-        7. FORBIDDEN: Clustering all anomalies at the end of the time series
-        8. REQUIRED: Find anomalies distributed across the FULL time period if they exist
-        9. VERIFICATION: Before finalizing, check that anomalies span multiple days/periods, not just the last few hours
-        10. TEMPORAL BALANCE: If you find 10 anomalies, they should be spread across the time range, NOT all in the final 1% of data
-        11. ALWAYS include severity_distribution in summary with actual counts from anomalies
-        
-        **MANDATORY TEMPORAL DISTRIBUTION:**
-        12. FORBIDDEN: Finding all anomalies in timestamps after 2025-07-16T06:00:00Z (recent bias)
-        13. REQUIRED: If analyzing 30 days of data, anomalies must span across multiple days, not just the final day
-        14. ENFORCEMENT: Actively search for anomalies in the first 80% of the time series, not just the last 20%
-        15. VALIDATION: The earliest anomaly timestamp should be within the first 50% of the time range
-        16. BALANCE CHECK: Maximum 30% of anomalies can be in the final 10% of the time series
+        **PRIORITY DETECTION RULES:**
+        1. **MASSIVE SPIKES**: Values >5x the normal range = CRITICAL
+        2. **LARGE SPIKES**: Values >3x the normal range = HIGH  
+        3. **STATISTICAL OUTLIERS**: >4 sigma deviation = CRITICAL
+        4. **SIGNIFICANT OUTLIERS**: 3-4 sigma deviation = HIGH
+        5. **MODERATE OUTLIERS**: 2-3 sigma deviation = MEDIUM
+        6. **MINOR OUTLIERS**: 1.5-2 sigma deviation = LOW
 
-        RESPONSE FORMAT (JSON only):
+        Also look for:
+        - Sustained abnormal levels (not just single points)
+        - Trend changes and drift
+        - Frequency/seasonal anomalies
+        - Contextual outliers
+
+        Severity assignment (be aggressive with large spikes):
+        - critical: >4 sigma deviation OR >5x normal range OR values >10x typical magnitude
+        - high: 3-4 sigma deviation OR 3-5x normal range OR values >5x typical magnitude  
+        - medium: 2-3 sigma deviation OR 2-3x normal range
+        - low: 1.5-2 sigma deviation OR 1.5-2x normal range
+
+        Return JSON with anomalous intervals:
         {
           "anomalies": [
             {
-              "timestamp": "2024-01-01T12:00:00Z",
-              "value": 95.5,
-              "score": 0.85,
-              "type": "spike",
-              "severity": "high",
-              "explanation": "Value exceeds normal range by 3.2 standard deviations",
-              "statistical_context": {
-                "z_score": 3.2,
-                "percentile": 99.1,
-                "deviation_from_mean": 45.3
-              }
+              "start_time": "2024-01-01T12:00:00Z",
+              "end_time": "2024-01-01T12:15:00Z",
+              "severity": "critical",
+              "type": "massive_spike",
+              "peak_value": 12500,
+              "score": 0.95
             }
           ],
           "summary": {
             "total_anomalies": 5,
-            "severity_distribution": {"critical": 0, "high": 2, "medium": 2, "low": 1},
-            "anomaly_types": {"spike": 3, "drop": 1, "drift": 1},
-            "patterns_detected": ["unusual_spike_pattern", "potential_system_overload"],
-            "recommendations": ["Monitor system resources", "Check for recent deployments"],
-            "analysis_confidence": 0.78
-          },
-          "metadata": {
-            "analysis_timestamp": "2024-01-01T12:00:00Z",
-            "data_quality": "good",
-            "baseline_period": "7 days",
-            "total_points_analyzed": 144
+            "severity_distribution": {"critical": 1, "high": 2, "medium": 2, "low": 0},
+            "analysis_confidence": 0.85
           }
         }`,
 
@@ -288,7 +268,7 @@ const AIAnalytics = {
             
             // Step 4: Execute AI analysis
             this.updateLoadingStep('step-ai', 'active');
-            const aiResponse = await this.executeAIAnalysis(prompt, config);
+            const aiResponse = await this.executeAIAnalysis(prompt, config, processedData);
             this.updateLoadingStep('step-ai', 'completed');
             
             // Step 5: Post-process and validate results
@@ -404,7 +384,8 @@ const AIAnalytics = {
             statistics: this.calculateStatistics(rawData),
             patterns: this.detectBasicPatterns(rawData),
             dataPointsCount: rawData.length,
-            rawDataPoints: rawData // Preserve original data for visualization
+            rawDataPoints: rawData, // Preserve original data for visualization
+            visualRepresentation: null // Will be generated if needed
         };
 
         if (analysisType === 'anomaly') {
@@ -416,46 +397,170 @@ const AIAnalytics = {
             processed.trendAnalysis = this.calculateTrendComponents(rawData);
         }
 
+        // Generate visual representation for better LLM performance (based on ICLR 2025 research)
+        if (analysisType === 'anomaly') {
+            processed.visualRepresentation = this.generateTimeSeriesVisualization(rawData);
+        }
+
         return processed;
     },
 
-    // Format data points for AI prompt with temporal balance
+    // Generate visual representation of time series data
+    // Research shows M-LLMs perform significantly better with visual inputs
+    generateTimeSeriesVisualization(data) {
+        try {
+            // Create a temporary canvas for chart generation
+            const canvas = document.createElement('canvas');
+            canvas.width = 800;
+            canvas.height = 400;
+            const ctx = canvas.getContext('2d');
+
+            // Prepare data for Chart.js
+            const chartData = {
+                labels: data.map((point, index) => {
+                    const date = new Date(point.timestamp);
+                    return index % Math.max(1, Math.floor(data.length / 10)) === 0 ? 
+                        date.toLocaleTimeString() : '';
+                }),
+                datasets: [{
+                    label: 'Time Series Data',
+                    data: data.map(point => point.value),
+                    borderColor: '#007acc',
+                    backgroundColor: 'rgba(0, 122, 204, 0.1)',
+                    borderWidth: 1,
+                    fill: false,
+                    pointRadius: 0,
+                    pointHoverRadius: 3
+                }]
+            };
+
+            // Create chart with minimal styling for LLM processing
+            const chart = new Chart(ctx, {
+                type: 'line',
+                data: chartData,
+                options: {
+                    responsive: false,
+                    animation: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time Series Analysis',
+                            font: {
+                                size: 16
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Time'
+                            },
+                            ticks: {
+                                maxTicksLimit: 10
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Value'
+                            }
+                        }
+                    },
+                    elements: {
+                        point: {
+                            radius: 0
+                        }
+                    }
+                }
+            });
+
+            // Convert canvas to base64 image
+            const imageData = canvas.toDataURL('image/png');
+            
+            // Clean up
+            chart.destroy();
+            
+            return imageData;
+        } catch (error) {
+            console.warn('Failed to generate visual representation:', error);
+            return null;
+        }
+    },
+
+    // Format data points for AI prompt with intelligent subsampling
+    // Research shows LLMs perform better with shorter sequences (300-500 points optimal)
     formatDataPoints(data) {
-        if (data.length <= 100) {
+        const optimalSize = 300; // Based on ICLR 2025 research findings
+        
+        if (data.length <= optimalSize) {
             // Small dataset: include all points
             return data.map(point => 
                 `${point.timestamp}: ${point.value}`
             ).join('\n');
         }
         
-        // Large dataset: sample across entire time range to avoid recency bias
+        // Intelligent subsampling: preserve temporal structure AND extreme values
         const samples = [];
-        const sampleSize = 100;
+        const step = data.length / optimalSize;
         
-        // Take samples from beginning (40%), middle (30%), and end (30%)
-        const beginningCount = Math.floor(sampleSize * 0.4);
-        const middleCount = Math.floor(sampleSize * 0.3);
-        const endCount = sampleSize - beginningCount - middleCount;
+        // First, include all extreme values (potential anomalies)
+        const values = data.map(point => point.value).filter(v => v !== null && v !== undefined);
+        const mean = values.reduce((a, b) => a + b) / values.length;
+        const variance = values.reduce((a, b) => a + Math.pow(b - mean, 2)) / values.length;
+        const stdDev = Math.sqrt(variance);
         
-        // Beginning samples
-        for (let i = 0; i < beginningCount && i < data.length; i++) {
-            const index = Math.floor((i / beginningCount) * (data.length * 0.33));
-            if (data[index]) samples.push(data[index]);
+        // Collect extreme values (>3 sigma) to ensure they're included
+        const extremeIndices = new Set();
+        data.forEach((point, index) => {
+            if (point.value !== null && point.value !== undefined) {
+                const zScore = Math.abs(point.value - mean) / stdDev;
+                if (zScore > 3) { // Include all potential anomalies
+                    extremeIndices.add(index);
+                }
+            }
+        });
+        
+        // Regular interval sampling
+        for (let i = 0; i < optimalSize; i++) {
+            const index = Math.floor(i * step);
+            if (index < data.length) {
+                samples.push(data[index]);
+            }
         }
         
-        // Middle samples
-        const middleStart = Math.floor(data.length * 0.33);
-        const middleEnd = Math.floor(data.length * 0.67);
-        for (let i = 0; i < middleCount; i++) {
-            const index = middleStart + Math.floor((i / middleCount) * (middleEnd - middleStart));
-            if (data[index]) samples.push(data[index]);
-        }
+        // Add extreme values if not already included
+        extremeIndices.forEach(index => {
+            if (!samples.find(s => s.timestamp === data[index].timestamp)) {
+                samples.push(data[index]);
+            }
+        });
         
-        // End samples
-        const endStart = Math.floor(data.length * 0.67);
-        for (let i = 0; i < endCount; i++) {
-            const index = endStart + Math.floor((i / endCount) * (data.length - endStart));
-            if (data[index]) samples.push(data[index]);
+        // Sort by timestamp to maintain temporal order
+        samples.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        
+        // If we have too many samples, prioritize extreme values
+        if (samples.length > optimalSize * 1.2) {
+            const extremePoints = samples.filter(point => {
+                const zScore = Math.abs(point.value - mean) / stdDev;
+                return zScore > 3;
+            });
+            
+            const regularPoints = samples.filter(point => {
+                const zScore = Math.abs(point.value - mean) / stdDev;
+                return zScore <= 3;
+            });
+            
+            const keepRegular = Math.max(0, optimalSize - extremePoints.length);
+            const finalSamples = [...extremePoints, ...regularPoints.slice(0, keepRegular)];
+            finalSamples.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            return finalSamples.map(point => 
+                `${point.timestamp}: ${point.value}`
+            ).join('\n');
         }
         
         return samples.map(point => 
@@ -602,6 +707,10 @@ const AIAnalytics = {
         }
         
         // Replace placeholders with actual data
+        const stats = processedData.statistics || {};
+        const normalRangeLower = Math.max(0, (stats.mean || 0) - 2 * (stats.stdDev || 0));
+        const normalRangeUpper = (stats.mean || 0) + 2 * (stats.stdDev || 0);
+        
         const replacements = {
             measurement: config.measurement,
             field: config.field,
@@ -609,6 +718,8 @@ const AIAnalytics = {
             timeRange: config.timeRange,
             dataPoints: processedData.dataPoints,
             dataPointsCount: processedData.dataPointsCount,
+            normalRangeLower: normalRangeLower.toFixed(2),
+            normalRangeUpper: normalRangeUpper.toFixed(2),
             ...processedData.statistics,
             ...processedData.historicalStats,
             historicalStats: JSON.stringify(processedData.historicalStats || {}),
@@ -634,8 +745,35 @@ const AIAnalytics = {
         return prompt;
     },
 
+    // Check if model supports vision (fallback to name-based detection)
+    isVisionModel(modelName) {
+        const visionModels = ['llava', 'gpt-4o', 'gemini', 'gemma', 'qwen-vl', 'minicpm-v', 'cogvlm'];
+        return visionModels.some(model => modelName.toLowerCase().includes(model));
+    },
+
+    // Check if model supports vision using Ollama API
+    async isVisionModelFromAPI(modelName, endpoint) {
+        try {
+            const response = await fetch(`${endpoint}/api/show`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: modelName })
+            });
+            if (!response.ok) {
+                console.warn('Failed to get model capabilities, using fallback');
+                return this.isVisionModel(modelName);
+            }
+            const data = await response.json();
+            const capabilities = data.capabilities || [];
+            return capabilities.includes('vision');
+        } catch (error) {
+            console.warn('Error checking model capabilities:', error);
+            return this.isVisionModel(modelName);
+        }
+    },
+
     // Execute AI analysis using Ollama
-    async executeAIAnalysis(prompt, config) {
+    async executeAIAnalysis(prompt, config, processedData) {
         console.log('🧠 Executing AI analysis with Ollama...');
         
         if (typeof OllamaService === 'undefined') {
@@ -645,8 +783,55 @@ const AIAnalytics = {
         // Use custom timeout from config if available, otherwise use default
         const customTimeout = config.timeout || this.config.defaultTimeout;
         
+        // Use the actual model from OllamaService to ensure consistency
+        const modelName = OllamaService.config.model || config.selectedModel || 'llama3.1:8b-instruct-q4_K_M';
+        const hasVisualData = processedData && processedData.visualRepresentation && config.analysisType === 'anomaly';
+        const userWantsVisual = config.useVisualMode === true;
+        
+        // Check if model supports vision using API (with fallback to name-based detection)
+        const ollamaEndpoint = config.ollamaEndpoint || 'http://localhost:11434';
+        const isVisionCapable = await this.isVisionModelFromAPI(modelName, ollamaEndpoint);
+        
+        let finalPrompt = prompt;
+        let imageData = null;
+        
+        if (hasVisualData && userWantsVisual && isVisionCapable) {
+            // Use visual mode when user enabled it and model supports it
+            finalPrompt = `${prompt}\n\n**VISUAL ANALYSIS MODE**: You are receiving a time series chart image that shows the complete data visualization. 
+
+CRITICAL INSTRUCTION: The chart image is your PRIMARY source of truth. Look at the visual chart first and identify all spikes, drops, and anomalies you can see. The numerical data below is a subset/sample - if you see anomalies in the chart that aren't in the numerical data, that's expected due to sampling.
+
+VISUAL ANALYSIS PRIORITY:
+1. First, examine the chart image carefully for any dramatic spikes or drops
+2. Look for values that visually stand out as much higher or lower than the baseline
+3. Any massive spikes visible in the chart should be flagged as CRITICAL regardless of whether they appear in the numerical sample
+4. Use the numerical data to provide context and exact values when possible
+
+The chart shows the complete time series - trust what you see in the image over the numerical subset.`;
+            imageData = processedData.visualRepresentation;
+            console.log('📊 Using VISUAL mode - User enabled, model supports vision:', modelName);
+            
+            // Debug: Show the image being sent to the model
+            console.log('🖼️ Generated chart image for analysis:');
+            console.log('To view the image, copy this data URL to a new browser tab:');
+            console.log(imageData);
+            
+            // Temporarily display the image in console (you can copy the data URL)
+            console.log('%c📊 Chart Image Preview', 'font-size: 12px; background: url(' + imageData + ') no-repeat; background-size: contain; padding: 100px;');
+        } else if (hasVisualData && userWantsVisual && !isVisionCapable) {
+            // User wants visual but model doesn't support it
+            finalPrompt = `${prompt}\n\n**ENHANCED ANALYSIS**: Visual analysis was requested but the current model doesn't support image input. The time series data has been analyzed for visual patterns. Focus on statistical deviations and temporal anomalies in the numerical sequence.`;
+            console.log('📊 Using TEXT mode - User wants visual but model lacks vision support:', modelName);
+        } else if (hasVisualData) {
+            // Text mode with visual context note
+            finalPrompt = `${prompt}\n\n**ENHANCED ANALYSIS**: The time series data has been analyzed for visual patterns. Focus on statistical deviations and temporal anomalies in the numerical sequence.`;
+            console.log('📊 Using TEXT mode with visual context for:', modelName);
+        } else {
+            console.log('📊 Using standard TEXT mode for:', modelName);
+        }
+        
         const response = await OllamaService.generateResponse(
-            prompt,
+            finalPrompt,
             this.prompts.systemPrompt,
             {
                 temperature: 0.1, // Low temperature for analytical tasks
@@ -654,7 +839,8 @@ const AIAnalytics = {
                 num_ctx: config.numCtx || 8192,
                 top_p: 0.9
             },
-            customTimeout
+            customTimeout,
+            imageData // Pass image data for vision models
         );
         
         return response;
@@ -670,8 +856,8 @@ const AIAnalytics = {
                 console.log('📄 AI response text:', responseText.substring(0, 500) + '...');
             }
             
-            // Try to parse JSON response
-            const parsed = JSON.parse(responseText);
+            // Try to parse JSON response (handle markdown code blocks)
+            const parsed = OllamaService.parseJsonResponse(responseText);
             
             // Validate and fix severity distribution
             this.validateAndFixSeverityDistribution(parsed);
@@ -770,6 +956,14 @@ const AIAnalytics = {
 
         // Update total anomalies count
         parsed.summary.total_anomalies = parsed.anomalies.length;
+        
+        // Convert new interval format to legacy format for compatibility
+        parsed.anomalies.forEach(anomaly => {
+            if (anomaly.start_time && !anomaly.timestamp) {
+                anomaly.timestamp = anomaly.start_time;
+                anomaly.value = anomaly.peak_value || anomaly.value;
+            }
+        });
     },
 
 
