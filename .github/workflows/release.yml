@@ -33,11 +33,11 @@ jobs:
       - name: Build and Publish
         run: |
           if [[ "${{ matrix.os }}" == "macos-latest" ]]; then
-            npm run build-mac
+            npm run build-mac -- --publish always
           elif [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            npm run build-win
+            npm run build-win -- --publish always
           else
-            npm run build-linux
+            npm run build-linux -- --publish always
           fi
         shell: bash
         env:
