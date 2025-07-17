@@ -139,5 +139,6 @@ dist
 .DS_Store 
 
 # Claude
+.claude
 CLAUDE.md
 influxql_spec.md
