@@ -30,8 +30,8 @@
         "electron",
         "desktop"
     ],
-    "author": "",
-    "license": "MIT",
+    "author": "richard@liquescent.dev",
+    "license": "AGPL-3.0-only",
     "dependencies": {
         "axios": "^1.6.2",
         "compression": "^1.7.4",
@@ -60,7 +60,7 @@
             {
                 "provider": "github",
                 "owner": "Liquescent-Development",
-                "repo": "grafana-query-ide",
+                "repo": "time-buddy",
                 "publishAutoUpdate": true
             }
         ],
