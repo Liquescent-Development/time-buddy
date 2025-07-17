@@ -4,7 +4,7 @@ This file lists the contributors to the Grafana Query IDE project.
 
 ## Project Lead & Primary Developer
 
-* **Richard Kiene** - Project founder, lead developer, and maintainer
+* [**Richard Kiene**](richard@liquescent.dev) - Project founder, lead developer, and maintainer
   - Core application architecture and design
   - VS Code-like interface implementation
   - PromQL and InfluxQL syntax highlighting and autocomplete
@@ -19,14 +19,14 @@ This file lists the contributors to the Grafana Query IDE project.
 
 ## Design & Branding
 
-* **Richard Kiene** - User interface design and branding
+* [**Richard Kiene**](richard@liquescent.dev) - User interface design and branding
   - Time Buddy mascot and logo design
   - Application icons and visual identity
   - User experience design and workflow optimization
 
 ## Technical Contributors
 
-* **Richard Kiene** - Core development and architecture
+* [**Richard Kiene**](richard@liquescent.dev) - Core development and architecture
   - JavaScript/Node.js backend development
   - Electron desktop application framework
   - Express.js proxy server implementation
@@ -37,7 +37,7 @@ This file lists the contributors to the Grafana Query IDE project.
 
 ## AI/ML Analytics
 
-* **Richard Kiene** - AI-powered anomaly detection system
+* [**Richard Kiene**](richard@liquescent.dev) - AI-powered anomaly detection system
   - Ollama LLM integration for time series analysis
   - Visual analysis mode with chart-based insights
   - Intelligent data subsampling algorithms
@@ -46,14 +46,14 @@ This file lists the contributors to the Grafana Query IDE project.
 
 ## Quality Assurance & Testing
 
-* **Richard Kiene** - Quality assurance and testing
+* [**Richard Kiene**](richard@liquescent.dev) - Quality assurance and testing
   - Manual testing across all supported platforms
   - User acceptance testing and feedback integration
   - Performance optimization and bug fixes
 
 ## Documentation
 
-* **Richard Kiene** - Technical documentation and user guides
+* [**Richard Kiene**](richard@liquescent.dev) - Technical documentation and user guides
   - README.md and project documentation
   - Code comments and architectural documentation
   - User guides and troubleshooting documentation
