@@ -275,7 +275,7 @@ const Connections = {
         GrafanaConfig.selectedDatasourceId = null;
         GrafanaConfig.currentDatasourceId = null;
         
-        localStorage.removeItem('grafanaConfig');
+        Storage.remove('GRAFANA_CONFIG');
         
         Utils.clearTokenStatus();
         this.ensureDisconnectedState();

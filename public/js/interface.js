@@ -144,10 +144,10 @@ const Interface = {
         console.log('Creating initial tab...');
         
         // Check if we're in demo mode and have demo tabs to load
-        const demoTabs = localStorage.getItem('demoTabs');
-        if (demoTabs && (window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true')) {
+        const demoTabs = Storage.getDemoTabs();
+        if (Object.keys(demoTabs).length > 0 && (window.location.search.includes('demo=true') || Storage.getDemoMode())) {
             console.log('🎭 Loading demo tabs...');
-            this.loadDemoTabs(JSON.parse(demoTabs));
+            this.loadDemoTabs(demoTabs);
             return;
         }
         
@@ -1948,8 +1948,8 @@ async function saveAiConnection() {
         createdAt: new Date().toISOString()
     };
     
-    // Save to storage
-    let aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    // Save to storage using centralized cache
+    let aiConnections = Storage.getAiConnections();
     
     if (window.editingAiConnectionId) {
         // Update existing
@@ -1962,18 +1962,28 @@ async function saveAiConnection() {
         aiConnections.push(aiConnection);
     }
     
-    localStorage.setItem('aiConnections', JSON.stringify(aiConnections));
+    Storage.setAiConnections(aiConnections);
+    
+    // Show testing feedback
+    const saveButton = document.querySelector('#aiConnectionDialog .primary-button');
+    const originalText = saveButton.textContent;
+    saveButton.textContent = 'Testing Connection...';
+    saveButton.disabled = true;
     
     // Test connection
     const success = await testAiConnectionInDialog(aiConnection);
     
+    // Restore button state
+    saveButton.textContent = originalText;
+    saveButton.disabled = false;
+    
     if (success) {
         // Update the connection status
-        const updatedConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+        const updatedConnections = Storage.getAiConnections();
         const connectionIndex = updatedConnections.findIndex(conn => conn.id === aiConnection.id);
         if (connectionIndex !== -1) {
             updatedConnections[connectionIndex].status = 'connected';
-            localStorage.setItem('aiConnections', JSON.stringify(updatedConnections));
+            Storage.setAiConnections(updatedConnections);
         }
         
         hideAiConnectionDialog();
@@ -1988,13 +1998,9 @@ async function saveAiConnection() {
 
 async function testAiConnectionInDialog(connection) {
     try {
-        const response = await fetch(`${connection.endpoint}/api/tags`);
-        if (response.ok) {
-            return true;
-        } else {
-            alert('Failed to connect to AI service. Please check your endpoint URL.');
-            return false;
-        }
+        // Use the proper OllamaService initialization like Analytics does
+        await OllamaService.initialize(connection.endpoint, connection.model);
+        return true;
     } catch (error) {
         alert(`Connection failed: ${error.message}`);
         return false;
@@ -2002,8 +2008,13 @@ async function testAiConnectionInDialog(connection) {
 }
 
 function loadAiConnections() {
-    const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    const aiConnections = Storage.getAiConnections();
     const connectionList = document.getElementById('aiConnectionList');
+    
+    if (!connectionList) {
+        console.error('AI connection list element not found');
+        return;
+    }
     
     if (aiConnections.length === 0) {
         connectionList.innerHTML = `
@@ -2042,7 +2053,7 @@ function loadAiConnections() {
 }
 
 function editAiConnection(connectionId) {
-    const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    const aiConnections = Storage.getAiConnections();
     const connection = aiConnections.find(conn => conn.id === connectionId);
     
     if (!connection) return;
@@ -2074,9 +2085,9 @@ function editAiConnection(connectionId) {
 function deleteAiConnection(connectionId) {
     if (!confirm('Delete this AI connection?')) return;
     
-    let aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    let aiConnections = Storage.getAiConnections();
     aiConnections = aiConnections.filter(conn => conn.id !== connectionId);
-    localStorage.setItem('aiConnections', JSON.stringify(aiConnections));
+    Storage.setAiConnections(aiConnections);
     
     loadAiConnections();
     
@@ -2087,7 +2098,7 @@ function deleteAiConnection(connectionId) {
 }
 
 async function connectToAiService(connectionId) {
-    const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    const aiConnections = Storage.getAiConnections();
     const connection = aiConnections.find(conn => conn.id === connectionId);
     
     if (!connection) return;
@@ -2096,26 +2107,25 @@ async function connectToAiService(connectionId) {
     connection.status = 'connecting';
     const connectionIndex = aiConnections.findIndex(conn => conn.id === connectionId);
     aiConnections[connectionIndex] = connection;
-    localStorage.setItem('aiConnections', JSON.stringify(aiConnections));
+    Storage.setAiConnections(aiConnections);
     loadAiConnections();
     
     try {
-        const response = await fetch(`${connection.endpoint}/api/tags`);
-        if (response.ok) {
-            connection.status = 'connected';
-            // Set this as the active AI connection
-            localStorage.setItem('activeAiConnection', connectionId);
-        } else {
-            connection.status = 'disconnected';
-        }
+        // Use proper OllamaService initialization to test the connection
+        await OllamaService.initialize(connection.endpoint, connection.model);
+        connection.status = 'connected';
+        // Set this as the active AI connection
+        Storage.set('ACTIVE_AI_CONNECTION', connectionId);
+        console.log(`✅ Successfully connected to ${connection.name}`);
     } catch (error) {
         connection.status = 'disconnected';
         console.error('AI connection failed:', error);
+        alert(`Failed to connect to ${connection.name}: ${error.message}`);
     }
     
     // Update storage and UI
     aiConnections[connectionIndex] = connection;
-    localStorage.setItem('aiConnections', JSON.stringify(aiConnections));
+    Storage.setAiConnections(aiConnections);
     loadAiConnections();
     
     // Update title bar status
@@ -2126,7 +2136,7 @@ async function connectToAiService(connectionId) {
 
 function filterAiConnections() {
     const searchTerm = document.getElementById('aiConnectionSearch').value.toLowerCase();
-    const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+    const aiConnections = Storage.getAiConnections();
     
     const filteredConnections = aiConnections.filter(connection => 
         connection.name.toLowerCase().includes(searchTerm) ||

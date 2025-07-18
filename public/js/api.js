@@ -11,7 +11,7 @@ const API = {
             };
             
             // Add demo mode header if in demo mode
-            const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
+            const isDemoMode = window.location.search.includes('demo=true') || Storage.getDemoMode();
             if (isDemoMode) {
                 headers['X-Demo-Mode'] = 'true';
             }
@@ -60,7 +60,7 @@ const API = {
             };
             
             // Add demo mode header if in demo mode
-            const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
+            const isDemoMode = window.location.search.includes('demo=true') || Storage.getDemoMode();
             if (isDemoMode) {
                 headers['X-Demo-Mode'] = 'true';
             }

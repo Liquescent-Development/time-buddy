@@ -252,23 +252,20 @@ const Analytics = {
         }
     },
 
-    // Load saved configuration
+    // Load saved configuration using centralized cache
     loadConfiguration() {
-        const savedConfig = localStorage.getItem('analytics_config');
-        if (savedConfig) {
-            try {
-                const parsed = JSON.parse(savedConfig);
-                this.config = { ...this.config, ...parsed };
-                console.log('📋 Loaded analytics configuration');
-            } catch (error) {
-                console.warn('Failed to load analytics config:', error);
-            }
+        try {
+            const savedConfig = Storage.getAnalyticsConfig();
+            this.config = { ...this.config, ...savedConfig };
+            console.log('📋 Loaded analytics configuration');
+        } catch (error) {
+            console.warn('Failed to load analytics config:', error);
         }
     },
 
-    // Save configuration to localStorage
+    // Save configuration using centralized cache
     saveConfiguration() {
-        localStorage.setItem('analytics_config', JSON.stringify(this.config));
+        Storage.setAnalyticsConfig(this.config);
     },
 
     // Fetch available models from Ollama
@@ -432,8 +429,8 @@ const Analytics = {
 
     // Check if we have any connected AI services and initialize them
     async checkAiConnection() {
-        const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
-        const activeConnectionId = localStorage.getItem('activeAiConnection');
+        const aiConnections = Storage.getAiConnections();
+        const activeConnectionId = Storage.get('ACTIVE_AI_CONNECTION');
         
         // Check if we have an active connection
         if (activeConnectionId) {
@@ -446,7 +443,7 @@ const Analytics = {
         // Check if any connection is connected
         const connectedConnection = aiConnections.find(conn => conn.status === 'connected');
         if (connectedConnection) {
-            localStorage.setItem('activeAiConnection', connectedConnection.id);
+            Storage.set('ACTIVE_AI_CONNECTION', connectedConnection.id);
             return await this.initializeAiConnection(connectedConnection);
         }
         
@@ -475,11 +472,11 @@ const Analytics = {
             console.warn('⚠️ Failed to initialize AI connection:', connection.name, error.message);
             
             // Update connection status to disconnected since it failed
-            const aiConnections = JSON.parse(localStorage.getItem('aiConnections') || '[]');
+            const aiConnections = Storage.getAiConnections();
             const connectionIndex = aiConnections.findIndex(conn => conn.id === connection.id);
             if (connectionIndex !== -1) {
                 aiConnections[connectionIndex].status = 'disconnected';
-                localStorage.setItem('aiConnections', JSON.stringify(aiConnections));
+                Storage.setAiConnections(aiConnections);
                 
                 // Reload AI connections UI if it exists
                 setTimeout(() => {
@@ -1294,7 +1291,7 @@ const Analytics = {
         };
 
         // Get existing saved analyses
-        const savedAnalyses = JSON.parse(localStorage.getItem('savedAiAnalyses') || '[]');
+        const savedAnalyses = Storage.getSavedAiAnalyses();
         
         // Add the new analysis
         savedAnalyses.unshift(savedAnalysis); // Add to beginning
@@ -1304,9 +1301,9 @@ const Analytics = {
             savedAnalyses.pop();
         }
         
-        // Save to localStorage
+        // Save using centralized cache
         try {
-            localStorage.setItem('savedAiAnalyses', JSON.stringify(savedAnalyses));
+            Storage.setSavedAiAnalyses(savedAnalyses);
             
             // Show success message
             this.showSuccessMessage('Analysis saved successfully!');
@@ -1615,7 +1612,13 @@ const Analytics = {
         const panel = document.getElementById('savedAnalysesPanel');
         if (!panel) return;
 
-        const savedAnalyses = JSON.parse(localStorage.getItem('savedAiAnalyses') || '[]');
+        let savedAnalyses = Storage.getSavedAiAnalyses();
+        
+        // Ensure savedAnalyses is an array (fix for legacy data)
+        if (!Array.isArray(savedAnalyses)) {
+            console.warn('Saved analyses was not an array, converting...', savedAnalyses);
+            savedAnalyses = [];
+        }
 
         if (savedAnalyses.length === 0) {
             panel.innerHTML = '<div class="no-saved-analyses">No saved analyses yet. Run an analysis and save it to see it here.</div>';
@@ -1665,7 +1668,13 @@ const Analytics = {
 
     // View a saved analysis
     viewSavedAnalysis(analysisId) {
-        const savedAnalyses = JSON.parse(localStorage.getItem('savedAiAnalyses') || '[]');
+        let savedAnalyses = Storage.getSavedAiAnalyses();
+        
+        // Ensure savedAnalyses is an array (fix for legacy data)
+        if (!Array.isArray(savedAnalyses)) {
+            console.warn('Saved analyses was not an array, converting...', savedAnalyses);
+            savedAnalyses = [];
+        }
         const analysis = savedAnalyses.find(a => a.id === analysisId);
         
         if (!analysis) {
@@ -1699,10 +1708,17 @@ const Analytics = {
             return;
         }
 
-        let savedAnalyses = JSON.parse(localStorage.getItem('savedAiAnalyses') || '[]');
+        let savedAnalyses = Storage.getSavedAiAnalyses();
+        
+        // Ensure savedAnalyses is an array (fix for legacy data)
+        if (!Array.isArray(savedAnalyses)) {
+            console.warn('Saved analyses was not an array, converting...', savedAnalyses);
+            savedAnalyses = [];
+        }
+        
         savedAnalyses = savedAnalyses.filter(a => a.id !== analysisId);
         
-        localStorage.setItem('savedAiAnalyses', JSON.stringify(savedAnalyses));
+        Storage.setSavedAiAnalyses(savedAnalyses);
         
         // Reload the list
         this.loadSavedAnalyses();

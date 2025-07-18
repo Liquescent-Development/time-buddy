@@ -12,7 +12,7 @@ const Demo = {
         // Check for demo mode parameter
         const urlParams = new URLSearchParams(window.location.search);
         const isDemoUrl = urlParams.get('demo') === 'true';
-        const isDemoStored = localStorage.getItem('demoMode') === 'true';
+        const isDemoStored = Storage.getDemoMode();
         
         this.enabled = isDemoUrl || isDemoStored;
         
@@ -24,15 +24,15 @@ const Demo = {
                 // First time entering demo mode
                 console.log('🎭 First time entering demo mode, backing up real data...');
                 this.backupRealData();
-                localStorage.setItem('demoMode', 'true');
+                Storage.setDemoMode(true);
             }
             
             this.setupDemoData();
             this.createDemoUI();
         } else {
             // Check if we have demo data contamination when not in demo mode
-            const connections = localStorage.getItem('grafanaConnections');
-            if (connections && connections.includes('demo-prod')) {
+            const connections = Storage.getSavedConnections();
+            if (connections && JSON.stringify(connections).includes('demo-prod')) {
                 console.warn('⚠️ Demo data detected in non-demo mode! Run cleanupDemoData() in console to fix.');
             }
         }
@@ -44,7 +44,7 @@ const Demo = {
         this.backupRealData();
         
         this.enabled = true;
-        localStorage.setItem('demoMode', 'true');
+        Storage.setDemoMode(true);
         this.setupDemoData();
         console.log('🎭 Demo mode enabled');
         window.location.reload();
@@ -53,7 +53,7 @@ const Demo = {
     // Disable demo mode
     disable() {
         this.enabled = false;
-        localStorage.removeItem('demoMode');
+        Storage.setDemoMode(false);
         
         // Restore real data from backup before demo mode was enabled
         this.restoreRealData();
@@ -66,63 +66,29 @@ const Demo = {
     
     // Backup real data before enabling demo mode
     backupRealData() {
-        const realConnections = localStorage.getItem('grafanaConnections');
-        if (realConnections && realConnections !== 'null') {
-            localStorage.setItem('real_grafanaConnections', realConnections);
-        }
-        
-        const realHistory = localStorage.getItem('queryHistory');
-        if (realHistory && realHistory !== 'null') {
-            localStorage.setItem('real_queryHistory', realHistory);
-        }
-        
-        const realVariables = localStorage.getItem('queryVariables');
-        if (realVariables && realVariables !== 'null') {
-            localStorage.setItem('real_queryVariables', realVariables);
-        }
-        
-        const realDirectory = localStorage.getItem('fileExplorerLastDirectory');
-        if (realDirectory && realDirectory !== 'null') {
-            localStorage.setItem('real_fileExplorerLastDirectory', realDirectory);
-        }
+        Storage.backupForDemo('CONNECTIONS');
+        Storage.backupForDemo('QUERY_HISTORY');
+        Storage.backupForDemo('QUERY_VARIABLES');
+        Storage.backupForDemo('FILE_EXPLORER_LAST_DIR');
         
         console.log('🎭 Real data backed up before demo mode');
     },
     
     // Restore real data when exiting demo mode
     restoreRealData() {
-        // Remove demo data from active keys
-        localStorage.removeItem('grafanaConnections');
-        localStorage.removeItem('queryHistory');
-        localStorage.removeItem('queryVariables');
-        localStorage.removeItem('fileExplorerLastDirectory');
-        localStorage.removeItem('demoMockFiles');
-        localStorage.removeItem('demoTabs');
+        // Clear demo data from active keys
+        Storage.remove('CONNECTIONS');
+        Storage.remove('QUERY_HISTORY');
+        Storage.remove('QUERY_VARIABLES');
+        Storage.remove('FILE_EXPLORER_LAST_DIR');
+        Storage.remove('DEMO_MOCK_FILES');
+        Storage.remove('DEMO_TABS');
         
         // Restore real data from backup
-        const realConnections = localStorage.getItem('real_grafanaConnections');
-        if (realConnections) {
-            localStorage.setItem('grafanaConnections', realConnections);
-            localStorage.removeItem('real_grafanaConnections');
-        }
-        
-        const realHistory = localStorage.getItem('real_queryHistory');
-        if (realHistory) {
-            localStorage.setItem('queryHistory', realHistory);
-            localStorage.removeItem('real_queryHistory');
-        }
-        
-        const realVariables = localStorage.getItem('real_queryVariables');
-        if (realVariables) {
-            localStorage.setItem('queryVariables', realVariables);
-            localStorage.removeItem('real_queryVariables');
-        }
-        
-        const realDirectory = localStorage.getItem('real_fileExplorerLastDirectory');
-        if (realDirectory) {
-            localStorage.setItem('fileExplorerLastDirectory', realDirectory);
-            localStorage.removeItem('real_fileExplorerLastDirectory');
-        }
+        Storage.restoreFromDemo('CONNECTIONS');
+        Storage.restoreFromDemo('QUERY_HISTORY');
+        Storage.restoreFromDemo('QUERY_VARIABLES');
+        Storage.restoreFromDemo('FILE_EXPLORER_LAST_DIR');
         
         console.log('🎭 Real data restored from backup');
     },
@@ -189,7 +155,7 @@ const Demo = {
         }
         
         // Store demo data
-        localStorage.setItem('grafanaConnections', JSON.stringify(demoConnections));
+        Storage.set('CONNECTIONS', demoConnections);
     },
     
     // Setup mock Grafana config
@@ -207,7 +173,7 @@ const Demo = {
             datasources: []
         };
         
-        localStorage.setItem('grafanaConfig', JSON.stringify(mockConfig));
+        Storage.set('GRAFANA_CONFIG', mockConfig);
         console.log('🎭 Mock config setup - frontend will proxy to mock server');
     },
     
@@ -303,7 +269,7 @@ const Demo = {
         }
         
         // Store demo data
-        localStorage.setItem('queryHistory', JSON.stringify(mockHistory));
+        Storage.set('QUERY_HISTORY', mockHistory);
     },
     
     // Setup mock variables
@@ -354,7 +320,7 @@ const Demo = {
         }
         
         // Store demo data
-        localStorage.setItem('queryVariables', JSON.stringify(mockVariables));
+        Storage.setQueryVariables(mockVariables);
     },
     
     // Setup mock file data
@@ -366,7 +332,7 @@ const Demo = {
         }
         
         // Store demo data
-        localStorage.setItem('fileExplorerLastDirectory', '/Users/demo/queries');
+        Storage.setFileExplorerLastDirectory('/Users/demo/queries');
         
         // Store mock file content in localStorage for demo mode
         const mockFiles = {
@@ -378,7 +344,7 @@ const Demo = {
             'performance-dashboard.promql': 'histogram_quantile(0.95,\n  sum(rate(http_request_duration_seconds_bucket[5m])) by (le)\n)\n\n# 95th percentile HTTP response time'
         };
         
-        localStorage.setItem('demoMockFiles', JSON.stringify(mockFiles));
+        Storage.setDemoMockFiles(mockFiles);
     },
     
     // Setup demo tabs data
@@ -426,7 +392,7 @@ const Demo = {
             }
         ];
         
-        localStorage.setItem('demoTabs', JSON.stringify(demoTabs));
+        Storage.setDemoTabs(demoTabs);
         console.log('🎭 Demo tabs data stored in localStorage');
     },
     
@@ -481,58 +447,57 @@ window.Demo = Demo;
 window.cleanupDemoData = function() {
     console.log('🧹 Manually cleaning up demo data...');
     
-    // Get current data
-    const connections = localStorage.getItem('grafanaConnections');
-    const history = localStorage.getItem('queryHistory'); 
-    const variables = localStorage.getItem('queryVariables');
-    const directory = localStorage.getItem('fileExplorerLastDirectory');
+    // Get current data using centralized cache
+    const connections = Storage.getSavedConnections();
+    const directory = Storage.getFileExplorerLastDirectory();
     
     // Check if current data looks like demo data
-    const isDemoConnections = connections && connections.includes('demo-prod');
+    const isDemoConnections = connections && JSON.stringify(connections).includes('demo-prod');
     const isDemoDirectory = directory && directory.includes('/Users/demo/');
     
     if (isDemoConnections || isDemoDirectory) {
         console.log('Demo data detected in localStorage, cleaning up...');
         
-        // Try to restore from backup first
-        const realConnections = localStorage.getItem('real_grafanaConnections');
-        const realHistory = localStorage.getItem('real_queryHistory');
-        const realVariables = localStorage.getItem('real_queryVariables');
-        const realDirectory = localStorage.getItem('real_fileExplorerLastDirectory');
+        // Try to restore from backup first - check if backups exist
+        const hasRealConnections = Storage.restoreFromDemo('CONNECTIONS');
+        const hasRealHistory = Storage.restoreFromDemo('QUERY_HISTORY');
+        const hasRealVariables = Storage.restoreFromDemo('QUERY_VARIABLES');
+        const hasRealDirectory = Storage.restoreFromDemo('FILE_EXPLORER_LAST_DIR');
         
-        // Clear demo data
+        // Clear demo data and restore backups if they exist
         if (isDemoConnections) {
-            localStorage.removeItem('grafanaConnections');
-            if (realConnections) {
-                localStorage.setItem('grafanaConnections', realConnections);
+            if (hasRealConnections) {
                 console.log('✅ Restored real connections from backup');
             } else {
+                Storage.remove('CONNECTIONS');
                 console.log('❌ No backup found for connections, cleared demo data');
             }
         }
         
         if (isDemoDirectory) {
-            localStorage.removeItem('fileExplorerLastDirectory');
-            if (realDirectory) {
-                localStorage.setItem('fileExplorerLastDirectory', realDirectory);
+            if (hasRealDirectory) {
                 console.log('✅ Restored real directory from backup');
             } else {
+                Storage.remove('FILE_EXPLORER_LAST_DIR');
                 console.log('❌ No backup found for directory, cleared demo data');
             }
         }
         
         // Clean up other demo data if needed
-        if (realHistory) {
-            localStorage.setItem('queryHistory', realHistory);
+        if (hasRealHistory) {
             console.log('✅ Restored real history from backup');
         }
         
-        if (realVariables) {
-            localStorage.setItem('queryVariables', realVariables);
+        if (hasRealVariables) {
             console.log('✅ Restored real variables from backup');
         }
         
-        // Remove all demo-related keys
+        // Remove all demo-related keys using centralized cache
+        Storage.remove('DEMO_MODE');
+        Storage.remove('DEMO_TABS');
+        Storage.remove('DEMO_MOCK_FILES');
+        
+        // Clean up any remaining demo keys manually (for keys not in registry)
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
@@ -543,14 +508,8 @@ window.cleanupDemoData = function() {
         
         keysToRemove.forEach(key => {
             localStorage.removeItem(key);
-            console.log(`🗑️ Removed demo key: ${key}`);
+            console.log(`🗑️ Removed unregistered demo key: ${key}`);
         });
-        
-        // Remove backup keys after restore
-        localStorage.removeItem('real_grafanaConnections');
-        localStorage.removeItem('real_queryHistory');
-        localStorage.removeItem('real_queryVariables');
-        localStorage.removeItem('real_fileExplorerLastDirectory');
         
         console.log('✅ Demo data cleanup complete!');
         console.log('🔄 Please reload the page to see your real data');

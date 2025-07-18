@@ -836,14 +836,13 @@ const Variables = {
         });
     },
     
-    // Storage methods
+    // Storage methods using centralized cache layer
     saveVariablesToStorage() {
-        localStorage.setItem('queryVariables', JSON.stringify(this.variables));
+        Storage.setQueryVariables(this.variables);
     },
     
     loadVariablesFromStorage() {
-        const stored = localStorage.getItem('queryVariables');
-        this.variables = stored ? JSON.parse(stored) : [];
+        this.variables = Storage.getQueryVariables();
         
         // Ensure backward compatibility - add missing loading property
         this.variables.forEach(variable => {
