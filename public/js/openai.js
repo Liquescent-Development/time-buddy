@@ -94,11 +94,28 @@ const OpenAIService = {
             }
             
             const data = await response.json();
-            // Filter for GPT models that support chat completions
-            const chatModels = data.data.filter(model => 
-                model.id.includes('gpt') && 
-                (model.id.includes('turbo') || model.id.includes('4') || model.id.includes('3.5'))
-            );
+            // Filter for models that support chat completions
+            // This includes GPT-3.5, GPT-4, and their variants
+            const chatModels = data.data.filter(model => {
+                const id = model.id.toLowerCase();
+                return (
+                    // GPT-4 models
+                    id.includes('gpt-4') ||
+                    // GPT-3.5 models
+                    id.includes('gpt-3.5') ||
+                    // Include any model with 'turbo' which indicates chat support
+                    id.includes('turbo')
+                ) && 
+                // Exclude embeddings, audio, and other non-chat models
+                !id.includes('embedding') &&
+                !id.includes('whisper') &&
+                !id.includes('tts') &&
+                !id.includes('dall-e') &&
+                !id.includes('davinci') &&
+                !id.includes('curie') &&
+                !id.includes('babbage') &&
+                !id.includes('ada');
+            });
             
             return chatModels.map(model => ({
                 name: model.id,
@@ -163,6 +180,18 @@ const OpenAIService = {
             hasImages: !!imageData,
             temperature: requestBody.temperature
         });
+        
+        // Debug: Log the full prompt being sent
+        console.log('📝 Full prompt being sent to model:');
+        console.log('===== PROMPT START =====');
+        console.log(prompt);
+        console.log('===== PROMPT END =====');
+        if (systemPrompt) {
+            console.log('🎯 System prompt:');
+            console.log('===== SYSTEM PROMPT START =====');
+            console.log(systemPrompt);
+            console.log('===== SYSTEM PROMPT END =====');
+        }
 
         let lastError;
         for (let attempt = 1; attempt <= this.config.maxRetries; attempt++) {

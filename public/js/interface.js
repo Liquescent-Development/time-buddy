@@ -1944,14 +1944,13 @@ function onAiProviderChange() {
         advancedSettings.style.display = 'none';
         showAdvancedCheckbox.checked = false;
         document.getElementById('aiConnectionName').placeholder = 'My OpenAI Connection';
-        // Set OpenAI models
-        modelSelect.innerHTML = `
-            <option value="gpt-4-turbo-preview">GPT-4 Turbo</option>
-            <option value="gpt-4">GPT-4</option>
-            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-            <option value="gpt-4o">GPT-4o (Vision)</option>
-            <option value="custom">Custom Model</option>
-        `;
+        // Clear models and show placeholder
+        modelSelect.innerHTML = '<option value="">Enter API key to load models</option>';
+        // Load models if API key is already present
+        const apiKey = document.getElementById('aiApiKey').value;
+        if (apiKey) {
+            loadOpenAIModels(apiKey);
+        }
     }
 }
 
@@ -2027,6 +2026,63 @@ function onEndpointChange() {
     }
 }
 
+function onOpenAIApiKeyChange() {
+    const apiKey = document.getElementById('aiApiKey').value.trim();
+    if (apiKey) {
+        loadOpenAIModels(apiKey);
+    }
+}
+
+async function loadOpenAIModels(apiKey) {
+    const modelSelect = document.getElementById('aiModel');
+    
+    try {
+        modelSelect.innerHTML = '<option value="">Loading models...</option>';
+        
+        // Initialize a temporary OpenAI service instance to fetch models
+        const tempService = Object.create(OpenAIService);
+        tempService.config = { ...OpenAIService.config, apiKey: apiKey };
+        
+        const models = await tempService.getAvailableModels();
+        
+        if (models.length > 0) {
+            // Sort models by name, prioritizing newer models
+            const sortedModels = models.sort((a, b) => {
+                // Prioritize GPT-4 models
+                if (a.name.includes('gpt-4') && !b.name.includes('gpt-4')) return -1;
+                if (!a.name.includes('gpt-4') && b.name.includes('gpt-4')) return 1;
+                // Then sort alphabetically
+                return b.name.localeCompare(a.name);
+            });
+            
+            modelSelect.innerHTML = sortedModels.map(model => 
+                `<option value="${model.name}">${model.name}</option>`
+            ).join('');
+            
+            // Add custom model option
+            modelSelect.innerHTML += '<option value="custom">Custom Model</option>';
+            
+            // Select a default model
+            if (sortedModels.some(m => m.name === 'gpt-4-turbo-preview')) {
+                modelSelect.value = 'gpt-4-turbo-preview';
+            } else if (sortedModels.some(m => m.name === 'gpt-4')) {
+                modelSelect.value = 'gpt-4';
+            } else if (sortedModels.length > 0) {
+                modelSelect.value = sortedModels[0].name;
+            }
+        } else {
+            modelSelect.innerHTML = '<option value="">No models available</option>';
+            modelSelect.innerHTML += '<option value="custom">Custom Model</option>';
+        }
+    } catch (error) {
+        console.error('Failed to load OpenAI models:', error);
+        modelSelect.innerHTML = '<option value="">Failed to load models (check API key)</option>';
+        modelSelect.innerHTML += '<option value="custom">Custom Model</option>';
+        modelSelect.value = 'custom';
+        document.getElementById('customModelGroup').style.display = 'block';
+    }
+}
+
 async function saveAiConnection() {
     const name = document.getElementById('aiConnectionName').value.trim();
     const provider = document.getElementById('aiProvider').value;
@@ -2099,12 +2155,31 @@ async function saveAiConnection() {
     saveButton.disabled = false;
     
     if (success) {
-        // Update the connection status
-        const updatedConnections = Storage.getAiConnections();
+        // Update the connection status and disconnect others
+        let updatedConnections = Storage.getAiConnections();
+        
+        // Disconnect all other connections
+        updatedConnections = updatedConnections.map(conn => {
+            if (conn.id !== aiConnection.id && conn.status === 'connected') {
+                console.log(`🔌 Disconnecting from ${conn.name}`);
+                // Disconnect the appropriate service
+                if (conn.provider === 'openai') {
+                    OpenAIService.disconnect();
+                } else {
+                    OllamaService.disconnect();
+                }
+                return { ...conn, status: 'disconnected' };
+            }
+            return conn;
+        });
+        
+        // Set the new connection as connected
         const connectionIndex = updatedConnections.findIndex(conn => conn.id === aiConnection.id);
         if (connectionIndex !== -1) {
             updatedConnections[connectionIndex].status = 'connected';
             Storage.setAiConnections(updatedConnections);
+            // Set as active connection
+            Storage.set('ACTIVE_AI_CONNECTION', aiConnection.id);
         }
         
         hideAiConnectionDialog();
@@ -2133,12 +2208,28 @@ async function testAiConnectionInDialog(connection) {
 }
 
 function loadAiConnections() {
-    const aiConnections = Storage.getAiConnections();
+    let aiConnections = Storage.getAiConnections();
     const connectionList = document.getElementById('aiConnectionList');
+    const activeConnectionId = Storage.get('ACTIVE_AI_CONNECTION');
     
     if (!connectionList) {
         console.error('AI connection list element not found');
         return;
+    }
+    
+    // Clean up connection states - only active connection should be marked as connected
+    let hasChanges = false;
+    aiConnections = aiConnections.map(conn => {
+        if (conn.status === 'connected' && conn.id !== activeConnectionId) {
+            console.log(`🔧 UI: Cleaning up stale connected status for ${conn.name}`);
+            hasChanges = true;
+            return { ...conn, status: 'disconnected' };
+        }
+        return conn;
+    });
+    
+    if (hasChanges) {
+        Storage.setAiConnections(aiConnections);
     }
     
     if (aiConnections.length === 0) {
@@ -2239,8 +2330,25 @@ function editAiConnection(connectionId) {
             }
         });
     } else {
-        // For OpenAI, models are already set in the provider change
-        document.getElementById('aiModel').value = connection.model || 'gpt-4-turbo-preview';
+        // For OpenAI, load models if API key is available
+        if (connection.apiKey) {
+            loadOpenAIModels(connection.apiKey).then(() => {
+                // Set the model after models are loaded
+                const modelSelect = document.getElementById('aiModel');
+                const isCustomModel = ![...modelSelect.options].some(option => option.value === connection.model);
+                
+                if (isCustomModel) {
+                    modelSelect.value = 'custom';
+                    document.getElementById('customModelName').value = connection.model;
+                    document.getElementById('customModelGroup').style.display = 'block';
+                } else {
+                    modelSelect.value = connection.model;
+                    document.getElementById('customModelGroup').style.display = 'none';
+                }
+            });
+        } else {
+            document.getElementById('aiModel').innerHTML = '<option value="">Enter API key to load models</option>';
+        }
     }
     
     document.getElementById('aiConnectionDialog').style.display = 'flex';
@@ -2262,15 +2370,29 @@ function deleteAiConnection(connectionId) {
 }
 
 async function connectToAiService(connectionId) {
-    const aiConnections = Storage.getAiConnections();
+    let aiConnections = Storage.getAiConnections();
     const connection = aiConnections.find(conn => conn.id === connectionId);
     
     if (!connection) return;
     
-    // Set connecting state
-    connection.status = 'connecting';
+    // Disconnect all other connections first
+    aiConnections = aiConnections.map(conn => {
+        if (conn.id !== connectionId && conn.status === 'connected') {
+            console.log(`🔌 Disconnecting from ${conn.name}`);
+            // Disconnect the appropriate service
+            if (conn.provider === 'openai') {
+                OpenAIService.disconnect();
+            } else {
+                OllamaService.disconnect();
+            }
+            return { ...conn, status: 'disconnected' };
+        }
+        return conn;
+    });
+    
+    // Set connecting state for the target connection
     const connectionIndex = aiConnections.findIndex(conn => conn.id === connectionId);
-    aiConnections[connectionIndex] = connection;
+    aiConnections[connectionIndex] = { ...connection, status: 'connecting' };
     Storage.setAiConnections(aiConnections);
     loadAiConnections();
     

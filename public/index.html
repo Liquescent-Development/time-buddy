@@ -698,7 +698,7 @@
                 </div>
                 <div class="form-group" id="aiApiKeyGroup" style="display: none;">
                     <label for="aiApiKey">OpenAI API Key</label>
-                    <input type="password" id="aiApiKey" placeholder="sk-...">
+                    <input type="password" id="aiApiKey" placeholder="sk-..." onblur="onOpenAIApiKeyChange()">
                     <small style="color: #666;">Your API key is stored locally and never sent to our servers</small>
                 </div>
                 <div class="form-group">
