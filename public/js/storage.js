@@ -1,5 +1,270 @@
 const Storage = {
-    // Connection storage
+    // Centralized cache key registry with expiration policies
+    CACHE_KEYS: {
+        // Core application data
+        CONNECTIONS: { key: 'grafanaConnections', ttl: null }, // No expiration
+        AUTH_TOKENS: { key: 'grafanaTokens', ttl: 24 * 60 * 60 * 1000 }, // 24 hours
+        SCHEMA_CACHE: { key: 'grafanaSchemaCache', ttl: 24 * 60 * 60 * 1000 }, // 24 hours
+        QUERY_HISTORY: { key: 'queryHistory', ttl: null, maxItems: 100 },
+        GRAFANA_CONFIG: { key: 'grafanaConfig', ttl: null },
+        
+        // Feature-specific data
+        QUERY_VARIABLES: { key: 'queryVariables', ttl: null },
+        ANALYTICS_CONFIG: { key: 'analytics_config', ttl: null },
+        AI_CONNECTIONS: { key: 'aiConnections', ttl: null },
+        ACTIVE_AI_CONNECTION: { key: 'activeAiConnection', ttl: null },
+        SAVED_AI_ANALYSES: { key: 'savedAiAnalyses', ttl: 7 * 24 * 60 * 60 * 1000 }, // 7 days
+        
+        // UI state and preferences
+        DEMO_MODE: { key: 'demoMode', ttl: null },
+        DEMO_TABS: { key: 'demoTabs', ttl: null },
+        DEMO_MOCK_FILES: { key: 'demoMockFiles', ttl: null },
+        FILE_EXPLORER_LAST_DIR: { key: 'fileExplorerLastDirectory', ttl: null },
+        
+        // Demo backup keys
+        DEMO_BACKUP_PREFIX: 'real_'
+    },
+
+    // Unified cache operations with validation and expiration
+    get(cacheKey, defaultValue = null) {
+        const keyConfig = this.CACHE_KEYS[cacheKey];
+        if (!keyConfig) {
+            console.error(`Unknown cache key: ${cacheKey}`);
+            return defaultValue;
+        }
+
+        try {
+            const rawData = localStorage.getItem(keyConfig.key);
+            if (rawData === null) {
+                return defaultValue;
+            }
+
+            const data = JSON.parse(rawData);
+
+            // Check for TTL expiration if configured
+            if (keyConfig.ttl && data._timestamp) {
+                const age = Date.now() - data._timestamp;
+                if (age > keyConfig.ttl) {
+                    this.remove(cacheKey);
+                    return defaultValue;
+                }
+                // Return data without timestamp metadata
+                // For arrays stored with TTL, return the _data property
+                if (data._data) {
+                    return data._data;
+                }
+                // For objects, remove the timestamp
+                const { _timestamp, ...actualData } = data;
+                // Check if actualData looks like an array stored as object (has numeric keys)
+                if (actualData['0'] !== undefined || actualData.length !== undefined) {
+                    const arrayData = [];
+                    let i = 0;
+                    while (actualData[i] !== undefined) {
+                        arrayData.push(actualData[i]);
+                        i++;
+                    }
+                    return arrayData;
+                }
+                return actualData;
+            }
+
+            return data;
+        } catch (error) {
+            console.error(`Error reading cache key ${cacheKey}:`, error);
+            return defaultValue;
+        }
+    },
+
+    set(cacheKey, data, customTtl = null) {
+        const keyConfig = this.CACHE_KEYS[cacheKey];
+        if (!keyConfig) {
+            console.error(`Unknown cache key: ${cacheKey}`);
+            return false;
+        }
+
+        try {
+            let dataToStore = data;
+
+            // Add timestamp for TTL if configured
+            const ttl = customTtl || keyConfig.ttl;
+            if (ttl) {
+                // For arrays, wrap in an object with _data property
+                if (Array.isArray(data)) {
+                    dataToStore = {
+                        _data: data,
+                        _timestamp: Date.now()
+                    };
+                } else {
+                    dataToStore = {
+                        ...data,
+                        _timestamp: Date.now()
+                    };
+                }
+            }
+
+            // Handle size limits for array-based caches
+            if (keyConfig.maxItems && Array.isArray(data)) {
+                if (data.length > keyConfig.maxItems) {
+                    const limitedData = data.slice(0, keyConfig.maxItems);
+                    if (ttl) {
+                        dataToStore = {
+                            _data: limitedData,
+                            _timestamp: Date.now()
+                        };
+                    } else {
+                        dataToStore = limitedData;
+                    }
+                }
+            }
+
+            localStorage.setItem(keyConfig.key, JSON.stringify(dataToStore));
+            return true;
+        } catch (error) {
+            console.error(`Error setting cache key ${cacheKey}:`, error);
+            return false;
+        }
+    },
+
+    remove(cacheKey) {
+        const keyConfig = this.CACHE_KEYS[cacheKey];
+        if (!keyConfig) {
+            console.error(`Unknown cache key: ${cacheKey}`);
+            return false;
+        }
+
+        try {
+            localStorage.removeItem(keyConfig.key);
+            return true;
+        } catch (error) {
+            console.error(`Error removing cache key ${cacheKey}:`, error);
+            return false;
+        }
+    },
+
+    // Bulk operations
+    clear(cacheKeys = null) {
+        if (cacheKeys === null) {
+            // Clear all registered cache keys
+            cacheKeys = Object.keys(this.CACHE_KEYS);
+        }
+
+        const results = {};
+        cacheKeys.forEach(key => {
+            results[key] = this.remove(key);
+        });
+        return results;
+    },
+
+    // Expiration management
+    cleanExpired() {
+        let cleanedCount = 0;
+        Object.keys(this.CACHE_KEYS).forEach(cacheKey => {
+            const keyConfig = this.CACHE_KEYS[cacheKey];
+            if (keyConfig.ttl) {
+                const currentData = this.get(cacheKey);
+                if (currentData === null) {
+                    cleanedCount++;
+                }
+            }
+        });
+        return cleanedCount;
+    },
+
+    // Demo mode backup/restore with centralized access
+    backupForDemo(cacheKey) {
+        const keyConfig = this.CACHE_KEYS[cacheKey];
+        if (!keyConfig) return false;
+
+        try {
+            const data = localStorage.getItem(keyConfig.key);
+            if (data) {
+                const backupKey = this.CACHE_KEYS.DEMO_BACKUP_PREFIX + keyConfig.key;
+                localStorage.setItem(backupKey, data);
+                return true;
+            }
+        } catch (error) {
+            console.error(`Error backing up ${cacheKey} for demo:`, error);
+        }
+        return false;
+    },
+
+    restoreFromDemo(cacheKey) {
+        const keyConfig = this.CACHE_KEYS[cacheKey];
+        if (!keyConfig) return false;
+
+        try {
+            const backupKey = this.CACHE_KEYS.DEMO_BACKUP_PREFIX + keyConfig.key;
+            const backupData = localStorage.getItem(backupKey);
+            if (backupData) {
+                localStorage.setItem(keyConfig.key, backupData);
+                localStorage.removeItem(backupKey);
+                return true;
+            }
+        } catch (error) {
+            console.error(`Error restoring ${cacheKey} from demo:`, error);
+        }
+        return false;
+    },
+
+    // Debug and diagnostics
+    inspect() {
+        const report = {
+            totalKeys: localStorage.length,
+            registeredKeys: {},
+            unregisteredKeys: [],
+            expiredKeys: []
+        };
+
+        // Check all registered keys
+        Object.keys(this.CACHE_KEYS).forEach(cacheKey => {
+            const keyConfig = this.CACHE_KEYS[cacheKey];
+            const data = localStorage.getItem(keyConfig.key);
+            
+            if (data) {
+                try {
+                    const parsed = JSON.parse(data);
+                    const info = {
+                        size: data.length,
+                        type: Array.isArray(parsed) ? 'array' : typeof parsed,
+                        hasTimestamp: parsed._timestamp ? true : false
+                    };
+
+                    if (keyConfig.ttl && parsed._timestamp) {
+                        const age = Date.now() - parsed._timestamp;
+                        info.age = age;
+                        info.expired = age > keyConfig.ttl;
+                        if (info.expired) {
+                            report.expiredKeys.push(cacheKey);
+                        }
+                    }
+
+                    if (Array.isArray(parsed)) {
+                        info.itemCount = parsed.length;
+                    }
+
+                    report.registeredKeys[cacheKey] = info;
+                } catch (error) {
+                    report.registeredKeys[cacheKey] = { error: error.message };
+                }
+            } else {
+                report.registeredKeys[cacheKey] = null;
+            }
+        });
+
+        // Check for unregistered keys
+        const registeredKeyValues = Object.values(this.CACHE_KEYS).map(config => config.key);
+        for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (!registeredKeyValues.includes(key) && 
+                !key.startsWith(this.CACHE_KEYS.DEMO_BACKUP_PREFIX)) {
+                report.unregisteredKeys.push(key);
+            }
+        }
+
+        return report;
+    },
+
+    // Legacy connection storage methods (backwards compatibility)
     getSavedConnections() {
         const rawData = localStorage.getItem('grafanaConnections');
         console.log('DEBUG: Raw localStorage data for grafanaConnections:', rawData);
@@ -428,5 +693,157 @@ const Storage = {
 
     clearHistory() {
         localStorage.removeItem('queryHistory');
+    },
+
+    // High-level convenience methods using the unified cache interface
+    
+    // Query Variables
+    getQueryVariables() {
+        return this.get('QUERY_VARIABLES', []);
+    },
+
+    setQueryVariables(variables) {
+        return this.set('QUERY_VARIABLES', variables);
+    },
+
+    // Analytics Configuration
+    getAnalyticsConfig() {
+        return this.get('ANALYTICS_CONFIG', {});
+    },
+
+    setAnalyticsConfig(config) {
+        return this.set('ANALYTICS_CONFIG', config);
+    },
+
+    // AI Connections (maintaining backwards compatibility with array format)
+    getAiConnections() {
+        const connections = this.get('AI_CONNECTIONS', []);
+        // Ensure we return an array for backwards compatibility
+        return Array.isArray(connections) ? connections : Object.values(connections);
+    },
+
+    setAiConnections(connections) {
+        // Accept both array and object formats
+        const dataToStore = Array.isArray(connections) ? connections : Object.values(connections);
+        return this.set('AI_CONNECTIONS', dataToStore);
+    },
+
+    // AI Connections as object (for new code)
+    getAiConnectionsAsObject() {
+        const connections = this.get('AI_CONNECTIONS', []);
+        if (Array.isArray(connections)) {
+            // Convert array to object using id as key
+            const connectionsObj = {};
+            connections.forEach(conn => {
+                if (conn.id) {
+                    connectionsObj[conn.id] = conn;
+                }
+            });
+            return connectionsObj;
+        }
+        return connections;
+    },
+
+    setAiConnectionsFromObject(connectionsObj) {
+        const connectionsArray = Object.values(connectionsObj);
+        return this.set('AI_CONNECTIONS', connectionsArray);
+    },
+
+    // Saved AI Analyses
+    getSavedAiAnalyses() {
+        return this.get('SAVED_AI_ANALYSES', []);
+    },
+
+    setSavedAiAnalyses(analyses) {
+        return this.set('SAVED_AI_ANALYSES', analyses);
+    },
+
+    // Demo Mode State
+    getDemoMode() {
+        return this.get('DEMO_MODE', false);
+    },
+
+    setDemoMode(enabled) {
+        return this.set('DEMO_MODE', enabled);
+    },
+
+    // Demo Tabs
+    getDemoTabs() {
+        return this.get('DEMO_TABS', {});
+    },
+
+    setDemoTabs(tabs) {
+        return this.set('DEMO_TABS', tabs);
+    },
+
+    // Demo Mock Files
+    getDemoMockFiles() {
+        return this.get('DEMO_MOCK_FILES', {});
+    },
+
+    setDemoMockFiles(files) {
+        return this.set('DEMO_MOCK_FILES', files);
+    },
+
+    // File Explorer Last Directory
+    getFileExplorerLastDirectory() {
+        return this.get('FILE_EXPLORER_LAST_DIR', null);
+    },
+
+    setFileExplorerLastDirectory(directory) {
+        return this.set('FILE_EXPLORER_LAST_DIR', directory);
+    },
+
+    // Utility methods for common operations
+    
+    // Add item to array-based cache (like history, variables, etc.)
+    addToArrayCache(cacheKey, item, uniqueKey = 'id') {
+        const currentArray = this.get(cacheKey, []);
+        
+        // Remove existing item if it exists (based on uniqueKey)
+        if (uniqueKey && item[uniqueKey]) {
+            const filteredArray = currentArray.filter(existing => 
+                existing[uniqueKey] !== item[uniqueKey]
+            );
+            // Add new item to the beginning
+            const newArray = [item, ...filteredArray];
+            return this.set(cacheKey, newArray);
+        } else {
+            // Simple prepend
+            const newArray = [item, ...currentArray];
+            return this.set(cacheKey, newArray);
+        }
+    },
+
+    // Remove item from array-based cache
+    removeFromArrayCache(cacheKey, itemId, uniqueKey = 'id') {
+        const currentArray = this.get(cacheKey, []);
+        const filteredArray = currentArray.filter(item => 
+            item[uniqueKey] !== itemId
+        );
+        return this.set(cacheKey, filteredArray);
+    },
+
+    // Update item in array-based cache
+    updateInArrayCache(cacheKey, itemId, updates, uniqueKey = 'id') {
+        const currentArray = this.get(cacheKey, []);
+        const updatedArray = currentArray.map(item => 
+            item[uniqueKey] === itemId ? { ...item, ...updates } : item
+        );
+        return this.set(cacheKey, updatedArray);
+    },
+
+    // Add or update item in object-based cache
+    setInObjectCache(cacheKey, key, value) {
+        const currentObject = this.get(cacheKey, {});
+        const updatedObject = { ...currentObject, [key]: value };
+        return this.set(cacheKey, updatedObject);
+    },
+
+    // Remove item from object-based cache
+    removeFromObjectCache(cacheKey, key) {
+        const currentObject = this.get(cacheKey, {});
+        const { [key]: removed, ...remainingObject } = currentObject;
+        return this.set(cacheKey, remainingObject);
     }
 };

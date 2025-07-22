@@ -84,30 +84,30 @@ const FileExplorer = {
         }
     },
     
-    // Save last directory to localStorage
+    // Save last directory using centralized cache
     saveLastDirectory(directory) {
         if (directory) {
-            localStorage.setItem('fileExplorerLastDirectory', directory);
+            Storage.setFileExplorerLastDirectory(directory);
             console.log('Saved last directory:', directory);
             
             // Verify it was saved
-            const saved = localStorage.getItem('fileExplorerLastDirectory');
+            const saved = Storage.getFileExplorerLastDirectory();
             console.log('Verified saved directory:', saved);
         }
     },
     
-    // Debug method to check localStorage
+    // Debug method to check centralized cache
     debugLastDirectory() {
-        const lastDirectory = localStorage.getItem('fileExplorerLastDirectory');
+        const lastDirectory = Storage.getFileExplorerLastDirectory();
         console.log('Current stored directory:', lastDirectory);
         console.log('All localStorage keys:', Object.keys(localStorage));
         console.log('localStorage length:', localStorage.length);
         return lastDirectory;
     },
     
-    // Restore last directory from localStorage
+    // Restore last directory from centralized cache
     async restoreLastDirectory() {
-        const lastDirectory = localStorage.getItem('fileExplorerLastDirectory');
+        const lastDirectory = Storage.getFileExplorerLastDirectory();
         console.log('Attempting to restore last directory:', lastDirectory);
         console.log('isElectron:', this.isElectron);
         console.log('Available electronAPI methods:', window.electronAPI ? Object.keys(window.electronAPI) : 'electronAPI not available');
@@ -125,7 +125,7 @@ const FileExplorer = {
                         console.log('Successfully restored last directory:', lastDirectory);
                     } else {
                         // Directory no longer exists, remove from storage
-                        localStorage.removeItem('fileExplorerLastDirectory');
+                        Storage.setFileExplorerLastDirectory(null);
                         console.log('Last directory no longer exists, cleared from storage:', lastDirectory);
                     }
                 } else {
@@ -138,14 +138,14 @@ const FileExplorer = {
                     } catch (refreshError) {
                         console.error('Failed to refresh file tree for last directory:', refreshError);
                         // Directory probably doesn't exist, remove from storage
-                        localStorage.removeItem('fileExplorerLastDirectory');
+                        Storage.setFileExplorerLastDirectory(null);
                         this.currentDirectory = null;
                     }
                 }
             } catch (error) {
                 console.error('Error restoring last directory:', error);
                 // If error checking directory, remove from storage
-                localStorage.removeItem('fileExplorerLastDirectory');
+                Storage.setFileExplorerLastDirectory(null);
                 this.currentDirectory = null;
             }
         } else if (lastDirectory && !this.isElectron) {
@@ -198,12 +198,12 @@ const FileExplorer = {
             console.log('Reading directory:', this.currentDirectory);
             
             // Check if we're in demo mode and should use mock files
-            const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
-            const demoMockFiles = localStorage.getItem('demoMockFiles');
+            const isDemoMode = window.location.search.includes('demo=true') || Storage.getDemoMode();
+            const demoMockFiles = Storage.getDemoMockFiles();
             
-            if (isDemoMode && demoMockFiles) {
+            if (isDemoMode && Object.keys(demoMockFiles).length > 0) {
                 console.log('🎭 Using mock files for demo mode');
-                const mockFiles = JSON.parse(demoMockFiles);
+                const mockFiles = demoMockFiles;
                 const files = Object.keys(mockFiles).map(fileName => ({
                     name: fileName,
                     path: `/Users/demo/queries/${fileName}`,
@@ -282,12 +282,12 @@ const FileExplorer = {
             let content;
             
             // Check if we're in demo mode and should use mock content
-            const isDemoMode = window.location.search.includes('demo=true') || localStorage.getItem('demoMode') === 'true';
-            const demoMockFiles = localStorage.getItem('demoMockFiles');
+            const isDemoMode = window.location.search.includes('demo=true') || Storage.getDemoMode();
+            const demoMockFiles = Storage.getDemoMockFiles();
             
-            if (isDemoMode && demoMockFiles) {
+            if (isDemoMode && Object.keys(demoMockFiles).length > 0) {
                 console.log('🎭 Using mock file content for demo mode');
-                const mockFiles = JSON.parse(demoMockFiles);
+                const mockFiles = demoMockFiles;
                 content = mockFiles[fileName] || `-- Demo file: ${fileName}\n-- Mock content not found`;
                 console.log('Mock file content loaded, length:', content.length);
             } else {
