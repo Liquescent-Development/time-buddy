@@ -453,17 +453,23 @@ const Analytics = {
         return false;
     },
 
-    // Initialize AI connection and Ollama service
+    // Initialize AI connection and appropriate service (Ollama or OpenAI)
     async initializeAiConnection(connection) {
         try {
-            this.config.ollamaEndpoint = connection.endpoint;
             this.config.selectedModel = connection.model;
+            this.config.provider = connection.provider || 'ollama'; // Default to ollama
             
-            // Actually initialize the Ollama service
-            await OllamaService.initialize(connection.endpoint, connection.model);
+            // Initialize the appropriate service
+            if (connection.provider === 'openai') {
+                this.config.openaiApiKey = connection.apiKey;
+                await OpenAIService.initialize(connection.apiKey, connection.model);
+            } else {
+                this.config.ollamaEndpoint = connection.endpoint;
+                await OllamaService.initialize(connection.endpoint, connection.model);
+            }
             
             this.isConnected = true;
-            console.log('✅ AI service initialized:', connection.name, 'at', connection.endpoint);
+            console.log('✅ AI service initialized:', connection.name, connection.provider === 'openai' ? '(OpenAI)' : `at ${connection.endpoint}`);
             this.updateTitleBarStatus();
             this.updateAnalysisButton();
             return true;
@@ -514,7 +520,16 @@ const Analytics = {
         }
 
         try {
-            await OllamaService.initialize(this.config.ollamaEndpoint, this.config.selectedModel);
+            // Get the active connection to determine provider
+            const activeConnectionId = Storage.get('ACTIVE_AI_CONNECTION');
+            const aiConnections = Storage.getAiConnections();
+            const activeConnection = aiConnections.find(conn => conn.id === activeConnectionId);
+            
+            if (activeConnection && activeConnection.provider === 'openai') {
+                await OpenAIService.initialize(activeConnection.apiKey, this.config.selectedModel);
+            } else {
+                await OllamaService.initialize(this.config.ollamaEndpoint, this.config.selectedModel);
+            }
             this.isConnected = true;
             
             // Update UI for success
@@ -522,7 +537,13 @@ const Analytics = {
                 statusIndicator.className = 'status-indicator connected';
             }
             if (statusText) {
-                statusText.textContent = 'Connected';
+                if (activeConnection && activeConnection.provider === 'openai') {
+                    const modelInfo = OpenAIService.getStatus();
+                    statusText.textContent = `Connected to OpenAI (${modelInfo.model})`;
+                } else {
+                    const modelInfo = OllamaService.getStatus();
+                    statusText.textContent = `Connected to Ollama (${modelInfo.model})`;
+                }
             }
             
             this.updateTitleBarStatus();

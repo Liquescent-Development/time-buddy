@@ -772,25 +772,47 @@ const AIAnalytics = {
         }
     },
 
-    // Execute AI analysis using Ollama
+    // Execute AI analysis using configured provider (Ollama or OpenAI)
     async executeAIAnalysis(prompt, config, processedData) {
-        console.log('🧠 Executing AI analysis with Ollama...');
+        console.log('🧠 Executing AI analysis...');
         
-        if (typeof OllamaService === 'undefined') {
-            throw new Error('Ollama service not available');
+        // Determine which service to use
+        const activeConnectionId = Storage.get('ACTIVE_AI_CONNECTION');
+        const aiConnections = Storage.getAiConnections();
+        const activeConnection = aiConnections.find(conn => conn.id === activeConnectionId);
+        const provider = activeConnection?.provider || 'ollama';
+        
+        console.log('🤖 Using AI provider:', provider);
+        
+        if (provider === 'openai') {
+            if (typeof OpenAIService === 'undefined' || !OpenAIService.isConnected) {
+                throw new Error('OpenAI service not available or not connected');
+            }
+        } else {
+            if (typeof OllamaService === 'undefined' || !OllamaService.isConnected) {
+                throw new Error('Ollama service not available or not connected');
+            }
         }
         
         // Use custom timeout from config if available, otherwise use default
         const customTimeout = config.timeout || this.config.defaultTimeout;
         
-        // Use the actual model from OllamaService to ensure consistency
-        const modelName = OllamaService.config.model || config.selectedModel || 'llama3.1:8b-instruct-q4_K_M';
+        // Get model name from appropriate service
+        const modelName = provider === 'openai' 
+            ? (OpenAIService.config.model || config.selectedModel || 'gpt-4-turbo-preview')
+            : (OllamaService.config.model || config.selectedModel || 'llama3.1:8b-instruct-q4_K_M');
+            
         const hasVisualData = processedData && processedData.visualRepresentation && config.analysisType === 'anomaly';
         const userWantsVisual = config.useVisualMode === true;
         
-        // Check if model supports vision using API (with fallback to name-based detection)
-        const ollamaEndpoint = config.ollamaEndpoint || 'http://localhost:11434';
-        const isVisionCapable = await this.isVisionModelFromAPI(modelName, ollamaEndpoint);
+        // Check if model supports vision
+        let isVisionCapable = false;
+        if (provider === 'openai') {
+            isVisionCapable = this.isVisionModel(modelName);
+        } else {
+            const ollamaEndpoint = config.ollamaEndpoint || 'http://localhost:11434';
+            isVisionCapable = await this.isVisionModelFromAPI(modelName, ollamaEndpoint);
+        }
         
         let finalPrompt = prompt;
         let imageData = null;
@@ -830,18 +852,35 @@ The chart shows the complete time series - trust what you see in the image over 
             console.log('📊 Using standard TEXT mode for:', modelName);
         }
         
-        const response = await OllamaService.generateResponse(
-            finalPrompt,
-            this.prompts.systemPrompt,
-            {
-                temperature: 0.1, // Low temperature for analytical tasks
-                num_predict: config.numPredict === -1 ? -1 : (config.numPredict || 4096),
-                num_ctx: config.numCtx || 8192,
-                top_p: 0.9
-            },
-            customTimeout,
-            imageData // Pass image data for vision models
-        );
+        // Call the appropriate service
+        let response;
+        if (provider === 'openai') {
+            response = await OpenAIService.generateResponse(
+                finalPrompt,
+                this.prompts.systemPrompt,
+                {
+                    temperature: 0.1, // Low temperature for analytical tasks
+                    num_predict: config.numPredict === -1 ? -1 : (config.numPredict || 4096),
+                    num_ctx: config.numCtx || 8192,
+                    top_p: 0.9
+                },
+                customTimeout,
+                imageData // Pass image data for vision models
+            );
+        } else {
+            response = await OllamaService.generateResponse(
+                finalPrompt,
+                this.prompts.systemPrompt,
+                {
+                    temperature: 0.1, // Low temperature for analytical tasks
+                    num_predict: config.numPredict === -1 ? -1 : (config.numPredict || 4096),
+                    num_ctx: config.numCtx || 8192,
+                    top_p: 0.9
+                },
+                customTimeout,
+                imageData // Pass image data for vision models
+            );
+        }
         
         return response;
     },
@@ -857,7 +896,15 @@ The chart shows the complete time series - trust what you see in the image over 
             }
             
             // Try to parse JSON response (handle markdown code blocks)
-            const parsed = OllamaService.parseJsonResponse(responseText);
+            // Determine which parser to use based on provider
+            const activeConnectionId = Storage.get('ACTIVE_AI_CONNECTION');
+            const aiConnections = Storage.getAiConnections();
+            const activeConnection = aiConnections.find(conn => conn.id === activeConnectionId);
+            const provider = activeConnection?.provider || 'ollama';
+            
+            const parsed = provider === 'openai' 
+                ? OpenAIService.parseJsonResponse(responseText)
+                : OllamaService.parseJsonResponse(responseText);
             
             // Validate and fix severity distribution
             this.validateAndFixSeverityDistribution(parsed);

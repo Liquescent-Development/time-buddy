@@ -1898,7 +1898,12 @@ async function saveConnection() {
 function showNewAiConnectionDialog() {
     document.getElementById('aiConnectionDialogTitle').textContent = 'New AI Connection';
     document.getElementById('aiConnectionName').value = '';
+    document.getElementById('aiProvider').value = 'ollama';
     document.getElementById('aiEndpoint').value = 'http://localhost:11434';
+    document.getElementById('aiApiKey').value = '';
+    document.getElementById('aiEndpointGroup').style.display = 'block';
+    document.getElementById('aiApiKeyGroup').style.display = 'none';
+    document.getElementById('advancedSettingsToggle').style.display = 'block';
     document.getElementById('aiModel').value = 'llama3.1:8b-instruct-q4_K_M';
     document.getElementById('customModelName').value = '';
     document.getElementById('aiResponseTokens').value = '-1';
@@ -1910,7 +1915,44 @@ function showNewAiConnectionDialog() {
     // Clear any editing state
     window.editingAiConnectionId = null;
     
+    // Load available models for default provider
+    loadAvailableModels();
+    
     document.getElementById('aiConnectionDialog').style.display = 'flex';
+}
+
+function onAiProviderChange() {
+    const provider = document.getElementById('aiProvider').value;
+    const endpointGroup = document.getElementById('aiEndpointGroup');
+    const apiKeyGroup = document.getElementById('aiApiKeyGroup');
+    const modelSelect = document.getElementById('aiModel');
+    const advancedSettingsToggle = document.getElementById('advancedSettingsToggle');
+    const advancedSettings = document.getElementById('advancedAiSettings');
+    const showAdvancedCheckbox = document.getElementById('showAdvancedAiSettings');
+    
+    if (provider === 'ollama') {
+        endpointGroup.style.display = 'block';
+        apiKeyGroup.style.display = 'none';
+        advancedSettingsToggle.style.display = 'block';
+        document.getElementById('aiConnectionName').placeholder = 'My Ollama Server';
+        // Load Ollama models
+        loadAvailableModels();
+    } else if (provider === 'openai') {
+        endpointGroup.style.display = 'none';
+        apiKeyGroup.style.display = 'block';
+        advancedSettingsToggle.style.display = 'none';
+        advancedSettings.style.display = 'none';
+        showAdvancedCheckbox.checked = false;
+        document.getElementById('aiConnectionName').placeholder = 'My OpenAI Connection';
+        // Set OpenAI models
+        modelSelect.innerHTML = `
+            <option value="gpt-4-turbo-preview">GPT-4 Turbo</option>
+            <option value="gpt-4">GPT-4</option>
+            <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+            <option value="gpt-4o">GPT-4o (Vision)</option>
+            <option value="custom">Custom Model</option>
+        `;
+    }
 }
 
 function hideAiConnectionDialog() {
@@ -1924,29 +1966,108 @@ function toggleAdvancedAiSettings() {
     advancedSettings.style.display = checkbox.checked ? 'block' : 'none';
 }
 
+async function loadAvailableModels() {
+    const provider = document.getElementById('aiProvider').value;
+    const modelSelect = document.getElementById('aiModel');
+    const endpoint = document.getElementById('aiEndpoint').value;
+    
+    if (provider === 'ollama' && endpoint) {
+        try {
+            modelSelect.innerHTML = '<option value="">Loading models...</option>';
+            
+            // Fetch models from Ollama
+            const response = await fetch(`${endpoint}/api/tags`);
+            if (response.ok) {
+                const data = await response.json();
+                const models = data.models || [];
+                
+                modelSelect.innerHTML = models.map(model => 
+                    `<option value="${model.name}">${model.name}</option>`
+                ).join('');
+                
+                // Add custom model option
+                modelSelect.innerHTML += '<option value="custom">Custom Model</option>';
+                
+                // Set default model if available
+                if (models.some(m => m.name === 'llama3.1:8b-instruct-q4_K_M')) {
+                    modelSelect.value = 'llama3.1:8b-instruct-q4_K_M';
+                } else if (models.length > 0) {
+                    modelSelect.value = models[0].name;
+                }
+            } else {
+                modelSelect.innerHTML = '<option value="custom">Custom Model (Ollama offline)</option>';
+                modelSelect.value = 'custom';
+                document.getElementById('customModelGroup').style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Failed to load Ollama models:', error);
+            modelSelect.innerHTML = '<option value="custom">Custom Model (Connection failed)</option>';
+            modelSelect.value = 'custom';
+            document.getElementById('customModelGroup').style.display = 'block';
+        }
+    }
+    // OpenAI models are already set in onAiProviderChange
+}
+
+function onModelSelectionChange() {
+    const modelSelect = document.getElementById('aiModel');
+    const customModelGroup = document.getElementById('customModelGroup');
+    
+    if (modelSelect.value === 'custom') {
+        customModelGroup.style.display = 'block';
+    } else {
+        customModelGroup.style.display = 'none';
+    }
+}
+
+function onEndpointChange() {
+    const provider = document.getElementById('aiProvider').value;
+    if (provider === 'ollama') {
+        loadAvailableModels();
+    }
+}
+
 async function saveAiConnection() {
     const name = document.getElementById('aiConnectionName').value.trim();
+    const provider = document.getElementById('aiProvider').value;
     const endpoint = document.getElementById('aiEndpoint').value.trim();
+    const apiKey = document.getElementById('aiApiKey').value.trim();
     const model = document.getElementById('aiModel').value;
     const customModel = document.getElementById('customModelName').value.trim();
     const responseTokens = document.getElementById('aiResponseTokens').value;
     const contextSize = document.getElementById('aiContextSize').value;
     
-    if (!name || !endpoint) {
-        alert('Please fill in all required fields');
+    if (!name) {
+        alert('Please provide a connection name');
+        return;
+    }
+    
+    if (provider === 'ollama' && !endpoint) {
+        alert('Please provide the Ollama endpoint');
+        return;
+    }
+    
+    if (provider === 'openai' && !apiKey) {
+        alert('Please provide your OpenAI API key');
         return;
     }
     
     const aiConnection = {
         id: window.editingAiConnectionId || Date.now().toString(),
         name: name,
-        endpoint: endpoint,
+        provider: provider || 'ollama', // Default to ollama for backwards compatibility
+        endpoint: provider === 'ollama' ? endpoint : 'https://api.openai.com/v1',
+        apiKey: provider === 'openai' ? apiKey : undefined,
         model: model === 'custom' ? customModel : model,
-        responseTokens: parseInt(responseTokens),
-        contextSize: parseInt(contextSize),
         status: 'disconnected',
         createdAt: new Date().toISOString()
     };
+    
+    // Only add Ollama-specific settings if provider is Ollama
+    if (provider === 'ollama') {
+        aiConnection.responseTokens = parseInt(responseTokens);
+        aiConnection.contextSize = parseInt(contextSize);
+    }
     
     // Save to storage using centralized cache
     let aiConnections = Storage.getAiConnections();
@@ -1998,8 +2119,12 @@ async function saveAiConnection() {
 
 async function testAiConnectionInDialog(connection) {
     try {
-        // Use the proper OllamaService initialization like Analytics does
-        await OllamaService.initialize(connection.endpoint, connection.model);
+        if (connection.provider === 'openai') {
+            await OpenAIService.initialize(connection.apiKey, connection.model);
+        } else {
+            // Default to Ollama for backwards compatibility
+            await OllamaService.initialize(connection.endpoint, connection.model);
+        }
         return true;
     } catch (error) {
         alert(`Connection failed: ${error.message}`);
@@ -2033,7 +2158,7 @@ function loadAiConnections() {
              onclick="connectToAiService('${connection.id}')">
             <div class="connection-info">
                 <div class="connection-name">${connection.name}</div>
-                <div class="connection-url">${connection.endpoint}</div>
+                <div class="connection-url">${connection.provider === 'openai' ? 'OpenAI API' : connection.endpoint}</div>
             </div>
             <div class="connection-actions">
                 <button class="icon-button" onclick="event.stopPropagation(); editAiConnection('${connection.id}')" title="Edit">
@@ -2060,7 +2185,24 @@ function editAiConnection(connectionId) {
     
     document.getElementById('aiConnectionDialogTitle').textContent = 'Edit AI Connection';
     document.getElementById('aiConnectionName').value = connection.name;
-    document.getElementById('aiEndpoint').value = connection.endpoint;
+    
+    // Set provider and show appropriate fields
+    const provider = connection.provider || 'ollama'; // Default to ollama for old connections
+    document.getElementById('aiProvider').value = provider;
+    
+    if (provider === 'openai') {
+        document.getElementById('aiEndpointGroup').style.display = 'none';
+        document.getElementById('aiApiKeyGroup').style.display = 'block';
+        document.getElementById('advancedSettingsToggle').style.display = 'none';
+        document.getElementById('advancedAiSettings').style.display = 'none';
+        document.getElementById('showAdvancedAiSettings').checked = false;
+        document.getElementById('aiApiKey').value = connection.apiKey || '';
+    } else {
+        document.getElementById('aiEndpointGroup').style.display = 'block';
+        document.getElementById('aiApiKeyGroup').style.display = 'none';
+        document.getElementById('advancedSettingsToggle').style.display = 'block';
+        document.getElementById('aiEndpoint').value = connection.endpoint;
+    }
     
     // Check if it's a custom model
     const modelSelect = document.getElementById('aiModel');
@@ -2079,6 +2221,28 @@ function editAiConnection(connectionId) {
     document.getElementById('aiContextSize').value = connection.contextSize || 16384;
     
     window.editingAiConnectionId = connectionId;
+    
+    // Load models and set the selected model after loading
+    if (provider === 'ollama') {
+        loadAvailableModels().then(() => {
+            // Set the model after models are loaded
+            const modelSelect = document.getElementById('aiModel');
+            const isCustomModel = ![...modelSelect.options].some(option => option.value === connection.model);
+            
+            if (isCustomModel) {
+                modelSelect.value = 'custom';
+                document.getElementById('customModelName').value = connection.model;
+                document.getElementById('customModelGroup').style.display = 'block';
+            } else {
+                modelSelect.value = connection.model;
+                document.getElementById('customModelGroup').style.display = 'none';
+            }
+        });
+    } else {
+        // For OpenAI, models are already set in the provider change
+        document.getElementById('aiModel').value = connection.model || 'gpt-4-turbo-preview';
+    }
+    
     document.getElementById('aiConnectionDialog').style.display = 'flex';
 }
 
@@ -2111,8 +2275,13 @@ async function connectToAiService(connectionId) {
     loadAiConnections();
     
     try {
-        // Use proper OllamaService initialization to test the connection
-        await OllamaService.initialize(connection.endpoint, connection.model);
+        // Initialize the appropriate service based on provider
+        if (connection.provider === 'openai') {
+            await OpenAIService.initialize(connection.apiKey, connection.model);
+        } else {
+            // Default to Ollama for backwards compatibility
+            await OllamaService.initialize(connection.endpoint, connection.model);
+        }
         connection.status = 'connected';
         // Set this as the active AI connection
         Storage.set('ACTIVE_AI_CONNECTION', connectionId);
@@ -2155,7 +2324,7 @@ function filterAiConnections() {
              onclick="connectToAiService('${connection.id}')">
             <div class="connection-info">
                 <div class="connection-name">${connection.name}</div>
-                <div class="connection-url">${connection.endpoint}</div>
+                <div class="connection-url">${connection.provider === 'openai' ? 'OpenAI API' : connection.endpoint}</div>
             </div>
             <div class="connection-actions">
                 <button class="icon-button" onclick="event.stopPropagation(); editAiConnection('${connection.id}')" title="Edit">

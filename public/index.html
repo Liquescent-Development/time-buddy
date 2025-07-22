@@ -683,15 +683,27 @@
             <div class="modal-content">
                 <div class="form-group">
                     <label for="aiConnectionName">Connection Name</label>
-                    <input type="text" id="aiConnectionName" placeholder="My Ollama Server">
+                    <input type="text" id="aiConnectionName" placeholder="My AI Connection">
                 </div>
                 <div class="form-group">
+                    <label for="aiProvider">AI Provider</label>
+                    <select id="aiProvider" onchange="onAiProviderChange()">
+                        <option value="ollama">Ollama (Local)</option>
+                        <option value="openai">OpenAI</option>
+                    </select>
+                </div>
+                <div class="form-group" id="aiEndpointGroup">
                     <label for="aiEndpoint">Ollama Endpoint</label>
-                    <input type="text" id="aiEndpoint" placeholder="http://localhost:11434">
+                    <input type="text" id="aiEndpoint" placeholder="http://localhost:11434" onblur="onEndpointChange()">
+                </div>
+                <div class="form-group" id="aiApiKeyGroup" style="display: none;">
+                    <label for="aiApiKey">OpenAI API Key</label>
+                    <input type="password" id="aiApiKey" placeholder="sk-...">
+                    <small style="color: #666;">Your API key is stored locally and never sent to our servers</small>
                 </div>
                 <div class="form-group">
                     <label for="aiModel">Default Model</label>
-                    <select id="aiModel">
+                    <select id="aiModel" onchange="onModelSelectionChange()">
                         <option value="">Loading models...</option>
                     </select>
                 </div>
@@ -700,8 +712,8 @@
                     <input type="text" id="customModelName" placeholder="Enter model name">
                 </div>
                 
-                <!-- Advanced Settings -->
-                <div class="form-group">
+                <!-- Advanced Settings (Ollama only) -->
+                <div class="form-group" id="advancedSettingsToggle">
                     <label>
                         <input type="checkbox" id="showAdvancedAiSettings" onchange="toggleAdvancedAiSettings()"> Advanced Settings
                     </label>
@@ -782,6 +794,7 @@
     <script src="js/fileExplorer.js"></script>
     <script src="js/demo.js"></script>
     <script src="js/ollama.js"></script>
+    <script src="js/openai.js"></script>
     <script src="js/modelManager.js"></script>
     <script src="js/timeSeriesProcessor.js"></script>
     <script src="js/aiAnalytics.js"></script>
