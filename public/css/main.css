@@ -4920,9 +4920,8 @@ body:has(#analyticsPanel.active) .sidebar {
 }
 
 .analytics-loading-modal {
-    min-width: 400px;
-    max-width: 500px;
-    max-height: 300px;
+    min-width: 500px;
+    max-width: 600px;
 }
 
 .analytics-modal-content {

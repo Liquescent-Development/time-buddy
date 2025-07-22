@@ -429,41 +429,74 @@ const Analytics = {
 
     // Check if we have any connected AI services and initialize them
     async checkAiConnection() {
-        const aiConnections = Storage.getAiConnections();
+        let aiConnections = Storage.getAiConnections();
         const activeConnectionId = Storage.get('ACTIVE_AI_CONNECTION');
+        
+        // First, clean up any invalid connection states
+        // Only the active connection should be marked as connected
+        let hasChanges = false;
+        aiConnections = aiConnections.map(conn => {
+            if (conn.status === 'connected' && conn.id !== activeConnectionId) {
+                console.log(`🔧 Cleaning up stale connected status for ${conn.name}`);
+                hasChanges = true;
+                return { ...conn, status: 'disconnected' };
+            }
+            return conn;
+        });
+        
+        if (hasChanges) {
+            Storage.setAiConnections(aiConnections);
+        }
         
         // Check if we have an active connection
         if (activeConnectionId) {
-            const activeConnection = aiConnections.find(conn => conn.id === activeConnectionId && conn.status === 'connected');
+            const activeConnection = aiConnections.find(conn => conn.id === activeConnectionId);
             if (activeConnection) {
-                return await this.initializeAiConnection(activeConnection);
+                // Try to initialize it
+                const success = await this.initializeAiConnection(activeConnection);
+                if (success) {
+                    // Update status to connected if initialization succeeded
+                    const updatedConnections = Storage.getAiConnections();
+                    const index = updatedConnections.findIndex(conn => conn.id === activeConnectionId);
+                    if (index !== -1) {
+                        updatedConnections[index].status = 'connected';
+                        Storage.setAiConnections(updatedConnections);
+                    }
+                    return true;
+                } else {
+                    // Clear active connection if initialization failed
+                    Storage.remove('ACTIVE_AI_CONNECTION');
+                }
             }
         }
         
-        // Check if any connection is connected
-        const connectedConnection = aiConnections.find(conn => conn.status === 'connected');
-        if (connectedConnection) {
-            Storage.set('ACTIVE_AI_CONNECTION', connectedConnection.id);
-            return await this.initializeAiConnection(connectedConnection);
-        }
-        
+        // No active connection
         this.isConnected = false;
         this.updateTitleBarStatus();
         this.updateAnalysisButton();
         return false;
     },
 
-    // Initialize AI connection and Ollama service
+    // Initialize AI connection and appropriate service (Ollama or OpenAI)
     async initializeAiConnection(connection) {
         try {
-            this.config.ollamaEndpoint = connection.endpoint;
+            // Update all relevant config with connection info
             this.config.selectedModel = connection.model;
+            this.config.provider = connection.provider || 'ollama'; // Default to ollama
+            this.config.activeConnectionName = connection.name;
+            this.config.activeConnectionId = connection.id;
             
-            // Actually initialize the Ollama service
-            await OllamaService.initialize(connection.endpoint, connection.model);
+            // Initialize the appropriate service
+            if (connection.provider === 'openai') {
+                this.config.openaiApiKey = connection.apiKey;
+                await OpenAIService.initialize(connection.apiKey, connection.model);
+            } else {
+                this.config.ollamaEndpoint = connection.endpoint;
+                await OllamaService.initialize(connection.endpoint, connection.model);
+            }
             
             this.isConnected = true;
-            console.log('✅ AI service initialized:', connection.name, 'at', connection.endpoint);
+            console.log('✅ AI service initialized:', connection.name, connection.provider === 'openai' ? '(OpenAI)' : `at ${connection.endpoint}`);
             this.updateTitleBarStatus();
             this.updateAnalysisButton();
             return true;
@@ -514,7 +547,16 @@ const Analytics = {
         }
 
         try {
-            await OllamaService.initialize(this.config.ollamaEndpoint, this.config.selectedModel);
+            // Get the active connection to determine provider
+            const activeConnectionId = Storage.get('ACTIVE_AI_CONNECTION');
+            const aiConnections = Storage.getAiConnections();
+            const activeConnection = aiConnections.find(conn => conn.id === activeConnectionId);
+            
+            if (activeConnection && activeConnection.provider === 'openai') {
+                await OpenAIService.initialize(activeConnection.apiKey, this.config.selectedModel);
+            } else {
+                await OllamaService.initialize(this.config.ollamaEndpoint, this.config.selectedModel);
+            }
             this.isConnected = true;
             
             // Update UI for success
@@ -522,7 +564,13 @@ const Analytics = {
                 statusIndicator.className = 'status-indicator connected';
             }
             if (statusText) {
-                statusText.textContent = 'Connected';
+                if (activeConnection && activeConnection.provider === 'openai') {
+                    const modelInfo = OpenAIService.getStatus();
+                    statusText.textContent = `Connected to OpenAI (${modelInfo.model})`;
+                } else {
+                    const modelInfo = OllamaService.getStatus();
+                    statusText.textContent = `Connected to Ollama (${modelInfo.model})`;
+                }
             }
             
             this.updateTitleBarStatus();
@@ -1189,6 +1237,15 @@ const Analytics = {
 
     // Get loading HTML
     getLoadingHTML() {
+        // Get active connection info
+        const activeConnectionId = Storage.get('ACTIVE_AI_CONNECTION');
+        const aiConnections = Storage.getAiConnections();
+        const activeConnection = aiConnections.find(conn => conn.id === activeConnectionId);
+        
+        const connectionName = activeConnection ? activeConnection.name : 'Unknown';
+        const provider = activeConnection ? (activeConnection.provider || 'ollama') : 'unknown';
+        const model = activeConnection ? activeConnection.model : this.config.selectedModel;
+        
         return `
             <div class="analysis-loading">
                 <div class="loading-spinner"></div>
@@ -1199,12 +1256,15 @@ const Analytics = {
                     <div class="loading-step" id="step-ai">🧠 Running AI analysis...</div>
                     <div class="loading-step" id="step-visualization">📈 Generating visualizations...</div>
                 </div>
-                <div class="loading-config">
-                    <strong>Analysis Configuration:</strong><br>
-                    Type: ${this.config.analysisType}<br>
-                    Model: ${this.config.selectedModel}<br>
-                    Data: ${this.config.measurement}.${this.config.field}<br>
-                    Range: ${this.config.timeRange}
+                <div class="loading-config" style="margin-top: 20px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 12px;">
+                    <strong style="display: block; margin-bottom: 8px;">Analysis Configuration:</strong>
+                    <div style="display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; line-height: 1.4;">
+                        <span style="opacity: 0.7;">Type:</span><span>${this.config.analysisType}</span>
+                        <span style="opacity: 0.7;">Connection:</span><span>${connectionName} (${provider.toUpperCase()})</span>
+                        <span style="opacity: 0.7;">Model:</span><span>${model}</span>
+                        <span style="opacity: 0.7;">Data:</span><span>${this.config.measurement}.${this.config.field}</span>
+                        <span style="opacity: 0.7;">Range:</span><span>${this.config.timeRange}</span>
+                    </div>
                 </div>
             </div>
         `;
