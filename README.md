@@ -4,7 +4,7 @@
 
 # Time Buddy
 
-**Your time series metric friend**
+**Your time series metric agent**
 
 [![Release](https://img.shields.io/github/v/release/Liquescent-Development/grafana-query-ide?style=flat-square)](https://github.com/Liquescent-Development/grafana-query-ide/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat-square)](https://github.com/Liquescent-Development/grafana-query-ide/releases)
@@ -32,9 +32,10 @@
 ## ✨ Features
 
 ### 🧠 **AI/ML Analytics** (New!)
-- **Intelligent anomaly detection** powered by Ollama LLMs
+- **Intelligent anomaly detection** powered by Ollama or OpenAI
+- **Multiple AI providers** - Local Ollama models or cloud OpenAI API
 - **Visual analysis mode** with chart-based AI insights  
-- **Configurable models** supporting Llama, Gemma, and more
+- **Dynamic model selection** from available models
 - **Time series preprocessing** with intelligent data subsampling
 - **Saved analyses** for tracking anomaly patterns over time
 
@@ -81,10 +82,18 @@
 4. **Start querying** with full autocomplete and syntax highlighting!
 
 ### AI Analytics Setup (Optional)
+
+**Option 1: Local AI with Ollama**
 1. **Install Ollama** from [ollama.ai](https://ollama.ai)
 2. **Pull a model**: `ollama pull llama3.2`
-3. **Configure AI connection** in the app
+3. **Configure Ollama connection** in the app with your local endpoint
 4. **Enable visual analysis** for intelligent anomaly detection
+
+**Option 2: Cloud AI with OpenAI**
+1. **Get OpenAI API key** from [platform.openai.com](https://platform.openai.com)
+2. **Configure OpenAI connection** in the app with your API key
+3. **Select model** from available options (GPT-4, GPT-3.5-turbo, etc.)
+4. **Run AI analysis** with cloud-powered insights
 
 ## 🛠️ Development
 
@@ -138,14 +147,23 @@ WHERE time > now() - 1h GROUP BY time(5m)
 │ • AI Analytics  │    │ • SSL Support   │    │ • Query API     │
 │ • File System   │    │ • Authentication│    │ • Dashboards    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
+          │
+          ▼
+┌─────────────────┐
+│   AI Providers  │
+│                 │
+│ • Ollama (Local)│
+│ • OpenAI (Cloud)│
+│ • Vision Support│
+└─────────────────┘
 ```
 
 ## 🤝 Contributing
 
 We welcome contributions! Areas for enhancement:
-- Additional AI models and analysis types
+- Additional AI providers and models
 - Query optimization and performance monitoring  
-- New visualization types
+- New visualization types and analysis modes
 - Additional data source support
 
 ## 📄 License
