@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/logo.svg" alt="Time Buddy Logo" width="120" height="120">
+<img src="assets/logo.png" alt="Time Buddy Logo" width="180" height="180">
 
 # Time Buddy
 
