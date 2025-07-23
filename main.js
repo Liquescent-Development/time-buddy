@@ -13,8 +13,6 @@ if (typeof require !== 'undefined') {
     }
 }
 const path = require('path');
-const { spawn } = require('child_process');
-const net = require('net');
 
 // Set app name early for macOS menu bar
 app.setName('Time Buddy');
@@ -25,13 +23,7 @@ console.log('App name:', app.getName());
 
 // Keep a global reference of the window object
 let mainWindow;
-let serverProcess;
-let mockServerProcess;
-const SERVER_PORT = 3000;
-const MOCK_SERVER_PORT = 3001;
 
-// Check for demo mode command line argument
-const isDemoMode = process.argv.includes('--demo') || process.argv.includes('-d');
 
 // Enable live reload for development (optional)
 if (process.env.NODE_ENV === 'development') {
@@ -45,129 +37,8 @@ if (process.env.NODE_ENV === 'development') {
     }
 }
 
-// Check if port is available
-function isPortAvailable(port) {
-    return new Promise((resolve) => {
-        const server = net.createServer();
-        server.listen(port, () => {
-            server.once('close', () => {
-                resolve(true);
-            });
-            server.close();
-        });
-        server.on('error', () => {
-            resolve(false);
-        });
-    });
-}
 
-// Start the Express server(s)
-async function startServer() {
-    if (isDemoMode) {
-        // In demo mode, start both the regular frontend server and mock Grafana server
-        await startFrontendServer();
-        await startMockServer();
-    } else {
-        // In normal mode, just start the frontend server
-        await startFrontendServer();
-    }
-}
 
-// Start the frontend server (serves the UI)
-async function startFrontendServer() {
-    const portAvailable = await isPortAvailable(SERVER_PORT);
-    
-    if (!portAvailable) {
-        console.log(`Port ${SERVER_PORT} is already in use, assuming frontend server is running`);
-        return Promise.resolve();
-    }
-
-    return new Promise((resolve, reject) => {
-        try {
-            // In production, server.js is unpacked from asar
-            const serverPath = app.isPackaged 
-                ? path.join(__dirname, '..', 'app.asar.unpacked', 'server.js')
-                : path.join(__dirname, 'server.js');
-            
-            console.log(`Starting frontend server: ${serverPath}`);
-            
-            // Require the server directly instead of spawning it
-            process.env.PORT = SERVER_PORT;
-            process.env.NODE_ENV = 'production';
-            
-            require(serverPath);
-            
-            // Give the server a moment to start
-            setTimeout(() => {
-                console.log('Frontend server started successfully');
-                resolve();
-            }, 1000);
-            
-        } catch (error) {
-            console.error('Failed to start server:', error);
-            resolve(); // Don't block the app
-        }
-    });
-}
-
-// Start the mock Grafana server (for demo mode)
-async function startMockServer() {
-    const portAvailable = await isPortAvailable(MOCK_SERVER_PORT);
-    
-    if (!portAvailable) {
-        console.log(`Port ${MOCK_SERVER_PORT} is already in use, assuming mock server is running`);
-        return Promise.resolve();
-    }
-
-    return new Promise((resolve, reject) => {
-        // In production, mock_server.js is unpacked from asar
-        const mockServerPath = app.isPackaged 
-            ? path.join(__dirname, '..', 'app.asar.unpacked', 'mock_server.js')
-            : path.join(__dirname, 'mock_server.js');
-        
-        console.log(`Starting mock Grafana server: ${mockServerPath}`);
-        
-        // Use the Node.js runtime that comes with Electron
-        const nodePath = process.platform === 'darwin' 
-            ? path.join(path.dirname(process.execPath), '..', 'Frameworks', 'Electron Framework.framework', 'Versions', 'A', 'Resources', 'node')
-            : 'node';
-        
-        mockServerProcess = spawn(nodePath, [mockServerPath], {
-            stdio: 'pipe',
-            env: { ...process.env, PORT: MOCK_SERVER_PORT }
-        });
-
-        mockServerProcess.stdout.on('data', (data) => {
-            console.log('Mock Server:', data.toString());
-            if (data.toString().includes('Mock Grafana Server')) {
-                resolve();
-            }
-        });
-
-        mockServerProcess.stderr.on('data', (data) => {
-            const errorStr = data.toString();
-            console.error('Mock Server Error:', errorStr);
-            
-            // If port is already in use, resolve anyway
-            if (errorStr.includes('EADDRINUSE')) {
-                console.log('Mock server already running, continuing...');
-                resolve();
-            }
-        });
-
-        mockServerProcess.on('error', (error) => {
-            console.error('Failed to start mock server:', error);
-            console.log('Mock server start failed, but continuing anyway...');
-            resolve();
-        });
-
-        // Timeout after 5 seconds
-        setTimeout(() => {
-            console.log('Mock server startup timeout, assuming server is ready...');
-            resolve();
-        }, 5000);
-    });
-}
 
 // Create the main application window
 function createMainWindow() {
@@ -189,14 +60,8 @@ function createMainWindow() {
     });
 
     // Load the application
-    const baseUrl = `http://localhost:${SERVER_PORT}`;
-    const url = isDemoMode ? `${baseUrl}?demo=true` : baseUrl;
-    mainWindow.loadURL(url);
-    
-    // Log demo mode status
-    if (isDemoMode) {
-        console.log('🎭 Starting in demo mode with mock data');
-    }
+    const appPath = path.join(__dirname, 'public', 'index.html');
+    mainWindow.loadFile(appPath);
 
     // Show window when ready
     mainWindow.once('ready-to-show', () => {
@@ -222,8 +87,8 @@ function createMainWindow() {
 
     // Prevent navigation to external sites
     mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
-        const parsedUrl = new URL(navigationUrl);
-        if (parsedUrl.origin !== `http://localhost:${SERVER_PORT}`) {
+        // Only allow file:// protocol navigation within the app
+        if (!navigationUrl.startsWith('file://')) {
             event.preventDefault();
         }
     });
@@ -388,40 +253,6 @@ function createMenu() {
             ]
         },
         {
-            label: 'Demo',
-            submenu: [
-                {
-                    label: 'Toggle Demo Mode',
-                    accelerator: 'CmdOrCtrl+Shift+D',
-                    click: () => {
-                        if (mainWindow) {
-                            mainWindow.webContents.executeJavaScript(`
-                                if (typeof Demo !== 'undefined') {
-                                    if (Demo.enabled) {
-                                        Demo.disable();
-                                    } else {
-                                        Demo.enable();
-                                    }
-                                }
-                            `);
-                        }
-                    }
-                },
-                { type: 'separator' },
-                {
-                    label: 'About Demo Mode',
-                    click: () => {
-                        dialog.showMessageBox(mainWindow, {
-                            type: 'info',
-                            title: 'Demo Mode',
-                            message: 'Demo Mode Information',
-                            detail: 'Demo mode provides mock data for:\n\n• Sample connections and data sources\n• Pre-built query examples\n• Mock schema data (metrics, measurements, fields, tags)\n• Sample dashboard queries\n• Query history and variables\n• File explorer with sample files\n\nPerfect for testing features or recording demos without exposing real data!'
-                        });
-                    }
-                }
-            ]
-        },
-        {
             label: 'Help',
             submenu: [
                 {
@@ -468,30 +299,15 @@ function createMenu() {
 }
 
 // App event handlers
-app.whenReady().then(async () => {
-    try {
-        // Check if server was already started by electron-start.js
-        if (process.env.ELECTRON_SERVER_STARTED === 'true') {
-            console.log('Server already started by electron-start.js, skipping server startup...');
-        } else {
-            console.log('Starting Express server...');
-            await startServer();
-            console.log('Server started, creating main window...');
+app.whenReady().then(() => {
+    createMainWindow();
+    createMenu();
+    
+    app.on('activate', () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createMainWindow();
         }
-        
-        createMainWindow();
-        createMenu();
-        
-        app.on('activate', () => {
-            if (BrowserWindow.getAllWindows().length === 0) {
-                createMainWindow();
-            }
-        });
-    } catch (error) {
-        console.error('Failed to start application:', error);
-        dialog.showErrorBox('Startup Error', 'Failed to start the application server.');
-        app.quit();
-    }
+    });
 });
 
 app.on('window-all-closed', () => {
@@ -500,14 +316,6 @@ app.on('window-all-closed', () => {
     }
 });
 
-app.on('before-quit', () => {
-    if (serverProcess) {
-        serverProcess.kill();
-    }
-    if (mockServerProcess) {
-        mockServerProcess.kill();
-    }
-});
 
 // Security: Prevent new window creation
 app.on('web-contents-created', (event, contents) => {
@@ -619,5 +427,250 @@ ipcMain.handle('read-file-content', async (event, filePath) => {
         return content;
     } catch (error) {
         throw new Error(`Failed to read file: ${error.message}`);
+    }
+});
+
+// Grafana API proxy handler using Electron's net module
+ipcMain.handle('grafana-api-request', async (event, options) => {
+    const { net } = require('electron');
+    const { URL } = require('url');
+    
+    try {
+        const { grafanaUrl, path, method, headers, body, timeout = 30000, proxyConfig } = options;
+        
+        if (!grafanaUrl) {
+            throw new Error('Missing Grafana URL');
+        }
+        
+        // Construct full URL
+        const fullUrl = `${grafanaUrl}${path}`;
+        console.log(`Proxying ${method} request to: ${fullUrl}`);
+        
+        // Check if we need to use SOCKS proxy
+        if (proxyConfig && proxyConfig.host) {
+            // Use traditional https/http module with SOCKS proxy
+            const { SocksProxyAgent } = require('socks-proxy-agent');
+            const https = require('https');
+            const http = require('http');
+            
+            console.log('Using SOCKS5 proxy:', proxyConfig.host + ':' + proxyConfig.port);
+            
+            // Build proxy URL
+            let proxyUrl = 'socks5://';
+            if (proxyConfig.username && proxyConfig.password) {
+                proxyUrl += `${encodeURIComponent(proxyConfig.username)}:${encodeURIComponent(proxyConfig.password)}@`;
+            }
+            proxyUrl += `${proxyConfig.host}:${proxyConfig.port}`;
+            
+            // Create SOCKS proxy agent
+            const socksAgent = new SocksProxyAgent(proxyUrl);
+            
+            // Parse URL to determine protocol
+            const parsedUrl = new URL(fullUrl);
+            const isHttps = parsedUrl.protocol === 'https:';
+            const requestModule = isHttps ? https : http;
+            
+            // Create request options
+            const requestOptions = {
+                method: method || 'GET',
+                headers: headers || {},
+                agent: socksAgent,
+                rejectUnauthorized: false, // Allow self-signed certificates
+                timeout: timeout
+            };
+            
+            return new Promise((resolve, reject) => {
+                const req = requestModule.request(fullUrl, requestOptions, (res) => {
+                    let responseData = '';
+                    
+                    res.on('data', (chunk) => {
+                        responseData += chunk.toString();
+                    });
+                    
+                    res.on('end', () => {
+                        // Try to parse JSON response
+                        let parsedData = responseData;
+                        try {
+                            if (responseData && res.headers['content-type']?.includes('application/json')) {
+                                parsedData = JSON.parse(responseData);
+                            }
+                        } catch (e) {
+                            // Keep as string if not valid JSON
+                        }
+                        
+                        resolve({
+                            status: res.statusCode,
+                            statusText: res.statusMessage || '',
+                            headers: res.headers,
+                            data: parsedData
+                        });
+                    });
+                });
+                
+                req.on('error', (error) => {
+                    console.error('SOCKS proxy request error:', error);
+                    
+                    // Map common errors to HTTP-like status codes
+                    let status = 500;
+                    let message = error.message;
+                    
+                    if (error.message.includes('ECONNREFUSED')) {
+                        status = 502;
+                        message = 'Connection refused. Check if the URL is correct and the server is running.';
+                    } else if (error.message.includes('ENOTFOUND')) {
+                        status = 502;
+                        message = 'Host not found. Check if the URL is correct.';
+                    } else if (error.message.includes('ETIMEDOUT')) {
+                        status = 504;
+                        message = 'Request timeout';
+                    } else if (error.message.includes('SOCKS')) {
+                        status = 502;
+                        message = 'SOCKS proxy error: ' + error.message;
+                    }
+                    
+                    reject({
+                        status,
+                        statusText: message,
+                        error: message,
+                        originalError: error.message
+                    });
+                });
+                
+                req.on('timeout', () => {
+                    req.destroy();
+                    reject({
+                        status: 504,
+                        statusText: 'Request timeout',
+                        error: 'Request was aborted due to timeout'
+                    });
+                });
+                
+                // Write body if present
+                if (body) {
+                    if (typeof body === 'object') {
+                        req.write(JSON.stringify(body));
+                    } else {
+                        req.write(body);
+                    }
+                }
+                
+                req.end();
+            });
+        }
+        
+        // Use Electron's net module for non-proxy requests
+        // Create request options
+        const requestOptions = {
+            method: method || 'GET',
+            url: fullUrl,
+            // Electron's net module doesn't validate certificates by default
+            // which is perfect for self-signed certs
+        };
+        
+        // Create the request
+        const request = net.request(requestOptions);
+        
+        // Set headers
+        if (headers) {
+            Object.entries(headers).forEach(([key, value]) => {
+                if (value !== undefined && value !== null) {
+                    request.setHeader(key, value);
+                }
+            });
+        }
+        
+        // Set timeout
+        const timeoutId = setTimeout(() => {
+            request.abort();
+        }, timeout);
+        
+        return new Promise((resolve, reject) => {
+            let responseData = '';
+            let responseHeaders = {};
+            let statusCode = 0;
+            
+            request.on('response', (response) => {
+                statusCode = response.statusCode;
+                responseHeaders = response.headers;
+                
+                response.on('data', (chunk) => {
+                    responseData += chunk.toString();
+                });
+                
+                response.on('end', () => {
+                    clearTimeout(timeoutId);
+                    
+                    // Try to parse JSON response
+                    let parsedData = responseData;
+                    try {
+                        if (responseData && response.headers['content-type']?.includes('application/json')) {
+                            parsedData = JSON.parse(responseData);
+                        }
+                    } catch (e) {
+                        // Keep as string if not valid JSON
+                    }
+                    
+                    resolve({
+                        status: statusCode,
+                        statusText: response.statusMessage || '',
+                        headers: responseHeaders,
+                        data: parsedData
+                    });
+                });
+            });
+            
+            request.on('error', (error) => {
+                clearTimeout(timeoutId);
+                console.error('Request error:', error);
+                
+                // Map common errors to HTTP-like status codes
+                let status = 500;
+                let message = error.message;
+                
+                if (error.message.includes('ECONNREFUSED')) {
+                    status = 502;
+                    message = 'Connection refused. Check if the URL is correct and the server is running.';
+                } else if (error.message.includes('ENOTFOUND')) {
+                    status = 502;
+                    message = 'Host not found. Check if the URL is correct.';
+                } else if (error.message.includes('ETIMEDOUT')) {
+                    status = 504;
+                    message = 'Request timeout';
+                } else if (error.message.includes('abort')) {
+                    status = 504;
+                    message = 'Request timeout';
+                }
+                
+                reject({
+                    status,
+                    statusText: message,
+                    error: message,
+                    originalError: error.message
+                });
+            });
+            
+            request.on('abort', () => {
+                clearTimeout(timeoutId);
+                reject({
+                    status: 504,
+                    statusText: 'Request timeout',
+                    error: 'Request was aborted due to timeout'
+                });
+            });
+            
+            // Write body if present
+            if (body) {
+                if (typeof body === 'object') {
+                    request.write(JSON.stringify(body));
+                } else {
+                    request.write(body);
+                }
+            }
+            
+            request.end();
+        });
+    } catch (error) {
+        console.error('Grafana API request error:', error);
+        throw error;
     }
 });

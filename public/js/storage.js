@@ -16,13 +16,7 @@ const Storage = {
         SAVED_AI_ANALYSES: { key: 'savedAiAnalyses', ttl: 7 * 24 * 60 * 60 * 1000 }, // 7 days
         
         // UI state and preferences
-        DEMO_MODE: { key: 'demoMode', ttl: null },
-        DEMO_TABS: { key: 'demoTabs', ttl: null },
-        DEMO_MOCK_FILES: { key: 'demoMockFiles', ttl: null },
-        FILE_EXPLORER_LAST_DIR: { key: 'fileExplorerLastDirectory', ttl: null },
-        
-        // Demo backup keys
-        DEMO_BACKUP_PREFIX: 'real_'
+        FILE_EXPLORER_LAST_DIR: { key: 'fileExplorerLastDirectory', ttl: null }
     },
 
     // Unified cache operations with validation and expiration
@@ -171,40 +165,6 @@ const Storage = {
     },
 
     // Demo mode backup/restore with centralized access
-    backupForDemo(cacheKey) {
-        const keyConfig = this.CACHE_KEYS[cacheKey];
-        if (!keyConfig) return false;
-
-        try {
-            const data = localStorage.getItem(keyConfig.key);
-            if (data) {
-                const backupKey = this.CACHE_KEYS.DEMO_BACKUP_PREFIX + keyConfig.key;
-                localStorage.setItem(backupKey, data);
-                return true;
-            }
-        } catch (error) {
-            console.error(`Error backing up ${cacheKey} for demo:`, error);
-        }
-        return false;
-    },
-
-    restoreFromDemo(cacheKey) {
-        const keyConfig = this.CACHE_KEYS[cacheKey];
-        if (!keyConfig) return false;
-
-        try {
-            const backupKey = this.CACHE_KEYS.DEMO_BACKUP_PREFIX + keyConfig.key;
-            const backupData = localStorage.getItem(backupKey);
-            if (backupData) {
-                localStorage.setItem(keyConfig.key, backupData);
-                localStorage.removeItem(backupKey);
-                return true;
-            }
-        } catch (error) {
-            console.error(`Error restoring ${cacheKey} from demo:`, error);
-        }
-        return false;
-    },
 
     // Debug and diagnostics
     inspect() {
@@ -756,33 +716,6 @@ const Storage = {
 
     setSavedAiAnalyses(analyses) {
         return this.set('SAVED_AI_ANALYSES', analyses);
-    },
-
-    // Demo Mode State
-    getDemoMode() {
-        return this.get('DEMO_MODE', false);
-    },
-
-    setDemoMode(enabled) {
-        return this.set('DEMO_MODE', enabled);
-    },
-
-    // Demo Tabs
-    getDemoTabs() {
-        return this.get('DEMO_TABS', {});
-    },
-
-    setDemoTabs(tabs) {
-        return this.set('DEMO_TABS', tabs);
-    },
-
-    // Demo Mock Files
-    getDemoMockFiles() {
-        return this.get('DEMO_MOCK_FILES', {});
-    },
-
-    setDemoMockFiles(files) {
-        return this.set('DEMO_MOCK_FILES', files);
     },
 
     // File Explorer Last Directory

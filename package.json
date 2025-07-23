@@ -1,17 +1,14 @@
 {
     "name": "time-buddy",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "description": "Your time series metric friend - Desktop IDE for executing InfluxQL and PromQL queries via Grafana API",
     "main": "main.js",
     "homepage": "./",
     "scripts": {
-        "start": "node server.js",
-        "dev": "node server.js",
+        "start": "electron .",
+        "dev": "electron .",
         "electron": "electron .",
         "electron-dev": "node electron-start.js",
-        "electron-dev-alt": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
-        "demo": "electron . --demo",
-        "demo-dev": "NODE_ENV=development electron . --demo",
         "build": "electron-builder",
         "build-mac": "electron-builder --mac",
         "build-win": "electron-builder --win",
@@ -33,19 +30,11 @@
     "author": "richard@liquescent.dev",
     "license": "AGPL-3.0-only",
     "dependencies": {
-        "axios": "^1.6.2",
-        "compression": "^1.7.4",
-        "cors": "^2.8.5",
-        "express": "^4.18.2",
-        "helmet": "^7.1.0",
-        "morgan": "^1.10.0",
         "socks-proxy-agent": "^8.0.5"
     },
     "devDependencies": {
-        "concurrently": "^8.2.2",
         "electron": "^28.0.0",
-        "electron-builder": "^24.9.1",
-        "wait-on": "^7.2.0"
+        "electron-builder": "^24.9.1"
     },
     "engines": {
         "node": ">=14.0.0"
@@ -67,17 +56,12 @@
         "files": [
             "main.js",
             "preload.js",
-            "server.js",
-            "mock_server.js",
             "public/**/*",
             "package.json",
             "node_modules/**/*"
         ],
         "asarUnpack": [
-            "server.js",
-            "mock_server.js",
-            "public/**/*",
-            "node_modules/**/*"
+            "public/**/*"
         ],
         "mac": {
             "category": "public.app-category.developer-tools",
