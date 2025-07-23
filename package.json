@@ -9,8 +9,6 @@
         "dev": "electron .",
         "electron": "electron .",
         "electron-dev": "node electron-start.js",
-        "demo": "electron . --demo",
-        "demo-dev": "NODE_ENV=development electron . --demo",
         "build": "electron-builder",
         "build-mac": "electron-builder --mac",
         "build-win": "electron-builder --win",

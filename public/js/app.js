@@ -22,11 +22,6 @@ const App = {
         Variables.initialize();
         Dashboard.initialize();
         
-        // Initialize demo mode only if explicitly requested via URL parameter
-        if (typeof Demo !== 'undefined' && window.location.search.includes('demo=true')) {
-            Demo.initialize();
-        }
-        
         // Initialize connection and API systems
         Connections.ensureDisconnectedState();
         API.checkIfRunningInContainer();

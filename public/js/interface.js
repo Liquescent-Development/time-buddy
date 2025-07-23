@@ -143,13 +143,6 @@ const Interface = {
     createInitialTab() {
         console.log('Creating initial tab...');
         
-        // Check if we're in demo mode and have demo tabs to load
-        const demoTabs = Storage.getDemoTabs();
-        if (Object.keys(demoTabs).length > 0 && (window.location.search.includes('demo=true') || Storage.getDemoMode())) {
-            console.log('🎭 Loading demo tabs...');
-            this.loadDemoTabs(demoTabs);
-            return;
-        }
         
         // Create the initial tab content if it doesn't exist
         const existingContainer = document.querySelector(`[data-tab-id="untitled-1"].editor-container`);
@@ -160,98 +153,6 @@ const Interface = {
         }
         console.log('Switching to untitled-1 tab');
         this.switchTab('untitled-1');
-    },
-
-    loadDemoTabs(demoTabs) {
-        console.log('🎭 Loading demo tabs from localStorage...', demoTabs);
-        
-        // Clear any existing tabs first
-        this.tabs.clear();
-        document.querySelectorAll('.tab').forEach(tab => tab.remove());
-        document.querySelectorAll('.editor-container').forEach(container => container.remove());
-        
-        let firstTabId = null;
-        
-        // Create each demo tab
-        demoTabs.forEach((tabData, index) => {
-            const tabId = tabData.id;
-            if (index === 0) firstTabId = tabId;
-            
-            // Auto-select appropriate datasource based on query type
-            let selectedDatasourceId = null;
-            if (tabData.queryType === 'promql') {
-                // Find a Prometheus datasource
-                selectedDatasourceId = 'prometheus-prod'; // Default to first prometheus in demo data
-            } else if (tabData.queryType === 'influxql') {
-                // Find an InfluxDB datasource
-                selectedDatasourceId = 'influxdb-staging'; // Default to first influxdb in demo data
-            }
-            
-            // Store tab data
-            this.tabs.set(tabId, {
-                id: tabId,
-                label: tabData.label,
-                content: tabData.content,
-                queryType: tabData.queryType,
-                saved: tabData.saved,
-                filePath: tabData.filePath,
-                datasourceId: selectedDatasourceId,
-                editor: null
-            });
-            
-            // Create tab UI
-            this.createTabElement(tabId, tabData.label);
-            this.createTabContent(tabId);
-            
-            console.log(`🎭 Created demo tab: ${tabData.label} (${tabData.queryType})`);
-        });
-        
-        // Switch to first tab
-        if (firstTabId) {
-            this.activeTab = firstTabId;
-            this.switchTab(firstTabId);
-            
-            // Set content and datasource selection after a short delay to ensure editors are ready
-            setTimeout(() => {
-                demoTabs.forEach(tabData => {
-                    const tabInfo = this.tabs.get(tabData.id);
-                    if (tabInfo && tabInfo.editor) {
-                        tabInfo.editor.setValue(tabData.content);
-                        const mode = tabData.queryType === 'promql' ? 'promql' : 'influxql';
-                        tabInfo.editor.setOption('mode', mode);
-                        
-                        // Set the datasource selection in the UI
-                        if (tabInfo.datasourceId) {
-                            this.setTabDatasource(tabData.id, tabInfo.datasourceId);
-                        }
-                        
-                        // Set the query type buttons
-                        this.setQueryType(tabData.id, tabData.queryType);
-                        
-                        console.log(`🎭 Set content and datasource for tab: ${tabData.label} (${tabData.queryType} -> ${tabInfo.datasourceId})`);
-                    }
-                });
-                
-                // Update all tab datasource selects to show available datasources
-                // Use a longer delay and retry mechanism to ensure datasources are loaded
-                setTimeout(() => {
-                    this.populateAllTabDatasourceSelects();
-                    
-                    // Apply the pre-selected datasources after population
-                    setTimeout(() => {
-                        demoTabs.forEach(tabData => {
-                            const tabInfo = this.tabs.get(tabData.id);
-                            if (tabInfo && tabInfo.datasourceId) {
-                                this.setTabDatasource(tabData.id, tabInfo.datasourceId);
-                                console.log(`🎭 Re-applied datasource selection: ${tabData.label} -> ${tabInfo.datasourceId}`);
-                            }
-                        });
-                    }, 300);
-                }, 800);
-            }, 500);
-        }
-        
-        console.log('🎭 Demo tabs loaded successfully');
     },
 
     createNewTab() {

@@ -828,12 +828,6 @@ const Schema = {
             return null;
         }
         
-        // Check if we're in demo mode - if so, use direct proxy endpoints for InfluxDB schema queries
-        const isDemoMode = window.location.search.includes('demo=true') || Storage.getDemoMode();
-        if (isDemoMode && datasourceType === 'influxdb') {
-            return this.executeInfluxSchemaQuery(query, datasourceNumericId);
-        }
-        
         let requestBody;
         let urlParams = '';
         

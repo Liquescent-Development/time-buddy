@@ -24,8 +24,6 @@ console.log('App name:', app.getName());
 // Keep a global reference of the window object
 let mainWindow;
 
-// Check for demo mode command line argument
-const isDemoMode = process.argv.includes('--demo') || process.argv.includes('-d');
 
 // Enable live reload for development (optional)
 if (process.env.NODE_ENV === 'development') {
@@ -63,13 +61,7 @@ function createMainWindow() {
 
     // Load the application
     const appPath = path.join(__dirname, 'public', 'index.html');
-    const url = isDemoMode ? `file://${appPath}?demo=true` : `file://${appPath}`;
-    mainWindow.loadFile(appPath, isDemoMode ? { query: { demo: 'true' } } : {});
-    
-    // Log demo mode status
-    if (isDemoMode) {
-        console.log('🎭 Starting in demo mode with mock data');
-    }
+    mainWindow.loadFile(appPath);
 
     // Show window when ready
     mainWindow.once('ready-to-show', () => {
@@ -258,40 +250,6 @@ function createMenu() {
                 ] : [
                     { role: 'close' }
                 ])
-            ]
-        },
-        {
-            label: 'Demo',
-            submenu: [
-                {
-                    label: 'Toggle Demo Mode',
-                    accelerator: 'CmdOrCtrl+Shift+D',
-                    click: () => {
-                        if (mainWindow) {
-                            mainWindow.webContents.executeJavaScript(`
-                                if (typeof Demo !== 'undefined') {
-                                    if (Demo.enabled) {
-                                        Demo.disable();
-                                    } else {
-                                        Demo.enable();
-                                    }
-                                }
-                            `);
-                        }
-                    }
-                },
-                { type: 'separator' },
-                {
-                    label: 'About Demo Mode',
-                    click: () => {
-                        dialog.showMessageBox(mainWindow, {
-                            type: 'info',
-                            title: 'Demo Mode',
-                            message: 'Demo Mode Information',
-                            detail: 'Demo mode provides mock data for:\n\n• Sample connections and data sources\n• Pre-built query examples\n• Mock schema data (metrics, measurements, fields, tags)\n• Sample dashboard queries\n• Query history and variables\n• File explorer with sample files\n\nPerfect for testing features or recording demos without exposing real data!'
-                        });
-                    }
-                }
             ]
         },
         {
