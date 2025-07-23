@@ -8,10 +8,11 @@ const compression = require('compression');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const { SocksProxyAgent } = require('socks-proxy-agent');
+const { findAvailablePorts } = require('./utils/port-finder');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-const MOCK_SERVER_PORT = 3001;
+let PORT = process.env.PORT ? parseInt(process.env.PORT) : null;
+let MOCK_SERVER_PORT = null;
 
 // Check if we should use mock server
 async function shouldUseMockServer(req) {
@@ -471,16 +472,47 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start the server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`
+// Start the server with dynamic port allocation
+async function startServer() {
+  try {
+    // Find available ports if not explicitly set
+    if (!PORT) {
+      const ports = await findAvailablePorts(2, 3000); // Find 2 ports starting from 3000
+      PORT = ports[0];
+      MOCK_SERVER_PORT = ports[1];
+    } else {
+      // If PORT is set, just find one port for mock server
+      const mockPorts = await findAvailablePorts(1, PORT + 1);
+      MOCK_SERVER_PORT = mockPorts[0];
+    }
+
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`
 ╔════════════════════════════════════════════════════╗
 ║            Time Buddy Server                       ║
 ╠════════════════════════════════════════════════════╣
 ║  Server running on: http://localhost:${PORT}          ║
+║  Mock server port: ${MOCK_SERVER_PORT}                     ║
 ║  Health check: http://localhost:${PORT}/health       ║
 ║                                                    ║
 ║  Open http://localhost:${PORT} in your browser       ║
 ╚════════════════════════════════════════════════════╝
-  `);
-});
+      `);
+      
+      // Write port info to a file for Electron to read
+      const fs = require('fs');
+      const portInfo = {
+        serverPort: PORT,
+        mockServerPort: MOCK_SERVER_PORT,
+        timestamp: Date.now()
+      };
+      fs.writeFileSync('.port-info.json', JSON.stringify(portInfo, null, 2));
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+// Start the server
+startServer();

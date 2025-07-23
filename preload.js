@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readDirectory: (dirPath) => ipcRenderer.invoke('read-directory', dirPath),
     readFileContent: (filePath) => ipcRenderer.invoke('read-file-content', filePath),
     
+    // Grafana API requests
+    grafanaRequest: (options) => ipcRenderer.invoke('grafana-api-request', options),
+    
     // Menu event listeners
     onMenuAction: (callback) => {
         // Menu shortcuts
