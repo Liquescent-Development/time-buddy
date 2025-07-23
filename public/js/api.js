@@ -15,7 +15,8 @@ const API = {
                         ...options.headers
                     },
                     body: options.body,
-                    timeout: 30000
+                    timeout: 30000,
+                    proxyConfig: GrafanaConfig.proxyConfig // Include proxy configuration if available
                 };
                 
                 const response = await window.electronAPI.grafanaRequest(requestOptions);
@@ -109,7 +110,8 @@ const API = {
                         ...options.headers
                     },
                     body: options.body,
-                    timeout: 30000
+                    timeout: 30000,
+                    proxyConfig: config.proxyConfig // Include proxy configuration if available
                 };
                 
                 const response = await window.electronAPI.grafanaRequest(requestOptions);

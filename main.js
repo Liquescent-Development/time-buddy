@@ -436,7 +436,7 @@ ipcMain.handle('grafana-api-request', async (event, options) => {
     const { URL } = require('url');
     
     try {
-        const { grafanaUrl, path, method, headers, body, timeout = 30000 } = options;
+        const { grafanaUrl, path, method, headers, body, timeout = 30000, proxyConfig } = options;
         
         if (!grafanaUrl) {
             throw new Error('Missing Grafana URL');
@@ -446,6 +446,119 @@ ipcMain.handle('grafana-api-request', async (event, options) => {
         const fullUrl = `${grafanaUrl}${path}`;
         console.log(`Proxying ${method} request to: ${fullUrl}`);
         
+        // Check if we need to use SOCKS proxy
+        if (proxyConfig && proxyConfig.host) {
+            // Use traditional https/http module with SOCKS proxy
+            const { SocksProxyAgent } = require('socks-proxy-agent');
+            const https = require('https');
+            const http = require('http');
+            
+            console.log('Using SOCKS5 proxy:', proxyConfig.host + ':' + proxyConfig.port);
+            
+            // Build proxy URL
+            let proxyUrl = 'socks5://';
+            if (proxyConfig.username && proxyConfig.password) {
+                proxyUrl += `${encodeURIComponent(proxyConfig.username)}:${encodeURIComponent(proxyConfig.password)}@`;
+            }
+            proxyUrl += `${proxyConfig.host}:${proxyConfig.port}`;
+            
+            // Create SOCKS proxy agent
+            const socksAgent = new SocksProxyAgent(proxyUrl);
+            
+            // Parse URL to determine protocol
+            const parsedUrl = new URL(fullUrl);
+            const isHttps = parsedUrl.protocol === 'https:';
+            const requestModule = isHttps ? https : http;
+            
+            // Create request options
+            const requestOptions = {
+                method: method || 'GET',
+                headers: headers || {},
+                agent: socksAgent,
+                rejectUnauthorized: false, // Allow self-signed certificates
+                timeout: timeout
+            };
+            
+            return new Promise((resolve, reject) => {
+                const req = requestModule.request(fullUrl, requestOptions, (res) => {
+                    let responseData = '';
+                    
+                    res.on('data', (chunk) => {
+                        responseData += chunk.toString();
+                    });
+                    
+                    res.on('end', () => {
+                        // Try to parse JSON response
+                        let parsedData = responseData;
+                        try {
+                            if (responseData && res.headers['content-type']?.includes('application/json')) {
+                                parsedData = JSON.parse(responseData);
+                            }
+                        } catch (e) {
+                            // Keep as string if not valid JSON
+                        }
+                        
+                        resolve({
+                            status: res.statusCode,
+                            statusText: res.statusMessage || '',
+                            headers: res.headers,
+                            data: parsedData
+                        });
+                    });
+                });
+                
+                req.on('error', (error) => {
+                    console.error('SOCKS proxy request error:', error);
+                    
+                    // Map common errors to HTTP-like status codes
+                    let status = 500;
+                    let message = error.message;
+                    
+                    if (error.message.includes('ECONNREFUSED')) {
+                        status = 502;
+                        message = 'Connection refused. Check if the URL is correct and the server is running.';
+                    } else if (error.message.includes('ENOTFOUND')) {
+                        status = 502;
+                        message = 'Host not found. Check if the URL is correct.';
+                    } else if (error.message.includes('ETIMEDOUT')) {
+                        status = 504;
+                        message = 'Request timeout';
+                    } else if (error.message.includes('SOCKS')) {
+                        status = 502;
+                        message = 'SOCKS proxy error: ' + error.message;
+                    }
+                    
+                    reject({
+                        status,
+                        statusText: message,
+                        error: message,
+                        originalError: error.message
+                    });
+                });
+                
+                req.on('timeout', () => {
+                    req.destroy();
+                    reject({
+                        status: 504,
+                        statusText: 'Request timeout',
+                        error: 'Request was aborted due to timeout'
+                    });
+                });
+                
+                // Write body if present
+                if (body) {
+                    if (typeof body === 'object') {
+                        req.write(JSON.stringify(body));
+                    } else {
+                        req.write(body);
+                    }
+                }
+                
+                req.end();
+            });
+        }
+        
+        // Use Electron's net module for non-proxy requests
         // Create request options
         const requestOptions = {
             method: method || 'GET',

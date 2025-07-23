@@ -30,6 +30,7 @@
     "author": "richard@liquescent.dev",
     "license": "AGPL-3.0-only",
     "dependencies": {
+        "socks-proxy-agent": "^8.0.5"
     },
     "devDependencies": {
         "electron": "^28.0.0",
