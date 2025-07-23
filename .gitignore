@@ -142,3 +142,6 @@ dist
 .claude
 CLAUDE.md
 influxql_spec.md
+
+# Dynamic port info (no longer used)
+.port-info.json
