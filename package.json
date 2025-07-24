@@ -65,7 +65,6 @@
         ],
         "mac": {
             "category": "public.app-category.developer-tools",
-            "identity": null,
             "hardenedRuntime": true,
             "gatekeeperAssess": false,
             "entitlements": "build/entitlements.mac.plist",
