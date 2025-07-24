@@ -1,6 +1,6 @@
 {
     "name": "time-buddy",
-    "version": "0.3.5",
+    "version": "0.3.6",
     "description": "Your time series metric friend - Desktop IDE for executing InfluxQL and PromQL queries via Grafana API",
     "main": "main.js",
     "homepage": "./",
@@ -33,6 +33,7 @@
         "socks-proxy-agent": "^8.0.5"
     },
     "devDependencies": {
+        "@electron/notarize": "^2.2.1",
         "electron": "^28.0.0",
         "electron-builder": "^24.9.1"
     },
@@ -69,7 +70,7 @@
             "gatekeeperAssess": false,
             "entitlements": "build/entitlements.mac.plist",
             "entitlementsInherit": "build/entitlements.mac.plist",
-            "notarize": true,
+            "notarize": false,
             "target": [
                 {
                     "target": "dmg",
@@ -81,6 +82,7 @@
             ],
             "icon": "assets/logo.png"
         },
+        "afterSign": "./scripts/notarize.js",
         "win": {
             "target": [
                 {
