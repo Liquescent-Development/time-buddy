@@ -1,6 +1,6 @@
 {
     "name": "time-buddy",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "description": "Your time series metric friend - Desktop IDE for executing InfluxQL and PromQL queries via Grafana API",
     "main": "main.js",
     "homepage": "./",
@@ -65,6 +65,11 @@
         ],
         "mac": {
             "category": "public.app-category.developer-tools",
+            "identity": null,
+            "hardenedRuntime": true,
+            "gatekeeperAssess": false,
+            "entitlements": "build/entitlements.mac.plist",
+            "entitlementsInherit": "build/entitlements.mac.plist",
             "target": [
                 {
                     "target": "dmg",
