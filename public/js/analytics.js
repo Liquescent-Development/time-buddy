@@ -892,7 +892,7 @@ const Analytics = {
         }
     },
 
-    // Load fields for selected measurement
+    // Load fields for selected measurement using centralized Schema
     async loadFieldsForMeasurement(measurement) {
         const fieldSelect = document.getElementById('analyticsField');
         if (!fieldSelect || !measurement) {
@@ -900,109 +900,76 @@ const Analytics = {
             return;
         }
 
-        console.log('📋 Loading fields for measurement:', measurement);
+        console.log('📋 Loading fields for measurement using centralized Schema:', measurement);
 
         try {
-            if (typeof Schema !== 'undefined') {
-                let fields = [];
+            if (typeof Schema === 'undefined') {
+                console.error('Schema module not available');
+                fieldSelect.innerHTML = '<option value="">Schema unavailable</option>';
+                return;
+            }
+
+            fieldSelect.innerHTML = '<option value="">Loading fields...</option>';
+            
+            let fields = [];
+            
+            if (GrafanaConfig.selectedDatasourceType === 'influxdb') {
+                // Use centralized Schema method to get fields with retry logic
+                const retentionPolicy = this.config.retentionPolicy || 'autogen';
+                fields = await Schema.getFieldsForMeasurement(measurement, retentionPolicy);
+                console.log('📊 Got fields from centralized Schema for', measurement, ':', fields);
+            } else if (GrafanaConfig.selectedDatasourceType === 'prometheus') {
+                // For Prometheus, metrics don't have traditional "fields" - they have labels
+                // For analytics purposes, we'll treat the metric itself as the "field"
+                fields = [measurement]; // The metric name itself is the "field"
+                console.log('📊 Using Prometheus metric as field:', measurement);
+            }
+            
+            fieldSelect.innerHTML = '<option value="">Select field...</option>';
+            
+            // Add fields with data availability checking
+            if (fields.length > 0) {
+                // Check if we can validate data availability for fields
+                const fieldsWithData = await this.checkFieldsForData(measurement, fields);
                 
-                if (GrafanaConfig.selectedDatasourceType === 'influxdb') {
-                    // For InfluxDB, get fields from the Schema.influxFields
-                    fields = Schema.influxFields[measurement] || [];
-                    console.log('📊 Found InfluxDB fields for', measurement, ':', fields);
-                } else if (GrafanaConfig.selectedDatasourceType === 'prometheus') {
-                    // For Prometheus, metrics don't have traditional "fields" - they have labels
-                    // For analytics purposes, we'll treat the metric itself as the "field"
-                    fields = [measurement]; // The metric name itself is the "field"
-                    console.log('📊 Using Prometheus metric as field:', measurement);
-                }
-                
-                fieldSelect.innerHTML = '<option value="">Select field...</option>';
-                
-                // Add fields with data availability checking
-                if (fields.length > 0) {
-                    // Check if we can validate data availability for fields
-                    const fieldsWithData = await this.checkFieldsForData(measurement, fields);
+                fields.forEach(field => {
+                    const option = document.createElement('option');
+                    option.value = field;
                     
-                    fields.forEach(field => {
-                        const option = document.createElement('option');
-                        option.value = field;
-                        
-                        // Indicate if field has recent data
-                        const hasData = fieldsWithData.includes(field);
-                        option.textContent = hasData ? `${field} ✓` : field;
-                        if (!hasData) {
-                            option.style.color = '#888888';
-                            option.title = 'No recent data found for this field';
-                        }
-                        
-                        if (field === this.config.field) {
-                            option.selected = true;
-                        }
-                        fieldSelect.appendChild(option);
-                    });
-                    
-                    // Add helper text
-                    if (fieldsWithData.length > 0) {
-                        const helperOption = document.createElement('option');
-                        helperOption.disabled = true;
-                        helperOption.textContent = `─── ${fieldsWithData.length} fields with recent data ✓ ───`;
-                        helperOption.style.fontStyle = 'italic';
-                        fieldSelect.insertBefore(helperOption, fieldSelect.children[1]);
+                    // Indicate if field has recent data
+                    const hasData = fieldsWithData.includes(field);
+                    option.textContent = hasData ? `${field} ✓` : field;
+                    if (!hasData) {
+                        option.style.color = '#888888';
+                        option.title = 'No recent data found for this field';
                     }
-                }
+                    
+                    if (field === this.config.field) {
+                        option.selected = true;
+                    }
+                    fieldSelect.appendChild(option);
+                });
                 
-                if (fields.length === 0) {
-                    // Check retry count to prevent infinite loop
-                    if (!this._fieldLoadRetries) {
-                        this._fieldLoadRetries = {};
-                    }
-                    const retryCount = this._fieldLoadRetries[measurement] || 0;
-                    const maxRetries = 2;
-                    
-                    // Try to load fields if they haven't been loaded yet for InfluxDB
-                    if (GrafanaConfig.selectedDatasourceType === 'influxdb' && retryCount < maxRetries) {
-                        console.log(`🔄 Fields not found, attempting to load for measurement: ${measurement} (attempt ${retryCount + 1}/${maxRetries})`);
-                        this._fieldLoadRetries[measurement] = retryCount + 1;
-                        fieldSelect.innerHTML = '<option value="">Loading fields...</option>';
-                        
-                        // Trigger field loading for this measurement
-                        Schema.loadMeasurementFieldsAndTags(measurement).then(() => {
-                            // Retry loading fields after schema load
-                            setTimeout(() => this.loadFieldsForMeasurement(measurement), 500);
-                        }).catch(error => {
-                            console.error('Failed to load fields for measurement:', error);
-                            fieldSelect.innerHTML = '<option value="">No fields found</option>';
-                        });
-                    } else {
-                        console.log(`❌ Max retries reached or not InfluxDB for measurement: ${measurement}`);
-                        fieldSelect.innerHTML = '<option value="">No fields found</option>';
-                        
-                        // For measurements with no fields but tags, add a default "value" field option
-                        if (GrafanaConfig.selectedDatasourceType === 'influxdb') {
-                            const tags = Schema.getInfluxMeasurementTags && Schema.getInfluxMeasurementTags(measurement);
-                            if (tags && tags.length > 0) {
-                                console.log('📊 No fields found but tags exist, adding default "value" field option');
-                                const valueOption = document.createElement('option');
-                                valueOption.value = 'value';
-                                valueOption.textContent = 'value (default)';
-                                fieldSelect.appendChild(valueOption);
-                            }
-                        }
-                    }
+                // Add helper text
+                if (fieldsWithData.length > 0) {
+                    const helperOption = document.createElement('option');
+                    helperOption.disabled = true;
+                    helperOption.textContent = `─── ${fieldsWithData.length} fields with recent data ✓ ───`;
+                    helperOption.style.fontStyle = 'italic';
+                    fieldSelect.insertBefore(helperOption, fieldSelect.children[1]);
                 }
             } else {
-                console.warn('⚠️ Schema module not available');
-                fieldSelect.innerHTML = '<option value="">Schema module not available</option>';
+                console.log(`❌ No fields found for measurement: ${measurement} after centralized loading`);
+                fieldSelect.innerHTML = '<option value="">No fields found</option>';
             }
         } catch (error) {
-            console.error('❌ Failed to load fields:', error);
+            console.error('❌ Failed to load fields using centralized Schema:', error);
             fieldSelect.innerHTML = '<option value="">Error loading fields</option>';
         }
-        
-        // Load tags for this measurement (they should be available from Schema now)
+
+        // Load tags at the end of this process
         console.log('🏷️ Loading tags at end of loadFieldsForMeasurement for:', measurement);
-        this.loadTagsForField(measurement, this.config.field || 'any');
+        this.loadTagsForField(measurement, 'any');
     },
 
     // Check which fields have recent data

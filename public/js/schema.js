@@ -44,6 +44,52 @@ const Schema = {
         return null;
     },
     
+    // Centralized method to get fields for a measurement, loading if necessary
+    async getFieldsForMeasurement(measurement, retentionPolicy = 'autogen') {
+        if (!measurement) return [];
+        
+        // Check if we already have fields for this measurement
+        if (this.influxFields[measurement] && this.influxFields[measurement].length > 0) {
+            console.log(`📋 Schema.getFieldsForMeasurement: Found cached fields for ${measurement}:`, this.influxFields[measurement]);
+            return this.influxFields[measurement];
+        }
+        
+        // If not in cache, load them
+        console.log(`🔄 Schema.getFieldsForMeasurement: Loading fields for ${measurement}...`);
+        try {
+            await this.loadMeasurementFieldsAndTags(measurement, retentionPolicy, false);
+            const fields = this.influxFields[measurement] || [];
+            console.log(`✅ Schema.getFieldsForMeasurement: Loaded ${fields.length} fields for ${measurement}:`, fields);
+            return fields;
+        } catch (error) {
+            console.error(`❌ Schema.getFieldsForMeasurement: Failed to load fields for ${measurement}:`, error);
+            return [];
+        }
+    },
+    
+    // Centralized method to get tags for a measurement, loading if necessary  
+    async getTagsForMeasurement(measurement, retentionPolicy = 'autogen') {
+        if (!measurement) return [];
+        
+        // Check if we already have tags for this measurement
+        if (this.influxTags[measurement] && this.influxTags[measurement].length > 0) {
+            console.log(`📋 Schema.getTagsForMeasurement: Found cached tags for ${measurement}:`, this.influxTags[measurement].length);
+            return this.influxTags[measurement];
+        }
+        
+        // If not in cache, load them
+        console.log(`🔄 Schema.getTagsForMeasurement: Loading tags for ${measurement}...`);
+        try {
+            await this.loadMeasurementFieldsAndTags(measurement, retentionPolicy, false);
+            const tags = this.influxTags[measurement] || [];
+            console.log(`✅ Schema.getTagsForMeasurement: Loaded ${tags.length} tags for ${measurement}`);
+            return tags;
+        } catch (error) {
+            console.error(`❌ Schema.getTagsForMeasurement: Failed to load tags for ${measurement}:`, error);
+            return [];
+        }
+    },
+    
     // Cache management
     schemaCache: {}, // Cache schema data per datasource: { datasourceId: { type, data, timestamp } }
     cacheExpiry: 5 * 60 * 1000, // 5 minutes cache expiry
