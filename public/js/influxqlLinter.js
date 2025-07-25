@@ -7,7 +7,7 @@
     // InfluxQL Keywords and syntax elements from the spec
     const KEYWORDS = new Set([
         'ALL', 'ALTER', 'ANALYZE', 'ANY', 'AS', 'ASC', 'BEGIN', 'BY', 'CREATE', 'CONTINUOUS',
-        'DATABASE', 'DATABASES', 'DEFAULT', 'DELETE', 'DESC', 'DESTINATIONS', 'DIAGNOSTICS', 'DISTINCT',
+        'DATABASE', 'DATABASES', 'DEFAULT', 'DELETE', 'DESC', 'DESTINATIONS', 'DIAGNOSTICS',
         'DROP', 'DURATION', 'END', 'EVERY', 'EXPLAIN', 'FIELD', 'FILL', 'FOR', 'FROM', 'GRANT', 'GRANTS',
         'GROUP', 'GROUPS', 'IN', 'INF', 'INSERT', 'INTO', 'KEY', 'KEYS', 'KILL', 'LIMIT', 'SHOW',
         'MEASUREMENT', 'MEASUREMENTS', 'NAME', 'OFFSET', 'ON', 'ORDER', 'PASSWORD', 'POLICY', 'POLICIES',
@@ -19,9 +19,15 @@
     ]);
 
     const FUNCTIONS = new Set([
-        'COUNT', 'SUM', 'MEAN', 'MEDIAN', 'MODE', 'SPREAD', 'STDDEV', 'FIRST', 'LAST', 'MAX', 'MIN',
+        'COUNT', 'DISTINCT', 'SUM', 'MEAN', 'MEDIAN', 'MODE', 'SPREAD', 'STDDEV', 'FIRST', 'LAST', 'MAX', 'MIN',
         'PERCENTILE', 'SAMPLE', 'TOP', 'BOTTOM', 'DERIVATIVE', 'DIFFERENCE', 'NON_NEGATIVE_DERIVATIVE',
         'INTEGRAL', 'ELAPSED', 'MOVING_AVERAGE', 'CUMULATIVE_SUM', 'HOLT_WINTERS'
+    ]);
+
+    // Aggregate functions that satisfy GROUP BY requirements
+    const AGGREGATE_FUNCTIONS = new Set([
+        'COUNT', 'DISTINCT', 'SUM', 'MEAN', 'MEDIAN', 'MODE', 'SPREAD', 'STDDEV', 
+        'FIRST', 'LAST', 'MAX', 'MIN', 'PERCENTILE', 'SAMPLE', 'TOP', 'BOTTOM'
     ]);
 
     const TIME_UNITS = ['u', 'µ', 'ms', 's', 'm', 'h', 'd', 'w'];
@@ -137,7 +143,13 @@
                 end: this.position,
                 line: startLine,
                 column: startColumn,
-                error: 'Unclosed string literal'
+                error: 'Unclosed string literal',
+                quickFix: {
+                    title: `Add closing ${quote} quote`,
+                    action: 'insert',
+                    position: 'after',
+                    newText: quote
+                }
             };
         }
 
@@ -458,6 +470,7 @@
             // Track query structure for validation
             this.selectFields = [];
             this.hasGroupBy = false;
+            this.hasGroupByTime = false;
             this.isInAggregateFunction = false;
         }
 
@@ -468,7 +481,7 @@
                 // Check for tokenization errors
                 for (const token of this.tokens) {
                     if (token.type === TokenType.INVALID) {
-                        this.addError(token.error || 'Invalid token', token);
+                        this.addError(token.error || 'Invalid token', token, token.quickFix);
                     }
                 }
 
@@ -515,17 +528,23 @@
             return token;
         }
 
-        addError(message, token) {
+        addError(message, token, quickFix = null) {
             // Convert token position to CodeMirror format
             const from = { line: token.line, ch: token.column };
             const to = { line: token.line, ch: token.column + (token.end - token.start) };
             
-            this.errors.push({
+            const error = {
                 message: message,
                 severity: 'error',
                 from: from,
                 to: to
-            });
+            };
+            
+            if (quickFix) {
+                error.quickFix = quickFix;
+            }
+            
+            this.errors.push(error);
         }
 
         expectIdentifierOrString(message) {
@@ -613,7 +632,13 @@
                     return;
                 }
             } else {
-                this.addError('SELECT statement requires FROM clause', this.currentToken());
+                const quickFix = {
+                    title: 'Add FROM clause',
+                    action: 'insert',
+                    position: 'after',
+                    newText: ' FROM "measurement_name"'
+                };
+                this.addError('SELECT statement requires FROM clause', this.currentToken(), quickFix);
                 return;
             }
             
@@ -683,6 +708,28 @@
         }
 
         validateMeasurement() {
+            // Check for subquery (nested SELECT in parentheses)
+            if (this.currentToken().type === TokenType.LPAREN) {
+                const start = this.current;
+                this.current++; // consume opening paren
+                
+                // Check if this is a SELECT subquery
+                if (this.currentToken().type === TokenType.KEYWORD && 
+                    this.currentToken().value.toUpperCase() === 'SELECT') {
+                    // Parse the nested SELECT statement
+                    this.validateSelectStatement();
+                    
+                    // Expect closing paren
+                    if (!this.expect(TokenType.RPAREN)) {
+                        return false;
+                    }
+                    return true;
+                } else {
+                    // Not a subquery, restore position
+                    this.current = start;
+                }
+            }
+            
             // Simple measurement: identifier or regex
             if (this.consume(TokenType.IDENTIFIER) || this.consume(TokenType.STRING) || this.consume(TokenType.REGEX)) {
                 // Optional database.retention_policy prefix
@@ -744,7 +791,7 @@
             // Handle functions
             if (this.currentToken().type === TokenType.FUNCTION) {
                 const funcName = this.currentToken().value.toUpperCase();
-                const isAggregate = FUNCTIONS.has(funcName);
+                const isAggregate = AGGREGATE_FUNCTIONS.has(funcName);
                 if (fieldInfo && isAggregate) {
                     fieldInfo.hasAggregateFunction = true;
                 }
@@ -938,6 +985,7 @@
 
         validateGroupByClause() {
             let hasGrouping = false;
+            this.hasGroupByTime = false; // Track if GROUP BY includes time()
             
             do {
                 // Check for time() function
@@ -958,6 +1006,7 @@
                             return;
                         }
                         hasGrouping = true;
+                        this.hasGroupByTime = true; // Mark that we have GROUP BY time()
                     }
                 } else if (this.validateExpression()) {
                     hasGrouping = true;
@@ -992,7 +1041,12 @@
 
         validateOrderByClause() {
             do {
-                if (!this.validateExpression()) {
+                // Special handling for 'time' keyword in ORDER BY
+                if (this.currentToken().type === TokenType.KEYWORD && 
+                    this.currentToken().value.toUpperCase() === 'TIME') {
+                    // In ORDER BY, 'time' is a valid column reference, not the time() function
+                    this.current++;
+                } else if (!this.validateExpression()) {
                     this.addError('Expected expression in ORDER BY', this.currentToken());
                     return;
                 }
@@ -1192,13 +1246,22 @@
         }
         
         validateFieldTagRules() {
-            // Rule 1: If GROUP BY is present, all field references must be in aggregate functions
-            if (this.hasGroupBy) {
+            // Rule 1: If GROUP BY time() is present, all field references must be in aggregate functions
+            // Note: GROUP BY with only tags does not require aggregate functions
+            if (this.hasGroupByTime) {
                 for (const fieldInfo of this.selectFields) {
                     if (fieldInfo.nonAggregatedField) {
+                        const fieldName = fieldInfo.nonAggregatedField.value;
+                        const quickFix = {
+                            title: `Wrap '${fieldName}' with MEAN() function`,
+                            action: 'replace',
+                            newText: `MEAN(${fieldName})`
+                        };
+                        
                         this.addError(
-                            `Field '${fieldInfo.nonAggregatedField.value}' must be used with an aggregate function when GROUP BY is present`,
-                            fieldInfo.nonAggregatedField
+                            `Field '${fieldName}' must be used with an aggregate function when GROUP BY time() is present`,
+                            fieldInfo.nonAggregatedField,
+                            quickFix
                         );
                     }
                 }
@@ -1226,12 +1289,20 @@
         const errors = validator.validate();
         
         // Convert to CodeMirror lint format
-        const lintResults = errors.map(error => ({
-            from: CodeMirror.Pos(error.from.line, error.from.ch),
-            to: CodeMirror.Pos(error.to.line, error.to.ch),
-            message: error.message,
-            severity: error.severity || 'error'
-        }));
+        const lintResults = errors.map(error => {
+            const result = {
+                from: CodeMirror.Pos(error.from.line, error.from.ch),
+                to: CodeMirror.Pos(error.to.line, error.to.ch),
+                message: error.message,
+                severity: error.severity || 'error'
+            };
+            
+            if (error.quickFix) {
+                result.quickFix = error.quickFix;
+            }
+            
+            return result;
+        });
         
         return lintResults;
     }
