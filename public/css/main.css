@@ -3770,6 +3770,58 @@ body {
     font-style: italic !important;
 }
 
+/* Quick Fix Styles */
+.CodeMirror-quickfix-gutter {
+    width: 20px !important;
+    background-color: #1e1e1e !important;
+}
+
+.quickfix-marker {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 16px !important;
+    height: 16px !important;
+    cursor: pointer !important;
+    position: relative !important;
+    font-size: 12px !important;
+    opacity: 0.8 !important;
+    transition: all 0.2s ease !important;
+    border-radius: 50% !important;
+    background: rgba(79, 174, 223, 0.1) !important;
+}
+
+.quickfix-marker:hover {
+    opacity: 1 !important;
+    background: rgba(79, 174, 223, 0.2) !important;
+    transform: scale(1.1) !important;
+}
+
+/* Hide the ugly green button - use lightbulb only */
+.quickfix-button {
+    display: none !important;
+}
+
+/* Quick-fix success animation */
+.quickfix-applied {
+    animation: quickfixApplied 0.6s ease-out !important;
+}
+
+@keyframes quickfixApplied {
+    0% {
+        background-color: rgba(79, 174, 223, 0.3) !important;
+        transform: scale(1.1) !important;
+    }
+    50% {
+        background-color: rgba(40, 167, 69, 0.4) !important;
+        transform: scale(1.2) !important;
+    }
+    100% {
+        background-color: transparent !important;
+        transform: scale(1) !important;
+    }
+}
+
 /* AI Analytics Panel Styles */
 #analyticsPanel {
     display: none;

@@ -19,7 +19,7 @@ const Editor = {
             smartIndent: true,
             lineWrapping: false,
             lint: enableLinting,
-            gutters: enableLinting ? ["CodeMirror-linenumbers", "CodeMirror-lint-markers"] : ["CodeMirror-linenumbers"],
+            gutters: enableLinting ? ["CodeMirror-linenumbers", "CodeMirror-lint-markers", "CodeMirror-quickfix-gutter"] : ["CodeMirror-linenumbers"],
             extraKeys: {
                 "Ctrl-Space": "autocomplete",
                 "Tab": function(cm) {
@@ -44,6 +44,7 @@ const Editor = {
         this.setupCodeMirrorHelpers();
         this.setupCodeMirrorEvents();
         this.setupResizeHandle();
+        this.initializeQuickFix();
         
         console.log('CodeMirror initialized successfully');
     },
@@ -302,6 +303,12 @@ const Editor = {
             while (wordStart > 0 && /[\w".]/.test(line.charAt(wordStart - 1))) {
                 wordStart--;
             }
+            
+            // Check if we're inside a quoted string to avoid adding extra quotes
+            const beforeCursor = line.slice(0, start);
+            const openQuotes = (beforeCursor.match(/"/g) || []).length;
+            const isInsideQuotes = openQuotes % 2 === 1;
+            
             
             // For FROM clause autocomplete, we need to include the entire line up to the cursor
             // not just up to the word boundary, to capture "retention_policy"."measurement" patterns
@@ -710,8 +717,15 @@ const Editor = {
                     }
                 }
                 
+                // Adjust suggestion text based on whether we're inside quotes
+                let adjustedText = suggestion;
+                if (isInsideQuotes && suggestion.startsWith('"') && suggestion.endsWith('"')) {
+                    // Remove the quotes since we're already inside a quoted string
+                    adjustedText = suggestion.slice(1, -1);
+                }
+                
                 return {
-                    text: suggestion,
+                    text: adjustedText,
                     displayText: displayText,
                     className: className
                 };
@@ -747,6 +761,18 @@ const Editor = {
             let replaceFrom = wordStart;
             let replaceTo = end;
             
+            // If we're inside quotes, adjust the replacement range to not include the opening quote
+            if (isInsideQuotes) {
+                // Find the last quote before cursor
+                const lastQuoteIndex = beforeCursor.lastIndexOf('"');
+                if (lastQuoteIndex !== -1) {
+                    // Only adjust if wordStart actually includes the quote
+                    if (wordStart <= lastQuoteIndex) {
+                        replaceFrom = lastQuoteIndex + 1; // Start after the quote
+                    }
+                }
+            }
+            
             // For FROM clause with retention policy patterns like "raw".prom
             // we only want to replace the measurement part, not the retention policy
             if (lineBefore.includes('FROM') && !lineBefore.includes('WHERE')) {
@@ -765,7 +791,6 @@ const Editor = {
                 }
             }
             
-            console.log(`Autocomplete return - from: ${replaceFrom}, to: ${replaceTo}`);
             
             return {
                 list: hintList,
@@ -864,6 +889,11 @@ const Editor = {
         let errors = [];
         if (GrafanaConfig.currentQueryType === 'promql') {
             errors = this.validatePromQL(query);
+        } else if (GrafanaConfig.currentQueryType === 'influxql') {
+            // Trigger quick-fix gutter update for InfluxQL
+            setTimeout(() => {
+                this.updateQuickFixGutter();
+            }, 150);
         }
         // InfluxQL validation is now handled by the linter
         
@@ -1211,7 +1241,7 @@ const Editor = {
             if (type === 'influxql') {
                 console.log('Enabling linting for InfluxQL mode');
                 GrafanaConfig.queryEditor.setOption('lint', true);
-                GrafanaConfig.queryEditor.setOption('gutters', ["CodeMirror-linenumbers", "CodeMirror-lint-markers"]);
+                GrafanaConfig.queryEditor.setOption('gutters', ["CodeMirror-linenumbers", "CodeMirror-lint-markers", "CodeMirror-quickfix-gutter"]);
             } else {
                 console.log('Disabling linting for PromQL mode');
                 GrafanaConfig.queryEditor.setOption('lint', false);
@@ -1270,5 +1300,271 @@ const Editor = {
                 document.body.style.cursor = '';
             }
         });
+    },
+    
+    // Initialize quick-fix functionality
+    initializeQuickFix() {
+        const editor = GrafanaConfig.queryEditor;
+        if (!editor) return;
+        
+        // Initialize the currentQuickFixes map if it doesn't exist
+        if (!this.currentQuickFixes) {
+            this.currentQuickFixes = new Map();
+        }
+        
+        // Store reference to this for use in closures
+        const self = this;
+        
+        // Custom lint handler that shows quick fix options
+        editor.on('changes', () => {
+            setTimeout(() => {
+                self.updateQuickFixGutter();
+            }, 200);
+        });
+        
+        // Also listen for lint completion events
+        editor.on('lintUpdated', (cm, annotations) => {
+            setTimeout(() => {
+                self.updateQuickFixGutter();
+            }, 50);
+        });
+        
+        // Click handler for quick-fix buttons
+        editor.getWrapperElement().addEventListener('click', (e) => {
+            console.log('Click detected on:', e.target, 'Classes:', e.target.classList);
+            
+            if (e.target.classList.contains('quickfix-button')) {
+                console.log('Quick fix button clicked!');
+                const line = parseInt(e.target.dataset.line);
+                const quickFix = self.currentQuickFixes.get(line);
+                console.log('Line:', line, 'QuickFix:', quickFix);
+                
+                if (quickFix) {
+                    console.log('Applying quick fix:', quickFix.title);
+                    Editor.applyQuickFix(quickFix, line);
+                } else {
+                    console.log('No quickFix found for line:', line);
+                }
+            }
+        });
+        
+        // Also try adding a more specific click handler directly to buttons
+        editor.getWrapperElement().addEventListener('click', (e) => {
+            // Check if clicked element or its parent has quickfix-button class
+            let target = e.target;
+            while (target && target !== editor.getWrapperElement()) {
+                if (target.classList && target.classList.contains('quickfix-button')) {
+                    console.log('Quick fix button clicked via delegation!');
+                    e.preventDefault();
+                    e.stopPropagation();
+                    
+                    const line = parseInt(target.dataset.line);
+                    const quickFix = self.currentQuickFixes.get(line);
+                    
+                    if (quickFix) {
+                        console.log('Applying delegated quick fix:', quickFix.title);
+                        Editor.applyQuickFix(quickFix, line);
+                    }
+                    return;
+                }
+                target = target.parentElement;
+            }
+        });
+        
+        // Keyboard shortcut for quick fix (Ctrl+.)
+        editor.addKeyMap({
+            'Ctrl-.': (cm) => {
+                const cursor = cm.getCursor();
+                const quickFix = self.currentQuickFixes.get(cursor.line);
+                if (quickFix) {
+                    Editor.applyQuickFix(quickFix, cursor.line);
+                }
+            }
+        });
+    },
+    
+    // Update the quick-fix gutter with available fixes
+    updateQuickFixGutter() {
+        const editor = GrafanaConfig.queryEditor;
+        if (!editor) return;
+        
+        // Initialize currentQuickFixes if it doesn't exist
+        if (!this.currentQuickFixes) {
+            this.currentQuickFixes = new Map();
+        }
+        
+        // Ensure the quick-fix gutter exists in the gutters array
+        const currentGutters = editor.getOption('gutters');
+        if (!currentGutters.includes('CodeMirror-quickfix-gutter')) {
+            console.log('Adding CodeMirror-quickfix-gutter to editor gutters');
+            const newGutters = [...currentGutters, 'CodeMirror-quickfix-gutter'];
+            editor.setOption('gutters', newGutters);
+        }
+        
+        // Clear existing quick-fix markers
+        editor.clearGutter('CodeMirror-quickfix-gutter');
+        this.currentQuickFixes.clear();
+        
+        console.log('Current editor gutters:', editor.getOption('gutters'));
+        
+        // Get current lint state
+        const lintState = editor.state.lint;
+        if (!lintState) return;
+        
+        // Try different ways to access annotations
+        let annotations = lintState.marked || lintState.hasGutter || [];
+        
+        // If that doesn't work, try accessing from the lint addon directly
+        if (!annotations || annotations.length === 0) {
+            const lintOptions = editor.getOption('lint');
+            if (lintOptions && typeof lintOptions === 'object' && lintOptions.getAnnotations) {
+                annotations = lintOptions.getAnnotations(editor);
+            }
+        }
+        
+        // Always get fresh annotations directly from the linter to preserve quickFix data
+        const text = editor.getValue();
+        console.log('Editor text for linting:', JSON.stringify(text));
+        
+        if (text.trim() && window.InfluxQLLinter) {
+            annotations = window.InfluxQLLinter.lint(text);
+            console.log('Got fresh annotations from linter:', annotations);
+            
+            // Test with a simple missing FROM clause query
+            if (text.trim().toUpperCase().startsWith('SELECT') && !text.toUpperCase().includes('FROM')) {
+                console.log('This should trigger a missing FROM clause error with quickFix');
+                
+                // Test the linter directly with a simple case
+                const testResult = window.InfluxQLLinter.lint('SELECT "value"');
+                console.log('Direct linter test result:', testResult);
+            }
+        }
+        
+        console.log('Quick fix annotations found:', annotations);
+        console.log('Detailed annotation data:', annotations ? annotations.map(a => ({
+            message: a.message,
+            quickFix: a.quickFix,
+            from: a.from,
+            to: a.to,
+            line: a.line
+        })) : 'No annotations');
+        
+        if (annotations && annotations.length > 0) {
+            annotations.forEach((annotation, index) => {
+                console.log(`Annotation ${index}:`, annotation);
+                console.log(`Has quickFix:`, !!annotation.quickFix);
+                
+                if (annotation.quickFix) {
+                    const line = annotation.from ? annotation.from.line : (annotation.line || 0);
+                    this.currentQuickFixes.set(line, annotation.quickFix);
+                    
+                    console.log(`Setting up quick fix marker for line ${line}`);
+                    
+                    // Create clean quick-fix marker
+                    const marker = document.createElement('div');
+                    marker.className = 'quickfix-marker';
+                    marker.innerHTML = '💡';
+                    marker.title = `💡 ${annotation.quickFix.title}\n\nClick to apply fix or press Ctrl+.`;
+                    marker.dataset.line = line;
+                    
+                    try {
+                        editor.setGutterMarker(line, 'CodeMirror-quickfix-gutter', marker);
+                        console.log(`Successfully added quick fix marker at line ${line}:`, annotation.quickFix.title);
+                        
+                        // Add direct click listener to the marker
+                        marker.addEventListener('click', (e) => {
+                            console.log('💡 Quick fix applied:', annotation.quickFix.title);
+                            e.preventDefault();
+                            e.stopPropagation();
+                            Editor.applyQuickFix(annotation.quickFix, line);
+                        });
+                        
+                    } catch (error) {
+                        console.error(`Failed to add gutter marker at line ${line}:`, error);
+                    }
+                } else {
+                    console.log(`Annotation ${index} has no quickFix property`);
+                }
+            });
+        } else {
+            console.log('No annotations found or annotations array is empty');
+        }
+    },
+    
+    // Apply a quick fix to the editor
+    applyQuickFix(quickFix, line) {
+        const editor = GrafanaConfig.queryEditor;
+        if (!editor) return;
+        
+        const doc = editor.getDoc();
+        
+        switch (quickFix.action) {
+            case 'replace':
+                // For field wrapping with aggregate functions
+                const lineText = doc.getLine(line);
+                // Find the field name to replace (usually the issue is with a specific field)
+                const fieldMatch = lineText.match(/\b[a-zA-Z_][a-zA-Z0-9_]*\b/);
+                if (fieldMatch) {
+                    const fieldStart = lineText.indexOf(fieldMatch[0]);
+                    const fieldEnd = fieldStart + fieldMatch[0].length;
+                    
+                    doc.replaceRange(
+                        quickFix.newText,
+                        { line: line, ch: fieldStart },
+                        { line: line, ch: fieldEnd }
+                    );
+                }
+                break;
+                
+            case 'insert':
+                if (quickFix.position === 'after') {
+                    // For missing FROM clause - insert at end of current line
+                    const lineText = doc.getLine(line);
+                    doc.replaceRange(
+                        quickFix.newText,
+                        { line: line, ch: lineText.length }
+                    );
+                } else {
+                    // Insert at beginning of line
+                    doc.replaceRange(
+                        quickFix.newText,
+                        { line: line, ch: 0 }
+                    );
+                }
+                break;
+        }
+        
+        // Show visual feedback for successful fix
+        const lineElement = editor.getLineHandle(line);
+        if (lineElement && lineElement.text) {
+            // Flash the entire line briefly to show the fix was applied
+            const lineWidget = editor.getWrapperElement().querySelector(`.CodeMirror-line[style*="line-number: ${line + 1}"]`);
+            if (lineWidget) {
+                lineWidget.classList.add('quickfix-applied');
+                setTimeout(() => {
+                    lineWidget.classList.remove('quickfix-applied');
+                }, 600);
+            }
+        }
+        
+        // Show a subtle notification
+        console.log(`✅ Quick fix applied: ${quickFix.title}`);
+        
+        // Trigger revalidation and cursor positioning
+        setTimeout(() => {
+            this.validateQuery();
+            // Position cursor after the fix
+            if (quickFix.action === 'insert' && quickFix.newText.includes('measurement_name')) {
+                // Find and select the placeholder text
+                const text = editor.getValue();
+                const index = text.indexOf('measurement_name');
+                if (index !== -1) {
+                    const pos = editor.posFromIndex(index);
+                    const endPos = editor.posFromIndex(index + 'measurement_name'.length);
+                    editor.setSelection(pos, endPos);
+                    editor.focus();
+                }
+            }
+        }, 100);
     }
 };
