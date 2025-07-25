@@ -910,6 +910,8 @@ const Analytics = {
                     // For InfluxDB, get fields from the Schema.influxFields
                     fields = Schema.influxFields[measurement] || [];
                     console.log('📊 Found InfluxDB fields for', measurement, ':', fields);
+                    console.log('📋 All available measurements in Schema.influxFields:', Object.keys(Schema.influxFields));
+                    console.log('📋 Schema.influxMeasurements:', Schema.influxMeasurements);
                 } else if (GrafanaConfig.selectedDatasourceType === 'prometheus') {
                     // For Prometheus, metrics don't have traditional "fields" - they have labels
                     // For analytics purposes, we'll treat the metric itself as the "field"
@@ -967,7 +969,11 @@ const Analytics = {
                         fieldSelect.innerHTML = '<option value="">Loading fields...</option>';
                         
                         // Trigger field loading for this measurement
-                        Schema.loadMeasurementFieldsAndTags(measurement).then(() => {
+                        console.log(`🔄 Attempting to load fields and tags for measurement: ${measurement}`);
+                        Schema.loadMeasurementFieldsAndTags(measurement).then((result) => {
+                            console.log(`✅ Schema.loadMeasurementFieldsAndTags completed for ${measurement}:`, result);
+                            console.log(`📋 Schema.influxFields after load:`, Object.keys(Schema.influxFields));
+                            console.log(`📋 Fields for ${measurement}:`, Schema.influxFields[measurement]);
                             // Retry loading fields after schema load
                             setTimeout(() => this.loadFieldsForMeasurement(measurement), 500);
                         }).catch(error => {
