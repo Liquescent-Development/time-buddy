@@ -39,6 +39,7 @@ const AIAgent = {
         this.setupEventListeners();
         this.updateContext();
         this.setupElectronChatCommunication(); // Set up Electron chat window communication
+        this.addEnhancedUIStyles(); // Add enhanced UI styles for new features
         
         console.log('✅ AI Agent initialized');
     },
@@ -69,6 +70,200 @@ const AIAgent = {
             console.warn('⚠️ Failed to load avatar via IPC, using fallback:', error);
             this.avatarDataUrl = null;
         }
+    },
+
+    // Add enhanced UI styles for new features
+    addEnhancedUIStyles() {
+        const style = document.createElement('style');
+        style.id = 'aiEnhancedUIStyles';
+        style.textContent = `
+            /* Message metadata container */
+            .message-metadata {
+                margin-top: 8px;
+                padding: 8px 12px;
+                background: rgba(255, 255, 255, 0.02);
+                border-radius: 6px;
+                border-left: 2px solid rgba(107, 70, 193, 0.3);
+                font-size: 12px;
+            }
+            
+            /* Confidence indicator */
+            .confidence-indicator {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                margin-bottom: 6px;
+            }
+            
+            .confidence-label {
+                color: #888;
+                min-width: 70px;
+            }
+            
+            .confidence-bar {
+                flex: 1;
+                height: 4px;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 2px;
+                overflow: hidden;
+                max-width: 100px;
+            }
+            
+            .confidence-fill {
+                height: 100%;
+                transition: width 0.3s ease;
+            }
+            
+            .confidence-percentage {
+                color: #ccc;
+                font-weight: 500;
+                min-width: 35px;
+                text-align: right;
+            }
+            
+            /* Data source badges */
+            .data-source-badges {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                margin-bottom: 6px;
+                flex-wrap: wrap;
+            }
+            
+            .badges-label {
+                color: #888;
+            }
+            
+            .data-source-badge {
+                background: rgba(107, 70, 193, 0.2);
+                color: #b39ddb;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 10px;
+                font-weight: 500;
+            }
+            
+            /* Query preview */
+            .query-preview {
+                margin-bottom: 8px;
+            }
+            
+            .query-toggle-btn {
+                background: rgba(76, 175, 80, 0.2);
+                border: 1px solid rgba(76, 175, 80, 0.3);
+                color: #81c784;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 11px;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            
+            .query-toggle-btn:hover {
+                background: rgba(76, 175, 80, 0.3);
+                border-color: rgba(76, 175, 80, 0.4);
+            }
+            
+            .query-content {
+                margin-top: 6px;
+                background: rgba(30, 30, 30, 0.8);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            
+            .query-content.hidden {
+                display: none;
+            }
+            
+            .query-content pre {
+                margin: 0;
+                padding: 8px;
+                font-size: 11px;
+                line-height: 1.4;
+                overflow-x: auto;
+            }
+            
+            .query-content code {
+                color: #81c784;
+                font-family: 'Courier New', monospace;
+            }
+            
+            /* Feedback buttons */
+            .feedback-buttons {
+                display: flex;
+                gap: 6px;
+                align-items: center;
+            }
+            
+            .feedback-btn {
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                color: #888;
+                padding: 4px 6px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+                transition: all 0.2s;
+                min-width: 30px;
+                text-align: center;
+            }
+            
+            .feedback-btn:hover {
+                background: rgba(255, 255, 255, 0.1);
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+            
+            .feedback-btn.selected {
+                background: rgba(107, 70, 193, 0.3);
+                border-color: rgba(107, 70, 193, 0.5);
+                color: #b39ddb;
+            }
+            
+            .feedback-confirmation {
+                color: #4CAF50;
+                font-size: 10px;
+                margin-left: 8px;
+                opacity: 0.8;
+            }
+            
+            /* Message timestamp */
+            .message-timestamp {
+                color: #666;
+                font-size: 10px;
+                text-align: right;
+                margin-top: 4px;
+                opacity: 0.7;
+            }
+            
+            /* Enhanced message styling */
+            .message.assistant {
+                position: relative;
+            }
+            
+            .message.assistant:hover .message-metadata {
+                background: rgba(255, 255, 255, 0.04);
+            }
+            
+            /* Responsive adjustments */
+            @media (max-width: 600px) {
+                .confidence-indicator {
+                    flex-direction: column;
+                    align-items: flex-start;
+                    gap: 4px;
+                }
+                
+                .confidence-bar {
+                    width: 100%;
+                    max-width: none;
+                }
+                
+                .data-source-badges {
+                    flex-direction: column;
+                    align-items: flex-start;
+                }
+            }
+        `;
+        document.head.appendChild(style);
     },
 
     // Get avatar HTML element
@@ -519,15 +714,286 @@ const AIAgent = {
             
             if (advancedAgent && advancedAgent.processAdvancedQuery) {
                 console.log('🧠 Using Advanced AI processing');
-                return await advancedAgent.processAdvancedQuery(message, context);
+                const response = await advancedAgent.processAdvancedQuery(message, context);
+                
+                // Enhance response with metadata for UI
+                return this.enhanceResponseWithMetadata(response, context, 'advanced');
             }
             
             console.log('⚠️ Advanced AI not available, using enhanced basic processing');
-            return await this.processEnhancedBasicMessage(message, context);
+            const response = await this.processEnhancedBasicMessage(message, context);
+            return this.enhanceResponseWithMetadata(response, context, 'basic');
             
         } catch (error) {
             console.error('Advanced AI processing failed:', error);
-            return await this.processEnhancedBasicMessage(message, context);
+            const response = await this.processEnhancedBasicMessage(message, context);
+            return this.enhanceResponseWithMetadata(response, context, 'fallback');
+        }
+    },
+
+    // Enhance response with metadata for UI features
+    enhanceResponseWithMetadata(response, context, processingType) {
+        console.log('🔧 Enhancing response with metadata, type:', processingType);
+        
+        if (!response || !response.data) {
+            response = response || {};
+            response.data = {};
+        }
+        
+        // Add confidence based on processing type
+        const confidence = this.calculateResponseConfidence(response, processingType);
+        response.data.confidence = confidence;
+        
+        // Add data sources information
+        const dataSources = this.extractDataSources(context);
+        if (dataSources.length > 0) {
+            response.data.dataSources = dataSources;
+        }
+        
+        // Add generated query if available
+        if (response.query || response.data.query) {
+            response.data.generatedQuery = response.query || response.data.query;
+        }
+        
+        // Add processing metadata
+        response.data.processingType = processingType;
+        response.data.timestamp = new Date().toISOString();
+        
+        return response;
+    },
+
+    // Calculate confidence score based on response quality and processing type
+    calculateResponseConfidence(response, processingType) {
+        let baseConfidence = 0.5; // Default confidence
+        
+        // Adjust base confidence by processing type
+        switch (processingType) {
+            case 'advanced':
+                baseConfidence = 0.85; // High confidence for advanced AI
+                break;
+            case 'basic':
+                baseConfidence = 0.65; // Medium confidence for enhanced basic
+                break;
+            case 'fallback':
+                baseConfidence = 0.45; // Lower confidence for fallback
+                break;
+        }
+        
+        // Adjust based on response characteristics
+        if (response.text) {
+            const text = response.text.toLowerCase();
+            
+            // Increase confidence for specific, actionable responses
+            if (text.includes('query') || text.includes('select') || text.includes('from')) {
+                baseConfidence += 0.1;
+            }
+            
+            // Increase confidence for data-driven responses
+            if (text.includes('found') || text.includes('detected') || text.includes('analyzed')) {
+                baseConfidence += 0.1;
+            }
+            
+            // Decrease confidence for uncertain language
+            if (text.includes('might') || text.includes('possibly') || text.includes('unsure')) {
+                baseConfidence -= 0.1;
+            }
+            
+            // Decrease confidence for error responses
+            if (text.includes('error') || text.includes('failed') || text.includes('unable')) {
+                baseConfidence -= 0.2;
+            }
+        }
+        
+        // Ensure confidence stays in valid range
+        return Math.max(0.1, Math.min(0.95, baseConfidence));
+    },
+
+    // Extract data sources from context
+    extractDataSources(context) {
+        const sources = [];
+        
+        if (context.datasource) {
+            sources.push(context.datasource);
+        }
+        
+        if (context.measurement) {
+            sources.push(context.measurement);
+        }
+        
+        // Add datasource type if available
+        const datasourceType = window.GrafanaConfig?.selectedDatasourceType || 
+                              window.Schema?.currentDatasourceType;
+        if (datasourceType && !sources.includes(datasourceType)) {
+            sources.push(datasourceType.charAt(0).toUpperCase() + datasourceType.slice(1));
+        }
+        
+        return sources.filter(Boolean); // Remove any null/undefined values
+    },
+
+    // Toggle proactive monitoring on/off
+    async toggleProactiveMonitoring(enable = null) {
+        const currentState = this.isProactiveMonitoringEnabled();
+        const newState = enable !== null ? enable : !currentState;
+        
+        if (newState === currentState) {
+            console.log(`🔄 Proactive monitoring already ${newState ? 'enabled' : 'disabled'}`);
+            return {
+                text: `Proactive monitoring is already ${newState ? 'enabled' : 'disabled'}.`,
+                data: { type: 'status', proactiveEnabled: newState }
+            };
+        }
+        
+        if (newState) {
+            return await this.enableProactiveMonitoring();
+        } else {
+            return await this.disableProactiveMonitoring();
+        }
+    },
+
+    // Enable proactive monitoring
+    async enableProactiveMonitoring() {
+        try {
+            console.log('🚀 Enabling proactive monitoring...');
+            
+            // Check if Advanced AI system and proactive monitoring are available
+            if (!window.AdvancedAI || !window.AdvancedAI.components || !window.AdvancedAI.components.proactiveMonitoring) {
+                return {
+                    text: "⚠️ **Proactive Monitoring Unavailable**\n\nProactive monitoring requires:\n\n• AI service connection (OpenAI or Ollama)\n• Advanced AI system initialization\n• Proactive Monitoring component loaded\n• Data source connection\n\n💡 **Note**: The ProactiveMonitoringSystem component may not be loaded if it's not needed for basic AI functionality.",
+                    data: { type: 'error', proactiveEnabled: false }
+                };
+            }
+            
+            // Enable proactive monitoring
+            await window.AdvancedAI.startProactiveSystemsSafely();
+            window.AdvancedAI.capabilities.proactiveInsights = true;
+            
+            // Store user preference
+            this.setProactiveMonitoringPreference(true);
+            
+            return {
+                text: "🚀 **Proactive Monitoring Enabled**\n\nI'm now actively monitoring your metrics and will send you:\n\n• 🔍 **Anomaly alerts** when unusual patterns are detected\n• 📊 **Health reports** every 30 minutes\n• 💡 **Predictive insights** about trends and issues\n• ⚡ **Smart recommendations** for optimization\n\n**Rate Limits:** Maximum 20 alerts per day with 30-second intervals to prevent overwhelm.\n\nYou can disable this anytime by saying *\"disable proactive monitoring\"*.",
+                data: { 
+                    type: 'proactive_enabled', 
+                    proactiveEnabled: true,
+                    confidence: 0.9,
+                    dataSources: ['Proactive Monitoring System'],
+                    processingType: 'system'
+                }
+            };
+            
+        } catch (error) {
+            console.error('Failed to enable proactive monitoring:', error);
+            return {
+                text: "❌ **Failed to Enable Proactive Monitoring**\n\nThere was an error starting the proactive monitoring system. Please try again or check the console for details.",
+                data: { type: 'error', proactiveEnabled: false, error: error.message }
+            };
+        }
+    },
+
+    // Disable proactive monitoring
+    async disableProactiveMonitoring() {
+        try {
+            console.log('🛑 Disabling proactive monitoring...');
+            
+            // Disable proactive monitoring
+            if (window.AdvancedAI && window.AdvancedAI.components.proactiveMonitoring) {
+                await window.AdvancedAI.components.proactiveMonitoring.stopMonitoring();
+                window.AdvancedAI.capabilities.proactiveInsights = false;
+            }
+            
+            // Store user preference
+            this.setProactiveMonitoringPreference(false);
+            
+            return {
+                text: "🛑 **Proactive Monitoring Disabled**\n\nI've stopped sending proactive alerts and health reports. I'll still respond to your direct questions and analyze data when you ask.\n\nYou can re-enable proactive monitoring anytime by saying *\"enable proactive monitoring\"*.",
+                data: { 
+                    type: 'proactive_disabled', 
+                    proactiveEnabled: false,
+                    confidence: 0.95,
+                    dataSources: ['System Settings'],
+                    processingType: 'system'
+                }
+            };
+            
+        } catch (error) {
+            console.error('Failed to disable proactive monitoring:', error);
+            return {
+                text: "❌ **Error Disabling Proactive Monitoring**\n\nThere was an error stopping the proactive monitoring system. Please check the console for details.",
+                data: { type: 'error', proactiveEnabled: true, error: error.message }
+            };
+        }
+    },
+
+    // Check if proactive monitoring is enabled
+    isProactiveMonitoringEnabled() {
+        return window.AdvancedAI && 
+               window.AdvancedAI.capabilities && 
+               window.AdvancedAI.capabilities.proactiveInsights === true;
+    },
+
+    // Get proactive monitoring status
+    getProactiveMonitoringStatus() {
+        const isEnabled = this.isProactiveMonitoringEnabled();
+        const isAvailable = window.AdvancedAI && window.AdvancedAI.components && window.AdvancedAI.components.proactiveMonitoring;
+        
+        let statusText = "📊 **Proactive Monitoring Status**\n\n";
+        
+        if (!isAvailable) {
+            statusText += "⚠️ **Status:** Unavailable\n\n";
+            statusText += "Proactive monitoring requires:\n";
+            statusText += "• AI service connection (OpenAI or Ollama)\n";
+            statusText += "• Advanced AI system initialization\n";
+            statusText += "• Data source connection\n\n";
+            statusText += "Please ensure these requirements are met to enable proactive monitoring.";
+        } else if (isEnabled) {
+            statusText += "✅ **Status:** Active\n\n";
+            statusText += "**Features Enabled:**\n";
+            statusText += "• 🔍 Anomaly detection\n";
+            statusText += "• 📊 Health reports (every 30 min)\n";
+            statusText += "• 💡 Predictive insights\n";
+            statusText += "• ⚡ Smart recommendations\n\n";
+            statusText += "**Rate Limits:** 20 alerts/day, 30s intervals\n\n";
+            statusText += "Say *\"disable proactive monitoring\"* to turn off.";
+        } else {
+            statusText += "💤 **Status:** Disabled\n\n";
+            statusText += "Proactive monitoring is available but currently disabled.\n\n";
+            statusText += "Say *\"enable proactive monitoring\"* to activate:\n";
+            statusText += "• Automatic anomaly alerts\n";
+            statusText += "• Periodic health reports\n";
+            statusText += "• Predictive trend analysis\n";
+            statusText += "• Intelligent recommendations";
+        }
+        
+        return {
+            text: statusText,
+            data: { 
+                type: 'proactive_status',
+                proactiveEnabled: isEnabled,
+                proactiveAvailable: isAvailable,
+                confidence: 0.95,
+                dataSources: ['System Status'],
+                processingType: 'system'
+            }
+        };
+    },
+
+    // Store user preference for proactive monitoring  
+    setProactiveMonitoringPreference(enabled) {
+        try {
+            localStorage.setItem('aiAgent.proactiveMonitoring.enabled', JSON.stringify(enabled));
+        } catch (error) {
+            console.warn('Failed to store proactive monitoring preference:', error);
+        }
+    },
+
+    // Get stored user preference for proactive monitoring
+    getProactiveMonitoringPreference() {
+        try {
+            const stored = localStorage.getItem('aiAgent.proactiveMonitoring.enabled');
+            return stored ? JSON.parse(stored) : null;
+        } catch (error) {
+            console.warn('Failed to get proactive monitoring preference:', error);
+            return null;
         }
     },
 
@@ -550,6 +1016,33 @@ const AIAgent = {
             return await this.handleIOPSQuery(message, availableMetrics);
         }
         
+        // Handle proactive monitoring commands
+        if (lowerMessage.includes('proactive') && lowerMessage.includes('monitor')) {
+            if (lowerMessage.includes('enable') || lowerMessage.includes('turn on') || lowerMessage.includes('start')) {
+                return await this.enableProactiveMonitoring();
+            } else if (lowerMessage.includes('disable') || lowerMessage.includes('turn off') || lowerMessage.includes('stop')) {
+                return await this.disableProactiveMonitoring();
+            } else if (lowerMessage.includes('status') || lowerMessage.includes('check')) {
+                return this.getProactiveMonitoringStatus();
+            }
+        }
+        
+        // Handle general monitoring/alert commands
+        if ((lowerMessage.includes('enable') || lowerMessage.includes('turn on')) && 
+            (lowerMessage.includes('alert') || lowerMessage.includes('monitor') || lowerMessage.includes('notification'))) {
+            return await this.enableProactiveMonitoring();
+        }
+        
+        if ((lowerMessage.includes('disable') || lowerMessage.includes('turn off')) && 
+            (lowerMessage.includes('alert') || lowerMessage.includes('monitor') || lowerMessage.includes('notification'))) {
+            return await this.disableProactiveMonitoring();
+        }
+        
+        // Handle status queries
+        if (lowerMessage.includes('monitoring status') || lowerMessage.includes('alert status')) {
+            return this.getProactiveMonitoringStatus();
+        }
+        
         // Handle general anomaly queries
         if (lowerMessage.includes('anomal') || lowerMessage.includes('spike') || lowerMessage.includes('unusual')) {
             return await this.handleAnomalyQuery(message, availableMetrics);
@@ -561,12 +1054,20 @@ const AIAgent = {
         }
         
         if (lowerMessage.includes('help') || lowerMessage.includes('what can you do')) {
+            const proactiveStatus = this.isProactiveMonitoringEnabled() ? '✅ Active' : '💤 Disabled';
+            
             return {
-                text: "I'm your AI assistant for time series analysis! I can help you:\n\n• Find and explore available metrics\n• Detect anomalies and patterns\n• Generate optimized queries\n• Analyze your data trends\n• Answer questions about your metrics\n\nWhat would you like to explore?",
-                data: { type: 'help' },
+                text: `I'm your AI assistant for time series analysis! I can help you:\n\n**Core Features:**\n• Find and explore available metrics\n• Detect anomalies and patterns\n• Generate optimized queries\n• Analyze your data trends\n• Answer questions about your metrics\n\n**Proactive Monitoring:** ${proactiveStatus}\n• Enable: *"enable proactive monitoring"*\n• Disable: *"disable proactive monitoring"*\n• Status: *"monitoring status"*\n\nWhat would you like to explore?`,
+                data: { 
+                    type: 'help',
+                    confidence: 0.95,
+                    dataSources: ['AI Assistant'],
+                    processingType: 'system'
+                },
                 actions: [
                     { label: 'Show Metrics', action: 'showMeasurements' },
-                    { label: 'Find Anomalies', action: 'findAnomalies' }
+                    { label: 'Find Anomalies', action: 'findAnomalies' },
+                    { label: 'Monitoring Status', action: 'proactiveStatus' }
                 ]
             };
         }
@@ -798,7 +1299,11 @@ const AIAgent = {
             "What's the trend for memory usage?",
             "Find correlations between these metrics",
             "Show me system performance insights",
-            "Help me optimize this query"
+            "Help me optimize this query",
+            "Enable proactive monitoring",
+            "What's my monitoring status?",
+            "Turn on alerts for anomalies",
+            "Disable automatic notifications"
         ];
         
         // Randomly select 2 sample sentences
@@ -1096,6 +1601,11 @@ const AIAgent = {
             contentEl.appendChild(errorEl);
         }
         
+        // Add enhanced UI features for assistant messages
+        if (sender === 'assistant') {
+            this.addMessageEnhancements(messageEl, contentEl, data);
+        }
+        
         messageEl.appendChild(avatarEl);
         messageEl.appendChild(contentEl);
 
@@ -1142,6 +1652,310 @@ const AIAgent = {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    },
+
+    // Add enhanced UI features for assistant messages
+    addMessageEnhancements(messageEl, contentEl, data) {
+        console.log('🎨 Adding enhanced UI features, data:', data);
+        
+        try {
+        
+        // Create metadata container
+        const metadataEl = document.createElement('div');
+        metadataEl.className = 'message-metadata';
+        
+        // Add confidence indicator if available
+        if (data && data.confidence) {
+            const confidenceEl = this.createConfidenceIndicator(data.confidence);
+            metadataEl.appendChild(confidenceEl);
+        }
+        
+        // Add data source badges if available
+        if (data && data.dataSources) {
+            const sourcesEl = this.createDataSourceBadges(data.dataSources);
+            metadataEl.appendChild(sourcesEl);
+        }
+        
+        // Add query preview if available
+        if (data && data.generatedQuery) {
+            const queryPreviewEl = this.createQueryPreview(data.generatedQuery);
+            metadataEl.appendChild(queryPreviewEl);
+        }
+        
+        // Add feedback buttons
+        const feedbackEl = this.createFeedbackButtons(messageEl);
+        metadataEl.appendChild(feedbackEl);
+        
+        // Add timestamp
+        const timestampEl = document.createElement('div');
+        timestampEl.className = 'message-timestamp';
+        timestampEl.textContent = new Date().toLocaleTimeString();
+        metadataEl.appendChild(timestampEl);
+        
+        // Insert metadata after content (with null check)
+        if (contentEl && contentEl.parentNode) {
+            contentEl.parentNode.insertBefore(metadataEl, contentEl.nextSibling);
+        } else {
+            console.warn('⚠️ Cannot insert metadata - contentEl or parentNode is null');
+            // Fallback: try to append to messageEl if possible
+            if (messageEl) {
+                messageEl.appendChild(metadataEl);
+            }
+        }
+        
+        } catch (error) {
+            console.error('❌ Error adding message enhancements:', error);
+        }
+    },
+
+    // Create confidence indicator
+    createConfidenceIndicator(confidence) {
+        const container = document.createElement('div');
+        container.className = 'confidence-indicator';
+        
+        const level = confidence >= 0.8 ? 'high' : confidence >= 0.6 ? 'medium' : 'low';
+        const color = level === 'high' ? '#4CAF50' : level === 'medium' ? '#FF9800' : '#f44336';
+        const percentage = Math.round(confidence * 100);
+        
+        container.innerHTML = `
+            <span class="confidence-label">Confidence:</span>
+            <div class="confidence-bar">
+                <div class="confidence-fill" style="width: ${percentage}%; background: ${color}"></div>
+            </div>
+            <span class="confidence-percentage">${percentage}%</span>
+        `;
+        
+        return container;
+    },
+
+    // Create data source badges
+    createDataSourceBadges(dataSources) {
+        const container = document.createElement('div');
+        container.className = 'data-source-badges';
+        
+        const label = document.createElement('span');
+        label.className = 'badges-label';
+        label.textContent = 'Data Sources: ';
+        container.appendChild(label);
+        
+        dataSources.forEach(source => {
+            const badge = document.createElement('span');
+            badge.className = 'data-source-badge';
+            badge.textContent = source;
+            container.appendChild(badge);
+        });
+        
+        return container;
+    },
+
+    // Create query preview with run in editor button
+    createQueryPreview(query, datasourceInfo = null) {
+        const container = document.createElement('div');
+        container.className = 'query-preview';
+        
+        // Action buttons container
+        const actionsContainer = document.createElement('div');
+        actionsContainer.className = 'query-preview-actions';
+        actionsContainer.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+        
+        // Toggle button
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'query-toggle-btn';
+        toggleBtn.textContent = '📋 View Generated Query';
+        
+        // Run in editor button
+        const runBtn = this.createRunInEditorButton(query, datasourceInfo);
+        
+        actionsContainer.appendChild(toggleBtn);
+        actionsContainer.appendChild(runBtn);
+        
+        // Query content
+        const queryContent = document.createElement('div');
+        queryContent.className = 'query-content hidden';
+        queryContent.innerHTML = `<pre><code>${this.escapeHtml(query)}</code></pre>`;
+        
+        // Toggle functionality
+        toggleBtn.addEventListener('click', () => {
+            queryContent.classList.toggle('hidden');
+            toggleBtn.textContent = queryContent.classList.contains('hidden') 
+                ? '📋 View Generated Query' 
+                : '📋 Hide Query';
+        });
+        
+        container.appendChild(actionsContainer);
+        container.appendChild(queryContent);
+        
+        return container;
+    },
+    
+    // Create run in editor button
+    createRunInEditorButton(query, datasourceInfo) {
+        const runBtn = document.createElement('button');
+        runBtn.className = 'query-run-btn';
+        runBtn.innerHTML = '▶️ Run in Editor';
+        
+        // Style the button
+        runBtn.style.cssText = `
+            background: rgba(0, 122, 204, 0.2);
+            border: 1px solid rgba(0, 122, 204, 0.3);
+            color: #4fc3f7;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        `;
+        
+        // Set datasource class for styling
+        const currentDatasourceType = datasourceInfo?.type || GrafanaConfig.selectedDatasourceType || 'influxdb';
+        if (currentDatasourceType === 'prometheus') {
+            runBtn.style.borderColor = 'rgba(255, 152, 0, 0.3)';
+            runBtn.style.color = '#ffb74d';
+        }
+        
+        // Set accessibility attributes
+        const datasourceText = currentDatasourceType ? ` (${currentDatasourceType})` : '';
+        runBtn.setAttribute('aria-label', `Run query in main editor in new tab${datasourceText}`);
+        runBtn.setAttribute('title', `Open this query in the main editor${datasourceText}`);
+        
+        // Hover effect
+        runBtn.addEventListener('mouseenter', () => {
+            runBtn.style.background = 'rgba(0, 122, 204, 0.3)';
+            runBtn.style.borderColor = 'rgba(0, 122, 204, 0.4)';
+            runBtn.style.color = '#81d4fa';
+        });
+        
+        runBtn.addEventListener('mouseleave', () => {
+            runBtn.style.background = 'rgba(0, 122, 204, 0.2)';
+            runBtn.style.borderColor = 'rgba(0, 122, 204, 0.3)';
+            runBtn.style.color = '#4fc3f7';
+        });
+        
+        // Click handler
+        runBtn.addEventListener('click', () => {
+            this.runQueryInEditor(query, datasourceInfo, runBtn);
+        });
+        
+        return runBtn;
+    },
+    
+    // Handle running query in editor
+    async runQueryInEditor(query, datasourceInfo, buttonEl) {
+        // Set loading state
+        const originalContent = buttonEl.innerHTML;
+        buttonEl.innerHTML = '⏳ Opening...';
+        buttonEl.disabled = true;
+        
+        try {
+            // Get current datasource info if not provided
+            const currentDatasourceType = datasourceInfo?.type || GrafanaConfig.selectedDatasourceType || 'influxdb';
+            const currentDatasourceName = datasourceInfo?.name || GrafanaConfig.currentDatasourceName || '';
+            
+            // Prepare data for main window
+            const queryData = {
+                query: query,
+                datasourceName: currentDatasourceName,
+                datasourceType: currentDatasourceType,
+                queryType: currentDatasourceType === 'prometheus' ? 'promql' : 'influxql'
+            };
+            
+            console.log('🚀 Running query in editor:', queryData);
+            
+            // Check if we're in the main window or pop-out
+            if (this.isActivePopout && window.electronAPI && typeof window.electronAPI.runQueryInEditor === 'function') {
+                // Pop-out window - use IPC
+                await window.electronAPI.runQueryInEditor(queryData);
+            } else if (typeof Interface !== 'undefined' && Interface.openAIGeneratedQuery) {
+                // Main window - call directly (we'll implement this method)
+                Interface.openAIGeneratedQuery(queryData);
+            } else {
+                // Fallback - copy to clipboard
+                await navigator.clipboard.writeText(query);
+                throw new Error('Editor not available - query copied to clipboard');
+            }
+            
+            // Success state
+            buttonEl.innerHTML = '✅ Opened';
+            setTimeout(() => {
+                buttonEl.innerHTML = originalContent;
+                buttonEl.disabled = false;
+            }, 1500);
+            
+        } catch (error) {
+            console.error('Failed to run query in editor:', error);
+            
+            // Error state with message
+            buttonEl.innerHTML = error.message.includes('clipboard') ? '📋 Copied' : '❌ Failed';
+            setTimeout(() => {
+                buttonEl.innerHTML = originalContent;
+                buttonEl.disabled = false;
+            }, 2000);
+        }
+    },
+
+    // Create feedback buttons
+    createFeedbackButtons(messageEl) {
+        const container = document.createElement('div');
+        container.className = 'feedback-buttons';
+        
+        const thumbsUp = document.createElement('button');
+        thumbsUp.className = 'feedback-btn thumbs-up';
+        thumbsUp.innerHTML = '👍';
+        thumbsUp.title = 'This response was helpful';
+        
+        const thumbsDown = document.createElement('button');
+        thumbsDown.className = 'feedback-btn thumbs-down';
+        thumbsDown.innerHTML = '👎';
+        thumbsDown.title = 'This response needs improvement';
+        
+        thumbsUp.addEventListener('click', () => {
+            this.submitFeedback('positive', messageEl);
+            thumbsUp.classList.add('selected');
+            thumbsDown.classList.remove('selected');
+        });
+        
+        thumbsDown.addEventListener('click', () => {
+            this.submitFeedback('negative', messageEl);
+            thumbsDown.classList.add('selected');
+            thumbsUp.classList.remove('selected');
+        });
+        
+        container.appendChild(thumbsUp);
+        container.appendChild(thumbsDown);
+        
+        return container;
+    },
+
+    // Submit feedback to improve RAG system
+    submitFeedback(type, messageEl) {
+        console.log(`📝 User feedback: ${type}`);
+        
+        // Send feedback to Advanced AI system for learning
+        if (window.AdvancedAI && window.AdvancedAI.components.ragSystem) {
+            try {
+                window.AdvancedAI.components.ragSystem.recordUserFeedback({
+                    type: type,
+                    messageContent: messageEl.querySelector('.message-content').textContent,
+                    timestamp: new Date().toISOString()
+                });
+                
+                // Show brief confirmation
+                const feedbackContainer = messageEl.querySelector('.feedback-buttons');
+                const confirmation = document.createElement('span');
+                confirmation.className = 'feedback-confirmation';
+                confirmation.textContent = 'Thanks for your feedback!';
+                feedbackContainer.appendChild(confirmation);
+                
+                setTimeout(() => {
+                    if (confirmation.parentNode) {
+                        confirmation.remove();
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Failed to record feedback:', error);
+            }
+        }
     },
 
     // Check if text contains markdown formatting
@@ -1603,16 +2417,29 @@ const AIAgent = {
                 this.saveConversations();
             }
             
-            // Send the response back to the chat window
+            // Send the response back to the chat window with enhanced data
             if (response && response.text) {
-                window.electronAPI.sendChatResponse(response.text);
-                console.log('✅ Response sent to chat window');
+                // Send full response object to support enhanced UI features in pop-out
+                const enhancedResponse = {
+                    text: response.text,
+                    data: response.data || {},
+                    actions: response.actions || [],
+                    timestamp: new Date().toISOString()
+                };
+                window.electronAPI.sendChatResponse(enhancedResponse);
+                console.log('✅ Enhanced response sent to chat window with data:', enhancedResponse.data);
             }
             
         } catch (error) {
             console.error('Error processing chat window message:', error);
             // Send error response to chat window
-            window.electronAPI.sendChatResponse('I encountered an error processing your request. Please try again.');
+            const errorResponse = {
+                text: 'I encountered an error processing your request. Please try again.',
+                data: { type: 'error', error: error.message },
+                actions: [],
+                timestamp: new Date().toISOString()
+            };
+            window.electronAPI.sendChatResponse(errorResponse);
         } finally {
             // Hide loading in chat window
             window.electronAPI.hideChatLoading();
@@ -1783,6 +2610,12 @@ const AIAgent = {
             errorEl.className = 'message-error';
             errorEl.textContent = typeof data.error === 'string' ? data.error : 'An error occurred';
             contentEl.appendChild(errorEl);
+        }
+        
+        // Add enhanced UI features for assistant messages (same as main addMessage method)
+        if (sender === 'assistant') {
+            console.log('🚀 About to call addMessageEnhancements from addMessageDirectlyToSidebar');
+            this.addMessageEnhancements(messageEl, contentEl, data);
         }
         
         messageEl.appendChild(avatarEl);

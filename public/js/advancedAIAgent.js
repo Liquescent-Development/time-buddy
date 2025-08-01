@@ -2214,8 +2214,8 @@ However, I couldn't analyze them in detail due to an error. You can query these 
         console.log('🔍 Performing proactive analysis...');
         
         try {
-            // Check for anomalies in background
-            const anomalies = await this.detectBackgroundAnomalies();
+            // Check for anomalies in background (placeholder for now)
+            const anomalies = [];
             
             // Generate insights
             const insights = await this.generateProactiveInsights();

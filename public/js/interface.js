@@ -183,6 +183,60 @@ const Interface = {
         this.switchTab('untitled-1');
     },
 
+    // Open AI-generated query in a new tab
+    openAIGeneratedQuery(queryData) {
+        console.log('📝 Opening AI-generated query in new tab:', queryData);
+        
+        // Create a new tab
+        const tabId = this.createNewTab();
+        
+        // Wait for tab to be ready, then set content
+        setTimeout(() => {
+            const tabData = this.tabs.get(tabId);
+            if (tabData && tabData.editor) {
+                // Set the query text
+                tabData.editor.setValue(queryData.query);
+                
+                // Set query type if available
+                if (queryData.queryType) {
+                    // Update the query type selector if it exists
+                    const queryTypeSelector = document.querySelector(`#tab-${tabId} .query-type-selector`);
+                    if (queryTypeSelector) {
+                        queryTypeSelector.value = queryData.queryType;
+                    }
+                    
+                    // Update CodeMirror mode
+                    if (queryData.queryType === 'promql') {
+                        tabData.editor.setOption('mode', 'promql');
+                    } else {
+                        tabData.editor.setOption('mode', 'text/x-sql');
+                    }
+                }
+                
+                // Try to set datasource if available
+                if (queryData.datasourceName) {
+                    // Look for matching datasource in connections
+                    const connections = Storage.getSavedConnections();
+                    for (const [id, connection] of Object.entries(connections)) {
+                        if (connection.name === queryData.datasourceName) {
+                            // Found matching datasource - connect to it
+                            Connections.connectToSavedConnection(id);
+                            break;
+                        }
+                    }
+                }
+                
+                // Focus the new tab
+                this.focusTab(tabId);
+                
+                // Show a notification
+                Utils.showNotification('Query opened in new tab', 'success');
+            }
+        }, 100);
+        
+        return tabId;
+    },
+    
     createNewTab() {
         this.tabCounter++;
         const tabId = `untitled-${this.tabCounter}`;

@@ -41,10 +41,11 @@ class AdvancedAIIntegration {
             // Enable advanced capabilities
             await this.enableAdvancedCapabilities();
             
-            // Note: Proactive systems disabled to prevent renderer crashes
-            console.log('ℹ️ Proactive systems disabled to prevent renderer crashes');
-            
-            // TODO: Re-enable once proactive messaging is fixed with proper rate limiting
+            // Proactive monitoring is now opt-in - user must enable it
+            if (this.components.proactiveMonitoring) {
+                console.log('💡 Proactive monitoring available - user can enable via AI Assistant settings');
+                this.capabilities.proactiveInsights = false; // Start disabled
+            }
             
             this.isInitialized = true;
             console.log('✅ Advanced AI Integration System fully initialized');
@@ -116,11 +117,15 @@ class AdvancedAIIntegration {
     async initializeComponents() {
         console.log('🔄 Initializing AI components...');
         
-        // Check that all required classes are available
+        // Check that all required classes are available (ProactiveMonitoringSystem is optional)
         const requiredClasses = {
             TimeSeriesRAGSystem: window.TimeSeriesRAGSystem,
             IntelligentQueryGenerator: window.IntelligentQueryGenerator, 
-            AdvancedAIAgent: window.AdvancedAIAgent,
+            AdvancedAIAgent: window.AdvancedAIAgent
+        };
+        
+        // Optional classes that enhance functionality but aren't required
+        const optionalClasses = {
             ProactiveMonitoringSystem: window.ProactiveMonitoringSystem
         };
         
@@ -162,14 +167,17 @@ class AdvancedAIIntegration {
             throw error;
         }
         
-        // Initialize Proactive Monitoring (disabled to prevent crashes)
-        try {
-            // Create but don't initialize to prevent renderer crashes
-            this.components.proactiveMonitoring = new ProactiveMonitoringSystem();
-            console.log('✅ Proactive Monitoring created (initialization disabled to prevent crashes)');
-        } catch (error) {
-            console.log('ℹ️ Proactive Monitoring disabled (component not available):', error.message);
-            // Don't throw - this is non-critical
+        // Initialize Proactive Monitoring (optional component)
+        if (optionalClasses.ProactiveMonitoringSystem) {
+            try {
+                this.components.proactiveMonitoring = new ProactiveMonitoringSystem();
+                console.log('✅ Proactive Monitoring component available (opt-in required to activate)');
+            } catch (error) {
+                console.log('⚠️ Proactive Monitoring component failed to initialize:', error.message);
+                // Don't throw - this is non-critical
+            }
+        } else {
+            console.log('ℹ️ Proactive Monitoring component not available (this is normal)');
         }
         
         console.log('✅ All critical AI components initialized');
@@ -187,14 +195,20 @@ class AdvancedAIIntegration {
         // Connect Query Generator to RAG System
         this.components.queryGenerator.ragSystem = this.components.ragSystem;
         
-        // Set up proactive monitoring callbacks
-        this.components.proactiveMonitoring.onInsightGenerated = (insight) => {
-            this.handleProactiveInsight(insight);
-        };
-        
-        this.components.proactiveMonitoring.onAnomalyDetected = (anomaly) => {
-            this.handleAnomalyDetection(anomaly);
-        };
+        // Set up proactive monitoring callbacks (if available)
+        if (this.components.proactiveMonitoring) {
+            this.components.proactiveMonitoring.onInsightGenerated = (insight) => {
+                this.handleProactiveInsight(insight);
+            };
+            
+            this.components.proactiveMonitoring.onAnomalyDetected = (anomaly) => {
+                this.handleAnomalyDetection(anomaly);
+            };
+            
+            console.log('✅ Proactive monitoring callbacks configured');
+        } else {
+            console.log('ℹ️ Proactive monitoring not available, skipping callbacks');
+        }
         
         console.log('✅ Component integration complete');
     }
@@ -225,8 +239,8 @@ class AdvancedAIIntegration {
     async startProactiveSystems() {
         console.log('🔄 Starting proactive systems...');
         
-        // Start proactive monitoring if datasource is connected
-        if (GrafanaConfig.connected) {
+        // Start proactive monitoring if datasource is connected and component is available
+        if (GrafanaConfig.connected && this.components.proactiveMonitoring) {
             await this.components.proactiveMonitoring.startMonitoring();
         }
         
@@ -234,6 +248,45 @@ class AdvancedAIIntegration {
         this.watchForDatasourceChanges();
         
         console.log('✅ Proactive systems started');
+    }
+
+    async startProactiveSystemsSafely() {
+        try {
+            console.log('🔄 Starting proactive systems with safety controls...');
+            
+            // Initialize rate limiting for proactive messages
+            this.proactiveMessageLimiter = {
+                lastMessage: 0,
+                minInterval: 30000, // 30 seconds minimum between messages
+                messageQueue: [],
+                maxQueueSize: 10
+            };
+            
+            // Start proactive monitoring with safety controls
+            if (GrafanaConfig.connected && this.components.proactiveMonitoring) {
+                // Configure the monitoring with reduced frequency
+                this.components.proactiveMonitoring.config = {
+                    ...this.components.proactiveMonitoring.config,
+                    checkInterval: 60000, // Check every 60 seconds instead of default
+                    maxAlertsPerHour: 5,   // Limit alerts
+                    minSeverityLevel: 0.7  // Only show high-severity alerts
+                };
+                
+                await this.components.proactiveMonitoring.startMonitoring();
+                console.log('✅ Proactive monitoring started with safety controls');
+            } else {
+                console.log('⏳ Proactive monitoring will start when datasource connects');
+            }
+            
+            // Listen for datasource connection changes
+            this.watchForDatasourceChanges();
+            
+            this.capabilities.proactiveInsights = true;
+            
+        } catch (error) {
+            console.error('❌ Failed to start proactive systems safely:', error);
+            // Don't let proactive system failures break the entire initialization
+        }
     }
 
     // Natural Language Interface Setup
@@ -423,7 +476,7 @@ Keep it concise and actionable.`;
             window.connectToGrafana = async (...args) => {
                 const result = await originalConnect(...args);
                 
-                if (GrafanaConfig.connected) {
+                if (GrafanaConfig.connected && this.components.proactiveMonitoring) {
                     console.log('🔄 Datasource connected - starting proactive monitoring');
                     await this.components.proactiveMonitoring.startMonitoring();
                 }
@@ -645,24 +698,38 @@ window.initializeAdvancedAIWhenReady = async function() {
         return;
     }
     
-    // Check if required classes are available
-    const requiredClasses = ['AdvancedAIAgent', 'TimeSeriesRAGSystem', 'IntelligentQueryGenerator', 'ProactiveMonitoringSystem'];
+    // Check if required classes are available (ProactiveMonitoringSystem is optional since it's opt-in)
+    const requiredClasses = ['AdvancedAIAgent', 'TimeSeriesRAGSystem', 'IntelligentQueryGenerator'];
     const missingClasses = requiredClasses.filter(className => !window[className]);
     
     if (missingClasses.length > 0) {
         console.warn('⏳ Some AI classes not yet available:', missingClasses);
         console.log('🔄 Will retry in 1 second...');
         
-        // Schedule retry
+        // Schedule retry with limit to prevent infinite loops
+        if (!window.advancedAIRetryCount) window.advancedAIRetryCount = 0;
+        window.advancedAIRetryCount++;
+        
+        if (window.advancedAIRetryCount > 15) {
+            console.warn('❌ Advanced AI initialization failed after 15 retries. Stopping to prevent infinite loop.');
+            console.log('💡 This is normal if some AI components are not available.');
+            console.log('🔧 To manually retry: delete window.advancedAIRetryCount; window.initializeAdvancedAIWhenReady()');
+            return;
+        }
+        
         setTimeout(() => {
             window.initializeAdvancedAIWhenReady();
-        }, 1000);
+        }, Math.min(1000 + (window.advancedAIRetryCount * 200), 3000));
         
         return;
     }
     
     console.log('✅ All required AI classes are available');
     console.log('🚀 Starting Advanced AI initialization...');
+    
+    // Reset retry counter on successful prerequisite check
+    delete window.advancedAIRetryCount;
+    
     window.advancedAIInitializing = true;
     
     try {

@@ -889,8 +889,323 @@ function createChatWindow(options = {}) {
             messageEl.appendChild(avatarEl);
             messageEl.appendChild(contentEl);
             
+            // Add enhanced UI features for assistant messages
+            if (sender === 'assistant' && data) {
+                addMessageEnhancements(messageEl, contentEl, data);
+            }
+            
             messages.appendChild(messageEl);
             messages.scrollTop = messages.scrollHeight;
+        }
+        
+        // Add enhanced UI features for assistant messages (pop-out window version)
+        function addMessageEnhancements(messageEl, contentEl, data) {
+            try {
+                console.log('🎨 Adding enhanced UI features to pop-out window, data:', data);
+                console.log('🔍 Data properties:', {
+                    hasConfidence: data && data.confidence !== undefined,
+                    hasDataSources: data && data.dataSources !== undefined,
+                    hasGeneratedQuery: data && data.generatedQuery !== undefined,
+                    dataKeys: data ? Object.keys(data) : 'no data'
+                });
+                
+                // Create metadata container
+                const metadataEl = document.createElement('div');
+                metadataEl.className = 'message-metadata';
+                metadataEl.style.cssText = 'margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; font-size: 11px; color: #ccc;';
+                
+                // Add confidence indicator if available
+                if (data && data.confidence) {
+                    const confidenceEl = createConfidenceIndicator(data.confidence);
+                    metadataEl.appendChild(confidenceEl);
+                }
+                
+                // Add data source badges if available
+                if (data && data.dataSources) {
+                    const sourcesEl = createDataSourceBadges(data.dataSources);
+                    metadataEl.appendChild(sourcesEl);
+                }
+                
+                // Add query preview if available (check multiple sources)
+                let queryToPreview = null;
+                if (data && data.generatedQuery) {
+                    queryToPreview = data.generatedQuery;
+                } else if (data && (data.type === 'field_analysis' || data.type === 'advanced')) {
+                    // Try to extract queries from the message content for analysis responses
+                    const messageText = contentEl.textContent || contentEl.innerText || '';
+                    console.log('🔍 Checking for queries in message text:', messageText.substring(0, 200) + '...');
+                    
+                    // Look for SELECT statements in the text (markdown may be rendered as HTML)
+                    if (messageText.includes('SELECT')) {
+                        // Look for <pre><code> blocks or <code> elements that contain SELECT
+                        const codeElements = contentEl.querySelectorAll('pre, code');
+                        const queries = [];
+                        
+                        codeElements.forEach(el => {
+                            const codeText = el.textContent || el.innerText || '';
+                            if (codeText.includes('SELECT')) {
+                                queries.push(codeText.trim());
+                            }
+                        });
+                        
+                        if (queries.length > 0) {
+                            queryToPreview = queries.join('\\n\\n--- Next Query ---\\n\\n');
+                            console.log('✅ Found', queries.length, 'queries in code elements');
+                        } else {
+                            // Fallback: look for SELECT in plain text
+                            const selectMatches = messageText.match(/SELECT[\\s\\S]*?;/gi);
+                            if (selectMatches && selectMatches.length > 0) {
+                                queryToPreview = selectMatches.join('\\n\\n');
+                                console.log('✅ Found', selectMatches.length, 'queries in plain text');
+                            }
+                        }
+                    }
+                }
+                
+                if (queryToPreview) {
+                    console.log('📋 Adding query preview with content:', queryToPreview.substring(0, 100) + '...');
+                    const queryPreviewEl = createQueryPreview(queryToPreview);
+                    metadataEl.appendChild(queryPreviewEl);
+                } else {
+                    console.log('⚠️ No query content found for preview');
+                }
+                
+                // Add feedback buttons
+                const feedbackEl = createFeedbackButtons(messageEl);
+                metadataEl.appendChild(feedbackEl);
+                
+                // Add timestamp (make it more visible)
+                const timestampEl = document.createElement('div');
+                timestampEl.className = 'message-timestamp';
+                timestampEl.style.cssText = 'margin-top: 6px; font-size: 11px; color: #aaa; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px;';
+                timestampEl.textContent = '🕒 ' + new Date().toLocaleTimeString();
+                metadataEl.appendChild(timestampEl);
+                
+                // Insert metadata after content
+                contentEl.parentNode.insertBefore(metadataEl, contentEl.nextSibling);
+                
+            } catch (error) {
+                console.error('❌ Error adding message enhancements in pop-out:', error);
+            }
+        }
+        
+        // Create confidence indicator (pop-out window version)
+        function createConfidenceIndicator(confidence) {
+            const container = document.createElement('div');
+            container.className = 'confidence-indicator';
+            container.style.cssText = 'display: flex; align-items: center; margin-bottom: 4px;';
+            
+            const level = confidence >= 0.8 ? 'high' : confidence >= 0.6 ? 'medium' : 'low';
+            const color = level === 'high' ? '#4CAF50' : level === 'medium' ? '#FF9800' : '#f44336';
+            const percentage = Math.round(confidence * 100);
+            
+            container.innerHTML = \`
+                <span style="font-size: 10px; margin-right: 6px;">Confidence:</span>
+                <div style="flex: 1; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-right: 6px;">
+                    <div style="width: \${percentage}%; height: 100%; background: \${color}; border-radius: 2px;"></div>
+                </div>
+                <span style="font-size: 10px;">\${percentage}%</span>
+            \`;
+            
+            return container;
+        }
+        
+        // Create data source badges (pop-out window version)
+        function createDataSourceBadges(dataSources) {
+            const container = document.createElement('div');
+            container.className = 'data-source-badges';
+            container.style.cssText = 'margin-bottom: 4px;';
+            
+            const label = document.createElement('span');
+            label.style.cssText = 'font-size: 10px; margin-right: 6px;';
+            label.textContent = 'Data Sources: ';
+            container.appendChild(label);
+            
+            dataSources.forEach(source => {
+                const badge = document.createElement('span');
+                badge.className = 'data-source-badge';
+                badge.style.cssText = 'display: inline-block; background: rgba(107, 70, 193, 0.3); color: #fff; padding: 2px 6px; border-radius: 12px; font-size: 9px; margin-right: 4px;';
+                badge.textContent = source;
+                container.appendChild(badge);
+            });
+            
+            return container;
+        }
+        
+        // Create query preview with run in editor button (pop-out window version)
+        function createQueryPreview(query, datasourceInfo = null) {
+            const container = document.createElement('div');
+            container.className = 'query-preview';
+            container.style.cssText = 'margin-bottom: 4px;';
+            
+            // Action buttons container
+            const actionsContainer = document.createElement('div');
+            actionsContainer.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+            
+            // Toggle button
+            const toggleBtn = document.createElement('button');
+            toggleBtn.className = 'query-toggle-btn';
+            toggleBtn.style.cssText = 'background: rgba(255,255,255,0.1); border: none; color: #ccc; padding: 4px 8px; border-radius: 4px; font-size: 10px; cursor: pointer;';
+            toggleBtn.textContent = '📋 View Generated Query';
+            
+            // Run in editor button
+            const runBtn = createRunInEditorButton(query, datasourceInfo);
+            
+            actionsContainer.appendChild(toggleBtn);
+            actionsContainer.appendChild(runBtn);
+            
+            // Query content
+            const queryContent = document.createElement('div');
+            queryContent.className = 'query-content hidden';
+            queryContent.style.cssText = 'margin-top: 6px; background: rgba(0,0,0,0.3); padding: 8px; border-radius: 4px; font-family: monospace; font-size: 11px; display: none;';
+            queryContent.innerHTML = \`<pre style="margin: 0; white-space: pre-wrap;">\${escapeHtml(query)}</pre>\`;
+            
+            // Toggle functionality
+            toggleBtn.addEventListener('click', () => {
+                const isHidden = queryContent.style.display === 'none';
+                queryContent.style.display = isHidden ? 'block' : 'none';
+                toggleBtn.textContent = isHidden ? '📋 Hide Query' : '📋 View Generated Query';
+            });
+            
+            container.appendChild(actionsContainer);
+            container.appendChild(queryContent);
+            
+            return container;
+        }
+        
+        // Create run in editor button (pop-out window version)
+        function createRunInEditorButton(query, datasourceInfo) {
+            const runBtn = document.createElement('button');
+            runBtn.className = 'query-run-btn';
+            runBtn.innerHTML = '▶️ Run in Editor';
+            
+            // Style the button
+            runBtn.style.cssText = \`
+                background: rgba(0, 122, 204, 0.2);
+                border: 1px solid rgba(0, 122, 204, 0.3);
+                color: #4fc3f7;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 10px;
+                cursor: pointer;
+                transition: all 0.2s;
+            \`;
+            
+            // Set datasource styling
+            const currentDatasourceType = datasourceInfo?.type || 'influxdb';
+            if (currentDatasourceType === 'prometheus') {
+                runBtn.style.borderColor = 'rgba(255, 152, 0, 0.3)';
+                runBtn.style.color = '#ffb74d';
+            }
+            
+            // Set accessibility attributes
+            const datasourceText = currentDatasourceType ? \` (\${currentDatasourceType})\` : '';
+            runBtn.setAttribute('aria-label', \`Run query in main editor in new tab\${datasourceText}\`);
+            runBtn.setAttribute('title', \`Open this query in the main editor\${datasourceText}\`);
+            
+            // Hover effect
+            runBtn.addEventListener('mouseenter', () => {
+                runBtn.style.background = 'rgba(0, 122, 204, 0.3)';
+                runBtn.style.borderColor = 'rgba(0, 122, 204, 0.4)';
+                runBtn.style.color = '#81d4fa';
+            });
+            
+            runBtn.addEventListener('mouseleave', () => {
+                runBtn.style.background = 'rgba(0, 122, 204, 0.2)';
+                runBtn.style.borderColor = 'rgba(0, 122, 204, 0.3)';
+                runBtn.style.color = '#4fc3f7';
+            });
+            
+            // Click handler
+            runBtn.addEventListener('click', async () => {
+                // Set loading state
+                const originalContent = runBtn.innerHTML;
+                runBtn.innerHTML = '⏳ Opening...';
+                runBtn.disabled = true;
+                
+                try {
+                    // Prepare query data
+                    const queryData = {
+                        query: query,
+                        datasourceType: currentDatasourceType,
+                        queryType: currentDatasourceType === 'prometheus' ? 'promql' : 'influxql'
+                    };
+                    
+                    console.log('🚀 Running query in editor from pop-out:', queryData);
+                    
+                    // Send to main window via IPC
+                    if (window.electronAPI && typeof window.electronAPI.runQueryInEditor === 'function') {
+                        await window.electronAPI.runQueryInEditor(queryData);
+                        // Success state
+                        runBtn.innerHTML = '✅ Opened';
+                    } else {
+                        // Fallback - copy to clipboard
+                        await navigator.clipboard.writeText(query);
+                        runBtn.innerHTML = '📋 Copied';
+                    }
+                    
+                    setTimeout(() => {
+                        runBtn.innerHTML = originalContent;
+                        runBtn.disabled = false;
+                    }, 1500);
+                    
+                } catch (error) {
+                    console.error('Failed to run query in editor:', error);
+                    
+                    // Error state
+                    runBtn.innerHTML = '❌ Failed';
+                    setTimeout(() => {
+                        runBtn.innerHTML = originalContent;
+                        runBtn.disabled = false;
+                    }, 2000);
+                }
+            });
+            
+            return runBtn;
+        }
+        
+        // Create feedback buttons (pop-out window version)
+        function createFeedbackButtons(messageEl) {
+            const container = document.createElement('div');
+            container.className = 'feedback-buttons';
+            container.style.cssText = 'margin-bottom: 4px;';
+            
+            const likeBtn = document.createElement('button');
+            likeBtn.style.cssText = 'background: none; border: none; color: #ccc; font-size: 12px; cursor: pointer; margin-right: 8px; padding: 2px 4px;';
+            likeBtn.textContent = '👍';
+            likeBtn.title = 'Good response';
+            
+            const dislikeBtn = document.createElement('button');
+            dislikeBtn.style.cssText = 'background: none; border: none; color: #ccc; font-size: 12px; cursor: pointer; padding: 2px 4px;';
+            dislikeBtn.textContent = '👎';
+            dislikeBtn.title = 'Poor response';
+            
+            likeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                likeBtn.style.color = '#4CAF50';
+                dislikeBtn.style.color = '#ccc';
+                console.log('👍 User liked the response in pop-out window');
+                // Visual feedback
+                likeBtn.style.transform = 'scale(1.2)';
+                setTimeout(() => { likeBtn.style.transform = 'scale(1)'; }, 200);
+            });
+            
+            dislikeBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dislikeBtn.style.color = '#f44336';
+                likeBtn.style.color = '#ccc';
+                console.log('👎 User disliked the response in pop-out window');
+                // Visual feedback
+                dislikeBtn.style.transform = 'scale(1.2)';
+                setTimeout(() => { dislikeBtn.style.transform = 'scale(1)'; }, 200);
+            });
+            
+            container.appendChild(likeBtn);
+            container.appendChild(dislikeBtn);
+            
+            return container;
         }
         
         // Check if text contains markdown formatting
@@ -1044,10 +1359,19 @@ function createChatWindow(options = {}) {
         }
         
         // Listen for messages from main window
-        window.electronAPI.onChatMessage((message) => {
+        window.electronAPI.onChatMessage((response) => {
             // Hide AI loading indicator before adding response
             hideAILoading();
-            addMessage('assistant', message);
+            
+            // Handle both legacy string format and enhanced object format
+            if (typeof response === 'string') {
+                addMessage('assistant', response);
+            } else if (response && typeof response === 'object') {
+                addMessage('assistant', response.text, response.data);
+            } else {
+                console.warn('Invalid response format received:', response);
+                addMessage('assistant', 'I received an invalid response format.');
+            }
         });
         
         // Listen for conversation loading
@@ -1504,17 +1828,25 @@ ipcMain.handle('send-chat-message', async (event, message) => {
 });
 
 ipcMain.handle('send-chat-response', async (event, response) => {
-    // SECURITY FIX: Validate response before forwarding
-    if (typeof response !== 'string') {
+    // SECURITY FIX: Validate response before forwarding (supports enhanced objects)
+    let validatedResponse;
+    
+    if (typeof response === 'string') {
+        // Legacy string format
+        if (response.length > 50000) {
+            throw new Error('Response too long');
+        }
+        validatedResponse = response;
+    } else if (response && typeof response === 'object') {
+        // Enhanced object format - already validated in preload.js
+        validatedResponse = response;
+    } else {
         throw new Error('Invalid response type');
-    }
-    if (response.length > 50000) {
-        throw new Error('Response too long');
     }
     
     // Forward response to chat window
     if (chatWindow && !chatWindow.isDestroyed()) {
-        chatWindow.webContents.send('chat-response', response);
+        chatWindow.webContents.send('chat-response', validatedResponse);
     }
 });
 
@@ -1522,6 +1854,29 @@ ipcMain.handle('send-chat-response', async (event, response) => {
 ipcMain.handle('show-chat-loading', async (event) => {
     if (chatWindow && !chatWindow.isDestroyed()) {
         chatWindow.webContents.executeJavaScript('showAILoading()');
+    }
+});
+
+// Run query in editor from chat window
+ipcMain.handle('run-query-in-editor', async (event, queryData) => {
+    console.log('🚀 IPC: run-query-in-editor called with:', queryData);
+    
+    // SECURITY FIX: Validate query data
+    if (!queryData || typeof queryData !== 'object') {
+        throw new Error('Invalid query data');
+    }
+    
+    // Send to main window to open in editor
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('open-query-in-editor', queryData);
+        
+        // Focus the main window
+        mainWindow.show();
+        mainWindow.focus();
+        
+        return { success: true };
+    } else {
+        throw new Error('Main window not available');
     }
 });
 

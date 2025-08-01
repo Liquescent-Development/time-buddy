@@ -41,9 +41,27 @@ const App = {
             console.log('Initializing AI Agent...');
             AIAgent.initialize();
         }
+        
+        // Listen for IPC messages from pop-out chat window (Electron only)
+        this.setupElectronListeners();
     },
     
     // Set default application state
+    // Setup Electron-specific listeners
+    setupElectronListeners() {
+        if (window.electronAPI && window.electronAPI.onOpenQueryInEditor) {
+            console.log('🔌 Setting up Electron listeners for AI query integration');
+            
+            // Listen for queries from pop-out chat window
+            window.electronAPI.onOpenQueryInEditor((queryData) => {
+                console.log('📝 Received query from chat window:', queryData);
+                if (typeof Interface !== 'undefined' && Interface.openAIGeneratedQuery) {
+                    Interface.openAIGeneratedQuery(queryData);
+                }
+            });
+        }
+    },
+    
     setDefaultApplicationState() {
         // Set default query type
         GrafanaConfig.currentQueryType = 'influxql';
@@ -596,6 +614,32 @@ window.onload = function() {
         FileExplorer.initialize();
     }
     
+    // Initialize Advanced AI System after a short delay
+    setTimeout(async () => {
+        console.log('🤖 Checking AI service connection for Advanced AI initialization...');
+        
+        // Check if AI service is connected
+        const aiConnected = (window.OpenAIService && window.OpenAIService.isConnected) || 
+                          (window.OllamaService && window.OllamaService.isConnected);
+        
+        if (aiConnected) {
+            console.log('✅ AI service connected, initializing Advanced AI System...');
+            
+            // Initialize advanced AI if not already done
+            if (!window.AdvancedAI) {
+                window.AdvancedAI = new AdvancedAIIntegration();
+            }
+            
+            try {
+                await window.AdvancedAI.initialize();
+                console.log('🚀 Advanced AI System initialized successfully');
+            } catch (error) {
+                console.error('❌ Failed to initialize Advanced AI:', error);
+            }
+        } else {
+            console.log('⏳ AI service not connected. Advanced AI will initialize when service connects.');
+        }
+    }, 2000);
     
     // Expose debug functions to global scope for console access
     window.debugStorage = Storage.debugLocalStorage.bind(Storage);

@@ -49,14 +49,30 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('send-chat-message', message);
     },
     sendChatResponse: (response) => {
-        // SECURITY FIX: Validate chat response
-        if (typeof response !== 'string') {
-            throw new Error('Chat response must be a string');
+        // SECURITY FIX: Validate chat response (supports both string and enhanced object format)
+        if (typeof response === 'string') {
+            // Legacy string format
+            if (response.length > 50000) {
+                throw new Error('Chat response too long (max 50,000 characters)');
+            }
+            return ipcRenderer.invoke('send-chat-response', response);
+        } else if (response && typeof response === 'object') {
+            // Enhanced object format with metadata
+            const validatedResponse = {
+                text: typeof response.text === 'string' ? response.text.substring(0, 50000) : '',
+                data: response.data && typeof response.data === 'object' ? {
+                    type: typeof response.data.type === 'string' ? response.data.type.substring(0, 50) : '',
+                    confidence: typeof response.data.confidence === 'number' ? response.data.confidence : undefined,
+                    dataSources: Array.isArray(response.data.dataSources) ? response.data.dataSources.slice(0, 10) : undefined,
+                    generatedQuery: typeof response.data.generatedQuery === 'string' ? response.data.generatedQuery.substring(0, 5000) : undefined
+                } : {},
+                actions: Array.isArray(response.actions) ? response.actions.slice(0, 5) : [],
+                timestamp: typeof response.timestamp === 'string' ? response.timestamp : new Date().toISOString()
+            };
+            return ipcRenderer.invoke('send-chat-response', validatedResponse);
+        } else {
+            throw new Error('Chat response must be a string or enhanced response object');
         }
-        if (response.length > 50000) {
-            throw new Error('Chat response too long (max 50,000 characters)');
-        }
-        return ipcRenderer.invoke('send-chat-response', response);
     },
     showChatLoading: () => ipcRenderer.invoke('show-chat-loading'),
     hideChatLoading: () => ipcRenderer.invoke('hide-chat-loading'),
@@ -66,6 +82,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onChatMessageFromPopup: (callback) => ipcRenderer.on('chat-message-from-popup', (event, message) => callback(message)),
     onLoadConversation: (callback) => ipcRenderer.on('load-conversation', (event, conversation) => callback(conversation)),
     onChatWindowClosed: (callback) => ipcRenderer.on('chat-window-closed', callback),
+    
+    // Run query in editor from chat window
+    runQueryInEditor: (queryData) => {
+        // SECURITY FIX: Validate query data
+        if (queryData && typeof queryData === 'object') {
+            const validatedData = {
+                query: typeof queryData.query === 'string' ? queryData.query.substring(0, 50000) : '',
+                datasourceName: typeof queryData.datasourceName === 'string' ? queryData.datasourceName.substring(0, 200) : '',
+                datasourceType: typeof queryData.datasourceType === 'string' ? queryData.datasourceType.substring(0, 50) : 'influxdb',
+                queryType: typeof queryData.queryType === 'string' ? queryData.queryType.substring(0, 50) : 'influxql'
+            };
+            return ipcRenderer.invoke('run-query-in-editor', validatedData);
+        }
+        throw new Error('Invalid query data');
+    },
     
     // Menu event listeners
     onMenuAction: (callback) => {
@@ -81,6 +112,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('menu-import-connection', callback);
         ipcRenderer.on('menu-export-connection', callback);
     },
+    
+    // Query editor integration
+    onOpenQueryInEditor: (callback) => ipcRenderer.on('open-query-in-editor', (event, queryData) => callback(queryData)),
     
     // Remove listeners
     removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
