@@ -869,85 +869,16 @@ const Schema = {
             datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId || GrafanaConfig.selectedDatasourceId;
         }
         
-        if (!datasourceNumericId) {
-            console.warn('No datasource ID available for schema query');
-            return null;
+        
+        // Use centralized query execution
+        if (typeof Queries !== 'undefined' && Queries.executeQueryDirect) {
+            return await Queries.executeQueryDirect(query, {
+                datasourceType: 'influxdb',
+                maxDataPoints: 10000
+            });
+        } else {
+            throw new Error('Centralized query system not available');
         }
-        
-        let requestBody;
-        let urlParams = '';
-        
-        const now = Date.now();
-        const fromTime = now - (60 * 60 * 1000); // 1 hour ago
-        const toTime = now;
-        
-        if (datasourceType === 'prometheus') {
-            const requestId = Math.random().toString(36).substr(2, 9);
-            urlParams = '?ds_type=prometheus&requestId=' + requestId;
-            
-            requestBody = {
-                queries: [{
-                    refId: 'A',
-                    datasource: { 
-                        uid: this.currentDatasourceId,
-                        type: 'prometheus'
-                    },
-                    expr: query,
-                    instant: true,
-                    interval: '',
-                    legendFormat: '',
-                    editorMode: 'code',
-                    exemplar: false,
-                    requestId: requestId.substr(0, 3).toUpperCase(),
-                    utcOffsetSec: new Date().getTimezoneOffset() * -60,
-                    scopes: [],
-                    adhocFilters: [],
-                    datasourceId: parseInt(datasourceNumericId),
-                    intervalMs: 15000,
-                    maxDataPoints: 10000
-                }],
-                from: fromTime.toString(),
-                to: toTime.toString()
-            };
-        } else if (datasourceType === 'influxdb') {
-            const requestId = Math.random().toString(36).substr(2, 9);
-            urlParams = '?ds_type=influxdb&requestId=' + requestId;
-            
-            requestBody = {
-                queries: [{
-                    refId: 'A',
-                    datasource: { 
-                        uid: this.currentDatasourceId,
-                        type: 'influxdb'
-                    },
-                    query: query,
-                    rawQuery: true,
-                    resultFormat: 'time_series',
-                    requestId: requestId.substr(0, 3).toUpperCase(),
-                    utcOffsetSec: new Date().getTimezoneOffset() * -60,
-                    datasourceId: parseInt(datasourceNumericId),
-                    intervalMs: 15000,
-                    maxDataPoints: 10000
-                }],
-                from: fromTime.toString(),
-                to: toTime.toString()
-            };
-        }
-        
-        const response = await API.makeApiRequest('/api/ds/query' + urlParams, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
-        });
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error('Schema query failed: ' + response.statusText + ' - ' + errorText);
-        }
-        
-        return await response.json();
     },
     
     // Load tags associated with a specific field
@@ -2273,3 +2204,6 @@ function filterTagValuesList(searchTerm, tag, field, measurement) {
     
     valuesContainer.innerHTML = valuesHtml;
 }
+
+// Export Schema to global window for access by other modules
+window.Schema = Schema;

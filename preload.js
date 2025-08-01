@@ -16,6 +16,57 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Grafana API requests
     grafanaRequest: (options) => ipcRenderer.invoke('grafana-api-request', options),
     
+    // Chat window functionality with security validation
+    openChatWindow: (options) => {
+        // SECURITY FIX: Validate chat window options
+        if (options && typeof options === 'object') {
+            const validatedOptions = {
+                conversation: options.conversation && typeof options.conversation === 'object' ? {
+                    messages: Array.isArray(options.conversation.messages) ? 
+                        options.conversation.messages.slice(0, 100).map(msg => ({
+                            sender: typeof msg.sender === 'string' ? msg.sender.substring(0, 20) : 'user',
+                            text: typeof msg.text === 'string' ? msg.text.substring(0, 10000) : '',
+                            data: null // Don't pass complex data objects
+                        })) : []
+                } : { messages: [] }
+            };
+            return ipcRenderer.invoke('open-chat-window', validatedOptions);
+        }
+        return ipcRenderer.invoke('open-chat-window', { conversation: { messages: [] } });
+    },
+    closeChatWindow: () => ipcRenderer.invoke('close-chat-window'),
+    sendChatMessage: (message) => {
+        // SECURITY FIX: Validate chat message
+        if (typeof message !== 'string') {
+            throw new Error('Chat message must be a string');
+        }
+        if (message.length === 0) {
+            throw new Error('Chat message cannot be empty');
+        }
+        if (message.length > 10000) {
+            throw new Error('Chat message too long (max 10,000 characters)');
+        }
+        return ipcRenderer.invoke('send-chat-message', message);
+    },
+    sendChatResponse: (response) => {
+        // SECURITY FIX: Validate chat response
+        if (typeof response !== 'string') {
+            throw new Error('Chat response must be a string');
+        }
+        if (response.length > 50000) {
+            throw new Error('Chat response too long (max 50,000 characters)');
+        }
+        return ipcRenderer.invoke('send-chat-response', response);
+    },
+    showChatLoading: () => ipcRenderer.invoke('show-chat-loading'),
+    hideChatLoading: () => ipcRenderer.invoke('hide-chat-loading'),
+    checkAIProcessing: () => ipcRenderer.invoke('check-ai-processing'),
+    getAIAvatar: () => ipcRenderer.invoke('get-ai-avatar'),
+    onChatMessage: (callback) => ipcRenderer.on('chat-response', (event, message) => callback(message)),
+    onChatMessageFromPopup: (callback) => ipcRenderer.on('chat-message-from-popup', (event, message) => callback(message)),
+    onLoadConversation: (callback) => ipcRenderer.on('load-conversation', (event, conversation) => callback(conversation)),
+    onChatWindowClosed: (callback) => ipcRenderer.on('chat-window-closed', callback),
+    
     // Menu event listeners
     onMenuAction: (callback) => {
         // Menu shortcuts

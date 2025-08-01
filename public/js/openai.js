@@ -34,12 +34,24 @@ const OpenAIService = {
             this.isConnected = true;
             this.lastError = null;
             console.log('✅ OpenAI service initialized successfully');
+            
+            // Update title bar status when connected
+            if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+                window.Analytics.updateTitleBarStatus();
+            }
+            
             return true;
             
         } catch (error) {
             this.isConnected = false;
             this.lastError = error.message;
             console.error('❌ OpenAI initialization failed:', error);
+            
+            // Update title bar status when disconnected
+            if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+                window.Analytics.updateTitleBarStatus();
+            }
+            
             throw error;
         }
     },
@@ -309,6 +321,11 @@ const OpenAIService = {
         this.config.apiKey = null; // Clear API key for security
         this.lastError = null;
         console.log('🔌 OpenAI service disconnected');
+        
+        // Update title bar status when disconnected
+        if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+            window.Analytics.updateTitleBarStatus();
+        }
     },
 
     // Create AbortController with compatibility check

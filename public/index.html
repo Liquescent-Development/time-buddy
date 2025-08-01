@@ -9,6 +9,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@4.1.0/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    
+    <!-- Markdown and Syntax Highlighting -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/sql/sql.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/show-hint.min.js"></script>
@@ -67,6 +73,11 @@
                         <path d="M9 3v2.01c-2.73.51-4.89 2.67-5.4 5.4H1v2h2.6c.51 2.73 2.67 4.89 5.4 5.4V20h2v-2.01c2.73-.51 4.89-2.67 5.4-5.4H18v-2h-2.6c-.51-2.73-2.67-4.89-5.4-5.4V3H9zm1 4.07c1.65.22 2.98 1.55 3.21 3.21l.79-.79 1.41 1.41-.79.79c-.22 1.65-1.55 2.98-3.21 3.21V16h-1v-1.1c-1.65-.22-2.98-1.55-3.21-3.21L6.41 12.5 5 11.09l.79-.79C6.01 8.65 7.35 7.32 9 7.1V6h1v1.07z"/>
                     </svg>
                 </div>
+                <div class="activity-item" data-view="agent" title="AI Assistant">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm9 7h-6v13h-2v-6h-2v6H9V9H3V7h18v2z"/>
+                    </svg>
+                </div>
                 <div class="activity-item" data-view="history" title="Query History">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
@@ -87,10 +98,10 @@
                                 <h3>Connections & Data Sources</h3>
                             </div>
                             <div class="sidebar-content">
-                                <!-- Connections Section -->
+                                <!-- Grafana Connections Section -->
                                 <div class="section-wrapper">
                                     <div class="section-header">
-                                        <h4>Connections</h4>
+                                        <h4>Grafana Connections</h4>
                                         <div style="display: flex; gap: 8px; align-items: center;">
                                             <button class="icon-button" onclick="exportConnections()" title="Export Connections" style="background: transparent; color: #cccccc; border: 1px solid #454545; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -118,6 +129,33 @@
                                                 <div style="margin-bottom: 12px; color: #858585;">No connections configured</div>
                                                 <button class="primary-button" onclick="showNewConnectionDialog()" style="font-size: 12px; padding: 6px 12px;">
                                                     Add Your First Connection
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- AI Connections Section -->
+                                <div class="section-wrapper">
+                                    <div class="section-header">
+                                        <h4>AI Connections</h4>
+                                        <div style="display: flex; gap: 8px; align-items: center;">
+                                            <button class="icon-button" onclick="showNewAiConnectionDialog()" title="New AI Connection" style="background: #007acc; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="search-container">
+                                        <input type="text" id="aiConnectionSearch" class="search-input" placeholder="Filter AI connections..." oninput="filterAiConnections()">
+                                    </div>
+                                    <div class="section-scrollable">
+                                        <div class="connection-list" id="aiConnectionList">
+                                            <div class="empty-state">
+                                                <div style="margin-bottom: 12px; color: #858585;">No AI connections configured</div>
+                                                <button class="primary-button" onclick="showNewAiConnectionDialog()" style="font-size: 12px; padding: 6px 12px;">
+                                                    Add Your First AI Connection
                                                 </button>
                                             </div>
                                         </div>
@@ -257,33 +295,60 @@
                             </div>
                         </div>
 
+                        <!-- AI Assistant Panel with Embedded Chat -->
+                        <div class="sidebar-panel" id="agentPanel">
+                            <div class="sidebar-header">
+                                <h3>AI Assistant</h3>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <button id="aiChatPopOut" class="pop-out-button" title="Pop out chat in new window" style="background: none; border: none; color: #cccccc; cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z"/>
+                                        </svg>
+                                    </button>
+                                    <div class="status-indicator offline" id="aiAssistantStatus" title="AI Connection Status"></div>
+                                </div>
+                            </div>
+                            <div class="sidebar-content" style="display: flex; flex-direction: column; height: 100%;">
+                                <!-- Chat Messages Area -->
+                                <div class="ai-chat-messages" id="aiChatMessages" style="flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px;">
+                                    <div class="ai-welcome-message">
+                                        <div class="welcome-icon">
+                                            <img src="images/logo.png" alt="Time Buddy AI Assistant" style="width: 48px; height: 48px; border-radius: 8px;">
+                                        </div>
+                                        <h4>Hi! I'm your AI Assistant</h4>
+                                        <p>I can help you analyze time series data, find anomalies, and answer questions about your metrics.</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- Chat Input Area -->
+                                <div class="ai-chat-input-container" style="border-top: 1px solid #454545; padding: 12px;">
+                                    <div class="ai-context-bar" id="aiContextBar" style="margin-bottom: 8px; font-size: 11px; color: #858585;">
+                                        <!-- Context info will be shown here -->
+                                    </div>
+                                    <div class="ai-input-wrapper" style="display: flex; gap: 8px; align-items: flex-end;">
+                                        <textarea 
+                                            id="aiChatInput" 
+                                            class="ai-chat-input" 
+                                            placeholder="Ask me about your metrics..."
+                                            rows="1"
+                                            style="flex: 1; background: #1e1e1e; border: 1px solid #454545; color: #cccccc; padding: 8px 12px; border-radius: 6px; resize: none; font-size: 14px; font-family: inherit; min-height: 36px; max-height: 120px;"
+                                        ></textarea>
+                                        <button id="aiChatSend" class="ai-chat-send" disabled style="background: #007acc; border: none; color: white; padding: 8px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- AI Analytics Panel -->
                         <div class="sidebar-panel" id="analyticsPanel">
                             <div class="sidebar-header">
                                 <h3>AI ANALYTICS</h3>
                             </div>
                             <div class="sidebar-content">
-                                <!-- AI Connections Section -->
-                                <div class="section-wrapper">
-                                    <div class="section-header">
-                                        <h4>AI Connections</h4>
-                                        <div style="display: flex; gap: 8px; align-items: center;">
-                                            <button class="icon-button" onclick="showNewAiConnectionDialog()" title="New AI Connection" style="background: #007acc; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
-                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                                    <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div class="search-container">
-                                        <input type="text" id="aiConnectionSearch" class="search-input" placeholder="Filter AI connections..." oninput="filterAiConnections()">
-                                    </div>
-                                    <div class="section-scrollable">
-                                        <div class="connection-list" id="aiConnectionList">
-                                            <!-- AI connections will be dynamically populated here -->
-                                        </div>
-                                    </div>
-                                </div>
 
                                 <!-- Data Configuration Section -->
                                 <div class="section-header">
@@ -703,9 +768,16 @@
                 </div>
                 <div class="form-group">
                     <label for="aiModel">Default Model</label>
-                    <select id="aiModel" onchange="onModelSelectionChange()">
-                        <option value="">Loading models...</option>
-                    </select>
+                    <div style="display: flex; gap: 8px;">
+                        <select id="aiModel" onchange="onModelSelectionChange()" style="flex: 1;">
+                            <option value="">Loading models...</option>
+                        </select>
+                        <button type="button" onclick="loadAvailableModels()" class="secondary-button" title="Refresh model list">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
                 <div class="form-group" id="customModelGroup" style="display: none;">
                     <label for="customModelName">Custom Model Name</label>
@@ -799,6 +871,15 @@
     <script src="js/aiAnalytics.js"></script>
     <script src="js/analyticsVisualizer.js"></script>
     <script src="js/analytics.js"></script>
+    <script src="js/aiAgent.js"></script>
+    
+    <!-- Advanced AI System Components -->
+    <script src="js/ragSystem.js"></script>
+    <script src="js/intelligentQueryGenerator.js"></script>
+    <script src="js/proactiveMonitoring.js"></script>
+    <script src="js/advancedAIAgent.js"></script>
+    <script src="js/advancedAIIntegration.js"></script>
+    
     <script src="js/interface.js"></script>
     <script src="js/app.js"></script>
 </body>

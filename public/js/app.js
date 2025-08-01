@@ -35,6 +35,12 @@ const App = {
         if (typeof Storage !== 'undefined') {
             Storage.clearExpiredSchemaCache();
         }
+        
+        // Initialize AI Agent
+        if (typeof AIAgent !== 'undefined') {
+            console.log('Initializing AI Agent...');
+            AIAgent.initialize();
+        }
     },
     
     // Set default application state

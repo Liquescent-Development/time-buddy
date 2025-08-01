@@ -617,7 +617,13 @@ const Analytics = {
     updateTitleBarStatus() {
         const titleBarStatus = document.getElementById('titleBarAiStatus');
         if (titleBarStatus) {
-            if (this.isConnected) {
+            // Check for any AI service connection (not just Analytics)
+            const isAnalyticsConnected = this.isConnected;
+            const isOllamaConnected = window.OllamaService && window.OllamaService.isConnected;
+            const isOpenAIConnected = window.OpenAIService && window.OpenAIService.isConnected;
+            const isAnyAIConnected = isAnalyticsConnected || isOllamaConnected || isOpenAIConnected;
+            
+            if (isAnyAIConnected) {
                 titleBarStatus.className = 'connection-status ai-connected';
                 titleBarStatus.textContent = 'AI: Connected';
             } else {

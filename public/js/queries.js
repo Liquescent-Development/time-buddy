@@ -27,7 +27,7 @@ const Queries = {
         
         // Get datasource info from global config (new interface)
         const datasourceType = GrafanaConfig.selectedDatasourceType || 'prometheus';
-        const datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId;
+        const datasourceNumericId = GrafanaConfig.selectedDatasourceId;
         
         const timeFromHours = parseFloat(document.getElementById('timeFrom').value) || 1;
         const timeToHours = parseFloat(document.getElementById('timeTo').value) || 0;
@@ -412,12 +412,19 @@ const Queries = {
         });
     },
 
-    // Execute a query programmatically and return the result
-    // Used by Analytics and other modules that need to execute queries without updating the UI
+    // Clean centralized query execution API
+    // Used by AI, Analytics, Schema explorer, and other modules
     async executeQueryDirect(query, options = {}) {
+        // Use provided options or sensible defaults from current connection
         const datasourceId = options.datasourceId || GrafanaConfig.currentDatasourceId;
-        const datasourceType = options.datasourceType || GrafanaConfig.selectedDatasourceType || 'prometheus';
+        const datasourceType = options.datasourceType || GrafanaConfig.selectedDatasourceType || 'influxdb';
         const timeout = options.timeout || 30000;
+        
+        // Time range options
+        const timeFromHours = options.timeFromHours || 1; // Default: 1 hour ago
+        const timeToHours = options.timeToHours || 0;     // Default: now
+        const maxDataPoints = options.maxDataPoints || 1000;
+        const intervalMs = options.intervalMs || 15000;
         
         if (!datasourceId) {
             throw new Error('No datasource ID provided');
@@ -428,10 +435,10 @@ const Queries = {
         }
         
         try {
-            // Use a fixed time range for metadata queries like SHOW TAG VALUES
+            // Calculate time range from options
             const now = Date.now();
-            const fromTime = now - (24 * 60 * 60 * 1000); // 24 hours ago
-            const toTime = now;
+            const fromTime = now - (timeFromHours * 60 * 60 * 1000);
+            const toTime = now - (timeToHours * 60 * 60 * 1000);
             
             let requestBody;
             let urlParams = '';
@@ -452,9 +459,9 @@ const Queries = {
                         resultFormat: 'time_series',
                         requestId: requestId,
                         utcOffsetSec: -25200, // PST offset
-                        datasourceId: null,
-                        intervalMs: 15000,
-                        maxDataPoints: 1000
+                        datasourceId: parseInt(GrafanaConfig.selectedDatasourceId),
+                        intervalMs: intervalMs,
+                        maxDataPoints: maxDataPoints
                     }],
                     from: fromTime.toString(),
                     to: toTime.toString()
