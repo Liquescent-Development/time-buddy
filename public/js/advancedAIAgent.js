@@ -75,6 +75,12 @@ class AdvancedAIAgent {
             return this.generateFallbackResponse(userInput, context);
         }
 
+        // Set conversation context for isolation
+        if (context.conversationId) {
+            this.contextManager.setConversationId(context.conversationId);
+            console.log('🔒 Set conversation context to:', context.conversationId);
+        }
+
         this.metrics.conversationTurns++;
         console.log('🧠 Processing intelligent query:', userInput);
         
@@ -3163,34 +3169,69 @@ class AIKnowledgeBase {
 
 class ConversationContextManager {
     constructor() {
-        this.currentContext = {
+        this.conversationContexts = new Map(); // Store contexts per conversation ID
+        this.currentConversationId = null;
+        this.maxHistorySize = 10; // Keep last 10 exchanges per conversation
+        
+        // Default context structure
+        this.defaultContext = {
             conversationHistory: [],
             userPreferences: {},
             sessionMetrics: {},
             activeTopics: [],
             temporalContext: null
         };
-        this.maxHistorySize = 10; // Keep last 10 exchanges
     }
 
     async initialize() {
         console.log('💭 Initializing Conversation Context Manager...');
         await this.loadUserPreferences();
-        await this.loadConversationHistory();
+        // Note: Individual conversation histories are now loaded on-demand
     }
 
     async loadUserPreferences() {
         const stored = localStorage.getItem('aiUserPreferences');
         if (stored) {
-            this.currentContext.userPreferences = JSON.parse(stored);
+            this.defaultContext.userPreferences = JSON.parse(stored);
         }
     }
 
-    async loadConversationHistory() {
-        const stored = localStorage.getItem('aiConversationHistory');
-        if (stored) {
-            this.currentContext.conversationHistory = JSON.parse(stored);
+    // Set the current conversation ID for context isolation
+    setCurrentConversation(conversationId) {
+        this.currentConversationId = conversationId;
+        
+        // Initialize context for this conversation if it doesn't exist
+        if (!this.conversationContexts.has(conversationId)) {
+            this.conversationContexts.set(conversationId, {
+                ...JSON.parse(JSON.stringify(this.defaultContext)), // Deep copy
+                conversationHistory: this.loadConversationHistory(conversationId)
+            });
         }
+    }
+
+    // Alias method for backwards compatibility
+    setConversationId(conversationId) {
+        this.setCurrentConversation(conversationId);
+    }
+
+    // Load conversation history for a specific conversation
+    loadConversationHistory(conversationId) {
+        try {
+            const stored = localStorage.getItem(`aiConversationHistory_${conversationId}`);
+            return stored ? JSON.parse(stored) : [];
+        } catch (error) {
+            console.warn(`Failed to load conversation history for ${conversationId}:`, error);
+            return [];
+        }
+    }
+
+    // Get current context (conversation-specific)
+    get currentContext() {
+        if (!this.currentConversationId) {
+            return this.defaultContext;
+        }
+        
+        return this.conversationContexts.get(this.currentConversationId) || this.defaultContext;
     }
 
     // Add a user message and AI response to conversation history
@@ -3218,10 +3259,21 @@ class ConversationContextManager {
     }
 
     saveConversationHistory() {
+        if (!this.currentConversationId) {
+            console.warn('No current conversation ID set, cannot save history');
+            return;
+        }
+        
         try {
-            localStorage.setItem('aiConversationHistory', JSON.stringify(this.currentContext.conversationHistory));
+            const context = this.conversationContexts.get(this.currentConversationId);
+            if (context && context.conversationHistory) {
+                localStorage.setItem(
+                    `aiConversationHistory_${this.currentConversationId}`, 
+                    JSON.stringify(context.conversationHistory)
+                );
+            }
         } catch (error) {
-            console.warn('Failed to save conversation history:', error);
+            console.warn(`Failed to save conversation history for ${this.currentConversationId}:`, error);
         }
     }
 
@@ -3256,10 +3308,41 @@ class ConversationContextManager {
         return '[AI Response]';
     }
 
-    // Clear conversation history
+    // Clear conversation history for current conversation
     clearHistory() {
-        this.currentContext.conversationHistory = [];
-        this.saveConversationHistory();
+        if (!this.currentConversationId) {
+            console.warn('No current conversation ID set, cannot clear history');
+            return;
+        }
+        
+        const context = this.conversationContexts.get(this.currentConversationId);
+        if (context) {
+            context.conversationHistory = [];
+            this.saveConversationHistory();
+        }
+    }
+    
+    // Clear history for a specific conversation
+    clearHistoryForConversation(conversationId) {
+        const context = this.conversationContexts.get(conversationId);
+        if (context) {
+            context.conversationHistory = [];
+            try {
+                localStorage.removeItem(`aiConversationHistory_${conversationId}`);
+            } catch (error) {
+                console.warn(`Failed to clear conversation history for ${conversationId}:`, error);
+            }
+        }
+    }
+    
+    // Remove conversation context entirely
+    removeConversationContext(conversationId) {
+        this.conversationContexts.delete(conversationId);
+        try {
+            localStorage.removeItem(`aiConversationHistory_${conversationId}`);
+        } catch (error) {
+            console.warn(`Failed to remove conversation context for ${conversationId}:`, error);
+        }
     }
 
     getCurrentContext() {

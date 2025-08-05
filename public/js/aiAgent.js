@@ -35,11 +35,13 @@ const AIAgent = {
         console.log('⏰ Initializing Time Buddy AI Agent...');
         this.loadAvatarImage(); // Load avatar image first
         this.loadConversations();
-        this.setupEmbeddedUI();
+        this.setupConversationListUI(); // Set up new conversation list UI
+        this.setupModalUI(); // Set up pop-out modal UI
         this.setupEventListeners();
         this.updateContext();
         this.setupElectronChatCommunication(); // Set up Electron chat window communication
         this.addEnhancedUIStyles(); // Add enhanced UI styles for new features
+        this.renderConversationList(); // Initial render of conversation list
         
         console.log('✅ AI Agent initialized');
     },
@@ -277,43 +279,114 @@ const AIAgent = {
     },
 
     // Setup embedded UI references
-    setupEmbeddedUI() {
-        // Reference existing embedded chat elements
-        this.ui.messageList = document.getElementById('aiChatMessages');
-        this.ui.input = document.getElementById('aiChatInput');
-        this.ui.sendButton = document.getElementById('aiChatSend');
-        this.ui.contextBar = document.getElementById('aiContextBar');
+    // Set up conversation list UI in sidebar
+    setupConversationListUI() {
+        this.ui.conversationList = document.getElementById('conversationList');
+        this.ui.conversationSearch = document.getElementById('conversationSearch');
+        this.ui.newConversationBtn = document.getElementById('newConversationBtn');
         this.ui.statusIndicator = document.getElementById('aiAssistantStatus');
-        this.ui.popOutButton = document.getElementById('aiChatPopOut');
         
-        if (!this.ui.messageList || !this.ui.input || !this.ui.sendButton) {
-            console.error('AI Agent: Required UI elements not found');
+        if (!this.ui.conversationList) {
+            console.error('AI Agent: Conversation list element not found');
             return;
         }
         
-        console.log('🎨 AI Agent embedded UI setup complete');
+        console.log('🎨 AI Agent conversation list UI setup complete');
+    },
+
+    // Set up modal UI for pop-out chat
+    setupModalUI() {
+        this.ui.modal = document.getElementById('aiChatModal');
+        this.ui.modalMessages = document.getElementById('aiChatModalMessages');
+        this.ui.modalInput = document.getElementById('aiChatModalInput');
+        this.ui.modalSend = document.getElementById('aiChatModalSend');
+        this.ui.modalTitle = document.getElementById('aiChatModalTitle');
+        this.ui.modalContext = document.getElementById('aiChatModalContext');
+        this.ui.modalClose = document.getElementById('aiChatClose');
+        this.ui.modalMinimize = document.getElementById('aiChatMinimize');
+        this.ui.modalSettings = document.getElementById('aiChatSettings');
+        
+        if (!this.ui.modal || !this.ui.modalMessages || !this.ui.modalInput) {
+            console.error('AI Agent: Modal UI elements not found');
+            return;
+        }
+        
+        // Debug log for button elements
+        console.log('🔍 Modal button elements found:');
+        console.log('  Close button:', !!this.ui.modalClose);
+        console.log('  Minimize button:', !!this.ui.modalMinimize);
+        console.log('  Settings button:', !!this.ui.modalSettings);
+
+        console.log('🎨 AI Agent modal UI setup complete');
     },
 
 
 
     // Setup event listeners for embedded UI
     setupEventListeners() {
-        if (!this.ui.input || !this.ui.sendButton) {
-            console.error('AI Agent: Required UI elements not found for event listeners');
-            return;
+        // Conversation list event listeners
+        if (this.ui.newConversationBtn) {
+            this.ui.newConversationBtn.addEventListener('click', () => this.createNewConversation());
         }
 
-        // Input handling
-        this.ui.input.addEventListener('input', () => this.handleInputChange());
-        this.ui.input.addEventListener('keydown', (e) => this.handleKeyDown(e));
-        this.ui.sendButton.addEventListener('click', () => this.sendMessage());
-        
-        // Pop-out button
-        if (this.ui.popOutButton) {
-            this.ui.popOutButton.addEventListener('click', () => this.popOutChat());
+        if (this.ui.conversationSearch) {
+            this.ui.conversationSearch.addEventListener('input', (e) => this.handleConversationSearch(e.target.value));
         }
 
         console.log('🎧 AI Agent event listeners setup complete');
+    },
+
+    // Set up modal-specific event listeners
+    setupModalEventListeners() {
+        if (!this.ui.modalInput || !this.ui.modalSend) {
+            console.error('AI Agent: Modal UI elements not found for event listeners');
+            return;
+        }
+
+        // Modal input handling
+        this.ui.modalInput.addEventListener('input', () => this.handleModalInputChange());
+        this.ui.modalInput.addEventListener('keydown', (e) => this.handleModalKeyDown(e));
+        this.ui.modalSend.addEventListener('click', () => this.sendModalMessage());
+
+        // Modal control buttons
+        if (this.ui.modalClose) {
+            this.ui.modalClose.addEventListener('click', (e) => {
+                e.stopPropagation();
+                console.log('🔴 Modal close button clicked');
+                this.closeModal();
+            });
+        }
+
+        if (this.ui.modalMinimize) {
+            this.ui.modalMinimize.addEventListener('click', (e) => {
+                e.stopPropagation();
+                console.log('🔽 Modal minimize button clicked');
+                this.minimizeModal();
+            });
+        }
+
+        if (this.ui.modalSettings) {
+            this.ui.modalSettings.addEventListener('click', (e) => {
+                e.stopPropagation();
+                console.log('⚙️ Modal settings button clicked');
+                this.showConversationSettings();
+            });
+        }
+
+        // Click outside to close
+        this.ui.modal.addEventListener('click', (e) => {
+            if (e.target === this.ui.modal) {
+                this.closeModal();
+            }
+        });
+
+        // Auto-resize textarea
+        this.ui.modalInput.addEventListener('input', () => {
+            this.ui.modalInput.style.height = 'auto';
+            this.ui.modalInput.style.height = Math.min(this.ui.modalInput.scrollHeight, 120) + 'px';
+        });
+
+        console.log('🎧 AI Agent modal event listeners setup complete');
     },
 
 
@@ -611,7 +684,8 @@ const AIAgent = {
                     field: this.state.context.field,
                     timeRange: this.state.context.timeRange,
                     connected: window.GrafanaConfig?.connected || false,
-                    availableMetrics: await this.getAvailableMetrics()
+                    availableMetrics: await this.getAvailableMetrics(),
+                    conversationId: this.state.currentConversationId || 'default'
                 };
                 
                 // Process with Advanced AI
@@ -2199,7 +2273,7 @@ const AIAgent = {
         console.log('👁️ Showing sidebar chat');
         
         if (!this.ui.messageList) {
-            console.warn('⚠️ No messageList found, cannot show sidebar');
+            console.log('ℹ️ No embedded messageList found - using conversation list only (new architecture)');
             return;
         }
         
@@ -2515,7 +2589,7 @@ const AIAgent = {
     // Update conversation display with current messages
     updateConversationDisplay() {
         if (!this.ui.messageList) {
-            console.warn('Message list UI element not found');
+            console.log('ℹ️ No embedded messageList found - using conversation list only (new architecture)');
             return;
         }
 
@@ -2633,84 +2707,212 @@ const AIAgent = {
         this.addMessage(sender, text, data);
     },
 
-    // Load conversations from storage
+    // Load conversations from storage using new Storage system
     loadConversations() {
         try {
-            const saved = localStorage.getItem('aiAgentConversations');
-            if (saved) {
-                this.state.conversations = JSON.parse(saved);
-            }
+            // Migrate old conversations if they exist
+            this.migrateOldConversations();
+            
+            // Load conversations using new Storage system
+            this.state.conversations = Storage.getAiConversations();
+            
+            console.log(`📚 Loaded ${this.state.conversations.length} conversations from storage`);
         } catch (error) {
             console.error('Failed to load conversations:', error);
+            this.state.conversations = [];
         }
     },
 
-    // Save conversations to storage with security limits
+    // Save conversations using new Storage system
     saveConversations() {
         try {
-            // SECURITY FIX: Implement storage limits to prevent memory leaks
-            const MAX_CONVERSATIONS = 50;
-            const MAX_MESSAGES_PER_CONVERSATION = 100;
-            const MAX_STORAGE_SIZE = 5 * 1024 * 1024; // 5MB limit
-            
-            // Limit number of conversations
-            let limitedConversations = this.state.conversations.slice(-MAX_CONVERSATIONS);
-            
-            // Limit messages per conversation and sanitize data
-            limitedConversations = limitedConversations.map(conv => ({
-                ...conv,
-                messages: (conv.messages || []).slice(-MAX_MESSAGES_PER_CONVERSATION).map(msg => ({
-                    sender: msg.sender || 'user',
-                    text: typeof msg.text === 'string' ? msg.text.substring(0, 10000) : '', // Limit message length
-                    timestamp: msg.timestamp || new Date().toISOString(),
-                    data: msg.data ? {
-                        type: msg.data.type || null,
-                        // Remove potentially large or sensitive data
-                        error: msg.data.error ? (typeof msg.data.error === 'string' ? msg.data.error.substring(0, 1000) : null) : null
-                    } : null
-                }))
-            }));
-            
-            // Check total size and reduce if necessary
-            let serialized = JSON.stringify(limitedConversations);
-            while (serialized.length > MAX_STORAGE_SIZE && limitedConversations.length > 1) {
-                // Remove oldest conversation if too large
-                limitedConversations.shift();
-                serialized = JSON.stringify(limitedConversations);
-            }
-            
-            // If still too large, reduce messages per conversation
-            if (serialized.length > MAX_STORAGE_SIZE) {
-                limitedConversations = limitedConversations.map(conv => ({
-                    ...conv,
-                    messages: conv.messages.slice(-50) // Further reduce to 50 messages per conversation
-                }));
-                serialized = JSON.stringify(limitedConversations);
-            }
-            
-            localStorage.setItem('aiAgentConversations', serialized);
-            
-            // Update state to match what was actually saved
-            this.state.conversations = limitedConversations;
-            
-            console.log(`💾 Saved ${limitedConversations.length} conversations (${Math.round(serialized.length / 1024)}KB)`);
-            
-        } catch (error) {
-            console.error('Failed to save conversations:', error);
-            
-            // If storage is full, try to recover by clearing old data
-            if (error.name === 'QuotaExceededError') {
-                console.warn('Storage quota exceeded, clearing old conversations');
-                try {
-                    // Keep only the current conversation
-                    const currentConv = this.state.conversations.find(c => c.id === this.state.currentConversationId);
-                    this.state.conversations = currentConv ? [currentConv] : [];
-                    localStorage.setItem('aiAgentConversations', JSON.stringify(this.state.conversations));
-                } catch (retryError) {
-                    console.error('Failed to recover from storage error:', retryError);
+            // The Storage system already handles limits and security
+            // Just update the conversations array in storage
+            if (this.state.currentConversationId) {
+                const currentConversation = this.getCurrentConversation();
+                if (currentConversation) {
+                    this.saveCurrentConversation();
                 }
             }
+            
+            console.log(`💾 Saved ${this.state.conversations.length} conversations`);
+        } catch (error) {
+            console.error('Failed to save conversations:', error);
         }
+    },
+
+    // Get current conversation object
+    getCurrentConversation() {
+        if (!this.state.currentConversationId) return null;
+        return this.state.conversations.find(c => c.id === this.state.currentConversationId);
+    },
+
+    // ===== NEW CONVERSATION MANAGEMENT METHODS =====
+
+    // Save current conversation to persistent storage
+    saveCurrentConversation() {
+        if (!this.state.currentConversationId) return;
+        
+        const conversation = this.getCurrentConversation();
+        if (!conversation) return;
+        
+        // Update conversation metadata
+        const conversationData = {
+            ...conversation,
+            updatedAt: new Date().toISOString(),
+            datasourceContext: this.getDatasourceContext(),
+            messageCount: conversation.messages.length,
+            lastMessagePreview: conversation.messages.length > 0 ? 
+                Storage.getLastMessagePreview(conversation.messages) : ''
+        };
+        
+        // Save to persistent storage
+        Storage.saveAiConversation(conversationData);
+        
+        // Update local state
+        const index = this.state.conversations.findIndex(c => c.id === conversation.id);
+        if (index !== -1) {
+            this.state.conversations[index] = conversationData;
+        }
+        
+        // Refresh conversation list UI
+        this.renderConversationList();
+    },
+
+    // Create new conversation with enhanced metadata
+    createNewConversationWithMetadata(title = null) {
+        const conversationId = Storage.generateConversationId();
+        const conversation = {
+            id: conversationId,
+            title: title || 'New Conversation',
+            messages: [],
+            tags: [],
+            starred: false,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            datasourceContext: this.getDatasourceContext(),
+            messageCount: 0,
+            lastMessagePreview: ''
+        };
+        
+        // Save to persistent storage
+        Storage.saveAiConversation(conversation);
+        
+        // Add to local state
+        this.state.conversations.unshift(conversation);
+        this.state.currentConversationId = conversationId;
+        
+        // Refresh UI
+        this.renderConversationList();
+        
+        return conversation;
+    },
+
+    // Delete conversation
+    deleteConversation(conversationId) {
+        if (!conversationId) return;
+        
+        // Remove from persistent storage
+        Storage.deleteAiConversation(conversationId);
+        
+        // Remove from local state
+        this.state.conversations = this.state.conversations.filter(c => c.id !== conversationId);
+        
+        // If we deleted the current conversation, clear it
+        if (this.state.currentConversationId === conversationId) {
+            this.state.currentConversationId = null;
+        }
+        
+        // Refresh UI
+        this.renderConversationList();
+    },
+
+    // Toggle conversation star
+    toggleConversationStar(conversationId) {
+        const result = Storage.toggleConversationStar(conversationId);
+        if (result) {
+            // Update local state
+            const index = this.state.conversations.findIndex(c => c.id === conversationId);
+            if (index !== -1) {
+                this.state.conversations[index] = result;
+            }
+            
+            // Refresh UI
+            this.renderConversationList();
+        }
+    },
+
+    // Add tags to conversation
+    addConversationTags(conversationId, tags) {
+        const result = Storage.addConversationTags(conversationId, tags);
+        if (result) {
+            // Update local state
+            const index = this.state.conversations.findIndex(c => c.id === conversationId);
+            if (index !== -1) {
+                this.state.conversations[index] = result;
+            }
+            
+            // Refresh UI
+            this.renderConversationList();
+        }
+    },
+
+    // Search conversations
+    searchConversations(searchTerm, options = {}) {
+        return Storage.searchAiConversations(searchTerm, options);
+    },
+
+    // Get all available tags
+    getAllConversationTags() {
+        return Storage.getAllConversationTags();
+    },
+
+    // Migrate old conversations to new format
+    migrateOldConversations() {
+        try {
+            const oldConversations = localStorage.getItem('aiAgentConversations');
+            if (oldConversations) {
+                const parsed = JSON.parse(oldConversations);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                    console.log(`🔄 Migrating ${parsed.length} old conversations...`);
+                    
+                    // Convert old format to new format
+                    parsed.forEach(oldConv => {
+                        const newConversation = {
+                            id: oldConv.id || Storage.generateConversationId(),
+                            title: oldConv.title || Storage.generateConversationTitle(oldConv.messages),
+                            messages: oldConv.messages || [],
+                            tags: oldConv.tags || [],
+                            starred: oldConv.starred || false,
+                            createdAt: oldConv.timestamp || new Date().toISOString(),
+                            updatedAt: oldConv.timestamp || new Date().toISOString(),
+                            datasourceContext: null,
+                            messageCount: (oldConv.messages || []).length,
+                            lastMessagePreview: Storage.getLastMessagePreview(oldConv.messages || [])
+                        };
+                        
+                        Storage.saveAiConversation(newConversation);
+                    });
+                    
+                    // Remove old storage key
+                    localStorage.removeItem('aiAgentConversations');
+                    
+                    console.log('✅ Migration completed successfully');
+                }
+            }
+        } catch (error) {
+            console.error('Error migrating old conversations:', error);
+        }
+    },
+
+    // Get current datasource context
+    getDatasourceContext() {
+        return {
+            datasourceId: GrafanaConfig.currentDatasourceId,
+            datasourceName: GrafanaConfig.selectedDatasourceName,
+            datasourceType: GrafanaConfig.selectedDatasourceType,
+            timestamp: new Date().toISOString()
+        };
     },
 
     // Receive proactive messages from the advanced AI system
@@ -2874,6 +3076,630 @@ const AIAgent = {
                 { label: 'Reconnect AI', action: 'reconnectAI' }
             ]
         };
+    },
+
+    // ======================================
+    // CONVERSATION LIST UI METHODS
+    // ======================================
+
+    // Render the conversation list in the sidebar
+    renderConversationList() {
+        if (!this.ui.conversationList) return;
+
+        const conversations = this.state.conversations || [];
+        
+        if (conversations.length === 0) {
+            this.ui.conversationList.innerHTML = `
+                <div class="empty-state">
+                    <div style="margin-bottom: 12px; color: #858585;">No conversations yet</div>
+                    <button class="primary-button" onclick="AIAgent.createNewConversation()" style="font-size: 12px; padding: 6px 12px;">
+                        Start Your First Conversation
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        // Sort conversations by date (most recent first)
+        const sortedConversations = [...conversations].sort((a, b) => 
+            new Date(b.timestamp) - new Date(a.timestamp)
+        );
+
+        const conversationItems = sortedConversations.map(conv => this.createConversationListItem(conv)).join('');
+        this.ui.conversationList.innerHTML = conversationItems;
+    },
+
+    // Create a single conversation list item
+    createConversationListItem(conversation) {
+        const title = this.getConversationTitle(conversation);
+        const preview = this.getConversationPreview(conversation);
+        const date = this.formatConversationDate(conversation.timestamp);
+        const messageCount = conversation.messages ? conversation.messages.length : 0;
+        const isActive = conversation.id === this.state.currentConversationId;
+        const isStarred = conversation.starred;
+        const tags = conversation.tags || [];
+
+        return `
+            <div class="conversation-item ${isActive ? 'active' : ''} ${isStarred ? 'starred' : ''}" 
+                 data-conversation-id="${conversation.id}" 
+                 onclick="AIAgent.openConversation('${conversation.id}')">
+                <div class="conversation-header">
+                    <h4 class="conversation-title">${title}</h4>
+                    <div class="conversation-actions">
+                        <button class="conversation-action-btn ${isStarred ? 'starred' : ''}" 
+                                onclick="event.stopPropagation(); AIAgent.toggleConversationStar('${conversation.id}')" 
+                                title="${isStarred ? 'Remove from favorites' : 'Add to favorites'}">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                            </svg>
+                        </button>
+                        <button class="conversation-action-btn" 
+                                onclick="event.stopPropagation(); AIAgent.showConversationMenu('${conversation.id}')" 
+                                title="More options">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                ${preview ? `<div class="conversation-preview">${preview}</div>` : ''}
+                <div class="conversation-metadata">
+                    <div class="conversation-date">${date}</div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        ${tags.length > 0 ? `
+                            <div class="conversation-tags">
+                                ${tags.slice(0, 2).map(tag => `<span class="conversation-tag">${tag}</span>`).join('')}
+                                ${tags.length > 2 ? `<span class="conversation-tag">+${tags.length - 2}</span>` : ''}
+                            </div>
+                        ` : ''}
+                        <div class="conversation-message-count">${messageCount}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    // Get conversation title (first user message or default)
+    getConversationTitle(conversation) {
+        if (conversation.title) return conversation.title;
+        
+        const firstUserMessage = conversation.messages?.find(msg => msg.sender === 'user');
+        if (firstUserMessage) {
+            const title = firstUserMessage.text.slice(0, 50);
+            return title.length < firstUserMessage.text.length ? title + '...' : title;
+        }
+        
+        return 'New Conversation';
+    },
+
+    // Get conversation preview (last message)
+    getConversationPreview(conversation) {
+        if (!conversation.messages || conversation.messages.length === 0) return '';
+        
+        const lastMessage = conversation.messages[conversation.messages.length - 1];
+        const text = typeof lastMessage.text === 'string' ? lastMessage.text : '';
+        
+        // Strip markdown and HTML for preview
+        const plainText = text.replace(/[*_`#\[\]]/g, '').replace(/<[^>]*>/g, '');
+        return plainText.slice(0, 100) + (plainText.length > 100 ? '...' : '');
+    },
+
+    // Format conversation date
+    formatConversationDate(timestamp) {
+        if (!timestamp) return 'Unknown date';
+        
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) return 'Invalid date';
+        
+        const now = new Date();
+        const diffMs = now - date;
+        const diffMins = Math.floor(diffMs / 60000);
+        const diffHours = Math.floor(diffMs / 3600000);
+        const diffDays = Math.floor(diffMs / 86400000);
+
+        if (diffMins < 1) return 'Just now';
+        if (diffMins < 60) return `${diffMins}m ago`;
+        if (diffHours < 24) return `${diffHours}h ago`;
+        if (diffDays < 7) return `${diffDays}d ago`;
+        
+        return date.toLocaleDateString();
+    },
+
+    // Handle conversation search
+    handleConversationSearch(query) {
+        if (!this.ui.conversationList) return;
+        
+        const items = this.ui.conversationList.querySelectorAll('.conversation-item');
+        const searchTerm = query.toLowerCase().trim();
+        
+        items.forEach(item => {
+            const title = item.querySelector('.conversation-title')?.textContent?.toLowerCase() || '';
+            const preview = item.querySelector('.conversation-preview')?.textContent?.toLowerCase() || '';
+            const isVisible = !searchTerm || title.includes(searchTerm) || preview.includes(searchTerm);
+            
+            item.style.display = isVisible ? 'block' : 'none';
+        });
+    },
+
+    // ======================================
+    // MODAL UI METHODS
+    // ======================================
+
+    // Open conversation in pop-out window
+    async openConversation(conversationId) {
+        this.state.currentConversationId = conversationId;
+        
+        // Check if we're in Electron and can use pop-out
+        if (window.electronAPI && window.electronAPI.openChatWindow) {
+            try {
+                // Get the conversation to open
+                const conversation = this.state.conversations.find(c => c.id === conversationId);
+                if (!conversation) {
+                    console.error('Conversation not found:', conversationId);
+                    return;
+                }
+
+                // Prepare conversation data for pop-out (simplified for IPC)
+                const simpleConversation = {
+                    id: conversation.id,
+                    title: conversation.title,
+                    messages: conversation.messages ? conversation.messages.map(msg => ({
+                        sender: msg.sender,
+                        text: msg.text || msg.content || '',
+                        timestamp: msg.timestamp,
+                        data: null // Skip complex data to avoid serialization issues
+                    })) : []
+                };
+
+                // Mark that we have an active pop-out
+                this.state.hasActivePopOut = true;
+                
+                console.log('🚀 Opening pop-out window with conversation:', {
+                    id: simpleConversation.id,
+                    title: simpleConversation.title,
+                    messageCount: simpleConversation.messages.length
+                });
+                
+                // Open the pop-out window
+                await window.electronAPI.openChatWindow({
+                    conversation: simpleConversation
+                });
+                
+                console.log('✅ Conversation opened in pop-out window:', conversationId);
+                this.renderConversationList(); // Update active state
+                
+            } catch (error) {
+                console.error('❌ Failed to open conversation in pop-out:', error);
+                this.state.hasActivePopOut = false;
+                
+                // Show user-friendly error instead of modal
+                this.showPopOutError('Failed to open conversation window. Please try again or restart the application.');
+            }
+        } else {
+            // Show error if not in Electron instead of modal fallback
+            this.showPopOutError('Pop-out conversations are only available in the desktop application. Please use the desktop version of Time Buddy.');
+        }
+    },
+
+    // Show pop-out error in sidebar instead of modal
+    showPopOutError(message) {
+        console.error('🚫 Pop-out error:', message);
+        
+        // Find conversation container and show error there
+        const conversationContainer = document.querySelector('.ai-agent-container');
+        if (conversationContainer) {
+            const errorHtml = `
+                <div class="pop-out-error" style="
+                    padding: 16px;
+                    margin: 16px;
+                    background-color: rgba(244, 67, 54, 0.1);
+                    border: 1px solid rgba(244, 67, 54, 0.3);
+                    border-radius: 8px;
+                    color: #ffcdd2;
+                ">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="color: #f44336;">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        <strong>Failed to Open Conversation</strong>
+                    </div>
+                    <div style="font-size: 13px; line-height: 1.4; margin-bottom: 12px;">
+                        ${message}
+                    </div>
+                    <button onclick="this.parentElement.remove()" style="
+                        background: rgba(244, 67, 54, 0.2);
+                        border: 1px solid rgba(244, 67, 54, 0.4);
+                        color: #ffcdd2;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-size: 12px;
+                        cursor: pointer;
+                    ">Dismiss</button>
+                </div>
+            `;
+            
+            // Remove any existing error
+            const existingError = conversationContainer.querySelector('.pop-out-error');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            // Add error at the top
+            conversationContainer.insertAdjacentHTML('afterbegin', errorHtml);
+            
+            // Auto-dismiss after 10 seconds
+            setTimeout(() => {
+                const errorElement = conversationContainer.querySelector('.pop-out-error');
+                if (errorElement) {
+                    errorElement.remove();
+                }
+            }, 10000);
+        }
+    },
+
+    // Open modal with current conversation
+    openModal() {
+        if (!this.ui.modal) return;
+        
+        this.ui.modal.classList.remove('hidden');
+        this.updateModalTitle();
+        this.updateModalContext();
+        
+        // Focus the input
+        setTimeout(() => {
+            if (this.ui.modalInput) {
+                this.ui.modalInput.focus();
+            }
+        }, 300);
+    },
+
+    // Close modal
+    closeModal() {
+        if (!this.ui.modal) return;
+        
+        this.ui.modal.classList.add('hidden');
+    },
+
+    // Minimize modal (same as close for now)
+    minimizeModal() {
+        this.closeModal();
+    },
+
+    // Update modal title
+    updateModalTitle() {
+        if (!this.ui.modalTitle || !this.state.currentConversationId) return;
+        
+        const conversation = this.state.conversations.find(c => c.id === this.state.currentConversationId);
+        const title = conversation ? this.getConversationTitle(conversation) : 'AI Conversation';
+        
+        this.ui.modalTitle.innerHTML = `
+            <img src="images/logo.png" alt="AI" style="width: 20px; height: 20px; border-radius: 4px;">
+            ${title}
+        `;
+    },
+
+    // Update modal context info
+    updateModalContext() {
+        if (!this.ui.modalContext) return;
+        
+        const context = this.buildContextInfo();
+        if (context.trim()) {
+            this.ui.modalContext.textContent = context;
+            this.ui.modalContext.style.display = 'block';
+        } else {
+            this.ui.modalContext.style.display = 'none';
+        }
+    },
+
+    // Render messages in modal
+    renderModalMessages() {
+        if (!this.ui.modalMessages || !this.state.currentConversationId) return;
+        
+        const conversation = this.state.conversations.find(c => c.id === this.state.currentConversationId);
+        if (!conversation || !conversation.messages) {
+            this.ui.modalMessages.innerHTML = `
+                <div class="ai-welcome-message">
+                    <div class="welcome-icon">
+                        <img src="images/logo.png" alt="Time Buddy AI Assistant" style="width: 48px; height: 48px; border-radius: 8px;">
+                    </div>
+                    <h4>Hi! I'm your AI Assistant</h4>
+                    <p>I can help you analyze time series data, find anomalies, and answer questions about your metrics.</p>
+                </div>
+            `;
+            return;
+        }
+
+        const messagesHtml = conversation.messages.map(msg => this.createModalMessageHTML(msg)).join('');
+        this.ui.modalMessages.innerHTML = messagesHtml;
+        
+        // Scroll to bottom
+        setTimeout(() => {
+            this.ui.modalMessages.scrollTop = this.ui.modalMessages.scrollHeight;
+        }, 100);
+    },
+
+    // Create message HTML for modal
+    createModalMessageHTML(message) {
+        const isUser = message.sender === 'user';
+        const avatarHtml = isUser ? 
+            '<div class="message-avatar">👤</div>' : 
+            this.getAvatarHTML();
+        
+        return `
+            <div class="${isUser ? 'user-message' : 'ai-message'}">
+                ${avatarHtml}
+                <div class="message-content">
+                    ${this.formatMessageContent(message.text)}
+                    ${message.timestamp ? `<div style="font-size: 10px; color: #666; margin-top: 8px;">${this.formatMessageTime(message.timestamp)}</div>` : ''}
+                </div>
+            </div>
+        `;
+    },
+
+    // Format message time
+    formatMessageTime(timestamp) {
+        return new Date(timestamp).toLocaleTimeString();
+    },
+
+    // Handle modal input changes
+    handleModalInputChange() {
+        if (!this.ui.modalInput || !this.ui.modalSend) return;
+        
+        const hasText = this.ui.modalInput.value.trim().length > 0;
+        this.ui.modalSend.disabled = !hasText;
+    },
+
+    // Handle modal key down
+    handleModalKeyDown(event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            this.sendModalMessage();
+        }
+    },
+
+    // Send message from modal
+    async sendModalMessage() {
+        if (!this.ui.modalInput || !this.ui.modalSend) return;
+        
+        const message = this.ui.modalInput.value.trim();
+        if (!message) return;
+
+        // Ensure we have a current conversation
+        if (!this.state.currentConversationId) {
+            this.createNewConversation();
+        }
+
+        // Clear input and disable send button
+        this.ui.modalInput.value = '';
+        this.ui.modalSend.disabled = true;
+        
+        // Add user message to conversation and modal
+        this.addMessageToConversation('user', message);
+        this.renderModalMessages();
+
+        try {
+            // Process message with AI
+            const response = await this.processMessage(message);
+            
+            // Add AI response to conversation and modal
+            this.addMessageToConversation('assistant', response.text);
+            this.renderModalMessages();
+            
+        } catch (error) {
+            console.error('Error processing modal message:', error);
+            this.addMessageToConversation('assistant', 'Sorry, I encountered an error processing your message. Please try again.');
+            this.renderModalMessages();
+        }
+        
+        // Update conversation list
+        this.renderConversationList();
+    },
+
+    // ======================================
+    // CONVERSATION MANAGEMENT METHODS
+    // ======================================
+
+    // Add message to current conversation
+    addMessageToConversation(sender, text) {
+        if (!this.state.currentConversationId) return;
+        
+        const conversation = this.state.conversations.find(c => c.id === this.state.currentConversationId);
+        if (!conversation) return;
+        
+        const message = {
+            sender,
+            text,
+            timestamp: new Date().toISOString()
+        };
+        
+        conversation.messages.push(message);
+        conversation.timestamp = message.timestamp; // Update conversation timestamp
+        this.saveConversations();
+    },
+
+    // Toggle conversation star status
+    toggleConversationStar(conversationId) {
+        const conversation = this.state.conversations.find(c => c.id === conversationId);
+        if (conversation) {
+            conversation.starred = !conversation.starred;
+            this.saveConversations();
+            this.renderConversationList();
+        }
+    },
+
+    // Show conversation menu
+    showConversationMenu(conversationId) {
+        const conversation = this.state.conversations.find(c => c.id === conversationId);
+        if (!conversation) return;
+
+        // Remove any existing menu
+        const existingMenu = document.querySelector('.conversation-menu');
+        if (existingMenu) {
+            existingMenu.remove();
+        }
+
+        // Create menu
+        const menu = document.createElement('div');
+        menu.className = 'conversation-menu';
+        menu.innerHTML = `
+            <div class="conversation-menu-item" onclick="AIAgent.renameConversation('${conversationId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                </svg>
+                Rename
+            </div>
+            <div class="conversation-menu-item" onclick="AIAgent.addTagsToConversation('${conversationId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7 5.5 7z"/>
+                </svg>
+                Add Tags
+            </div>
+            <div class="conversation-menu-item" onclick="AIAgent.exportConversation('${conversationId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20Z"/>
+                </svg>
+                Export
+            </div>
+            <div class="conversation-menu-divider"></div>
+            <div class="conversation-menu-item danger" onclick="AIAgent.deleteConversation('${conversationId}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+                </svg>
+                Delete
+            </div>
+        `;
+
+        // Position menu near the clicked button
+        const button = event.target.closest('.conversation-action-btn');
+        const rect = button.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.top = rect.bottom + 4 + 'px';
+        menu.style.left = rect.left - 120 + 'px';
+        menu.style.zIndex = '10000';
+
+        document.body.appendChild(menu);
+
+        // Close menu when clicking outside
+        const closeMenu = (e) => {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener('click', closeMenu);
+            }
+        };
+        setTimeout(() => document.addEventListener('click', closeMenu), 0);
+    },
+
+    // Rename conversation
+    renameConversation(conversationId) {
+        const conversation = this.state.conversations.find(c => c.id === conversationId);
+        if (!conversation) return;
+
+        ListManager.showInlineEdit(conversationId, conversation.title, (newTitle) => {
+            conversation.title = newTitle;
+            Storage.updateAiConversation(conversationId, { title: newTitle });
+            this.renderConversationList();
+        });
+    },
+
+    // Add tags to conversation
+    addTagsToConversation(conversationId) {
+        const conversation = this.state.conversations.find(c => c.id === conversationId);
+        if (!conversation) return;
+
+        ListManager.showTagsInput('Add Tags', conversation.tags || [], (tags) => {
+            Storage.addConversationTags(conversationId, tags);
+            
+            // Update local state
+            conversation.tags = tags;
+            this.renderConversationList();
+        });
+    },
+
+    // Export conversation
+    exportConversation(conversationId) {
+        const conversation = this.state.conversations.find(c => c.id === conversationId);
+        if (!conversation) return;
+
+        const exportData = {
+            title: conversation.title,
+            id: conversationId,
+            messages: conversation.messages,
+            createdAt: conversation.createdAt,
+            tags: conversation.tags || []
+        };
+
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `time-buddy-conversation-${conversation.title.replace(/[^a-zA-Z0-9]/g, '-')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    },
+
+    // Show conversation settings
+    showConversationSettings() {
+        if (!this.state.currentConversationId) return;
+        
+        // Use the same rename function as the context menu
+        this.renameConversation(this.state.currentConversationId);
+    },
+
+    // Override createNewConversation to work with new UI
+    async createNewConversation() {      
+        this.startNewConversation();
+        this.renderConversationList();
+        
+        // Only open in pop-out - no terrible modal fallback!
+        if (this.state.currentConversationId) {
+            await this.openConversation(this.state.currentConversationId);
+        } else {
+            this.showPopOutError('Failed to create new conversation. This is embarrassing - we are terrible at software and deeply apologize for this failure. 🙏');
+        }
+    },
+
+    // ======================================
+    // UTILITY METHODS
+    // ======================================
+
+    // Build context information string
+    buildContextInfo() {
+        const context = this.state.context;
+        const parts = [];
+        
+        if (context.datasource) {
+            parts.push(`Data Source: ${context.datasource}`);
+        }
+        
+        if (context.measurement) {
+            parts.push(`Measurement: ${context.measurement}`);
+        }
+        
+        if (context.field) {
+            parts.push(`Field: ${context.field}`);
+        }
+        
+        if (context.timeRange) {
+            parts.push(`Time Range: ${context.timeRange}`);
+        }
+        
+        return parts.join(' • ');
+    },
+
+    // Format message content for display
+    formatMessageContent(text) {
+        if (!text) return '';
+        
+        const textStr = typeof text === 'string' ? text : JSON.stringify(text);
+        
+        // Process markdown if detected
+        if (this.containsMarkdown(textStr)) {
+            return this.renderMarkdown(textStr);
+        } else {
+            return this.escapeHtml(textStr);
+        }
     }
 };
 

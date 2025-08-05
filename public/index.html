@@ -295,48 +295,31 @@
                             </div>
                         </div>
 
-                        <!-- AI Assistant Panel with Embedded Chat -->
+                        <!-- AI Assistant Panel with Conversation List -->
                         <div class="sidebar-panel" id="agentPanel">
                             <div class="sidebar-header">
-                                <h3>AI Assistant</h3>
+                                <h3>AI Conversations</h3>
                                 <div style="display: flex; align-items: center; gap: 8px;">
-                                    <button id="aiChatPopOut" class="pop-out-button" title="Pop out chat in new window" style="background: none; border: none; color: #cccccc; cursor: pointer; padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z"/>
+                                    <button id="newConversationBtn" class="icon-button" title="New Conversation" style="background: #007acc; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; display: flex; align-items: center;">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
                                         </svg>
                                     </button>
                                     <div class="status-indicator offline" id="aiAssistantStatus" title="AI Connection Status"></div>
                                 </div>
                             </div>
-                            <div class="sidebar-content" style="display: flex; flex-direction: column; height: 100%;">
-                                <!-- Chat Messages Area -->
-                                <div class="ai-chat-messages" id="aiChatMessages" style="flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 12px;">
-                                    <div class="ai-welcome-message">
-                                        <div class="welcome-icon">
-                                            <img src="images/logo.png" alt="Time Buddy AI Assistant" style="width: 48px; height: 48px; border-radius: 8px;">
-                                        </div>
-                                        <h4>Hi! I'm your AI Assistant</h4>
-                                        <p>I can help you analyze time series data, find anomalies, and answer questions about your metrics.</p>
-                                    </div>
+                            <div class="sidebar-content">
+                                <!-- Search Container -->
+                                <div class="search-container">
+                                    <input type="text" id="conversationSearch" class="search-input" placeholder="Search conversations..." oninput="AIAgent.handleConversationSearch(this.value)">
                                 </div>
                                 
-                                <!-- Chat Input Area -->
-                                <div class="ai-chat-input-container" style="border-top: 1px solid #454545; padding: 12px;">
-                                    <div class="ai-context-bar" id="aiContextBar" style="margin-bottom: 8px; font-size: 11px; color: #858585;">
-                                        <!-- Context info will be shown here -->
-                                    </div>
-                                    <div class="ai-input-wrapper" style="display: flex; gap: 8px; align-items: flex-end;">
-                                        <textarea 
-                                            id="aiChatInput" 
-                                            class="ai-chat-input" 
-                                            placeholder="Ask me about your metrics..."
-                                            rows="1"
-                                            style="flex: 1; background: #1e1e1e; border: 1px solid #454545; color: #cccccc; padding: 8px 12px; border-radius: 6px; resize: none; font-size: 14px; font-family: inherit; min-height: 36px; max-height: 120px;"
-                                        ></textarea>
-                                        <button id="aiChatSend" class="ai-chat-send" disabled style="background: #007acc; border: none; color: white; padding: 8px 12px; border-radius: 6px; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;">
-                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-                                            </svg>
+                                <!-- Conversation List -->
+                                <div class="conversation-list" id="conversationList">
+                                    <div class="empty-state">
+                                        <div style="margin-bottom: 12px; color: #858585;">No conversations yet</div>
+                                        <button class="primary-button" onclick="AIAgent.createNewConversation()" style="font-size: 12px; padding: 6px 12px;">
+                                            Start Your First Conversation
                                         </button>
                                     </div>
                                 </div>
@@ -846,12 +829,65 @@
         </div>
     </div>
 
+    <!-- AI Chat Pop-out Modal -->
+    <div class="ai-chat-modal hidden" id="aiChatModal">
+        <div class="ai-chat-window">
+            <div class="ai-chat-header">
+                <h3 class="ai-chat-title" id="aiChatModalTitle">
+                    <img src="images/logo.png" alt="AI" style="width: 20px; height: 20px; border-radius: 4px;">
+                    AI Conversation
+                </h3>
+                <div class="ai-chat-controls">
+                    <button class="ai-chat-control-btn" id="aiChatMinimize" title="Minimize">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20 14H4v-4h16"/>
+                        </svg>
+                    </button>
+                    <button class="ai-chat-control-btn" id="aiChatSettings" title="Conversation Settings">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 15.5A3.5 3.5 0 0 1 8.5 12A3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97 0-.33-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.31-.61-.22l-2.49 1c-.52-.39-1.06-.73-1.69-.98l-.37-2.65A.506.506 0 0 0 14 2h-4c-.25 0-.46.18-.5.42l-.37 2.65c-.63.25-1.17.59-1.69.98l-2.49-1c-.22-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1 0 .33.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.06.74 1.69.99l.37 2.65c.04.24.25.42.5.42h4c.25 0 .46-.18.5-.42l.37-2.65c.63-.26 1.17-.59 1.69-.99l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.66Z"/>
+                        </svg>
+                    </button>
+                    <button class="ai-chat-control-btn close-btn" id="aiChatClose" title="Close">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="ai-chat-body">
+                <div class="ai-chat-messages-container" id="aiChatModalMessages">
+                    <!-- Messages will be populated here -->
+                </div>
+                <div class="ai-chat-input-area">
+                    <div class="ai-chat-context-info" id="aiChatModalContext" style="display: none;">
+                        <!-- Context info will be shown here -->
+                    </div>
+                    <div class="ai-chat-input-wrapper">
+                        <textarea 
+                            id="aiChatModalInput" 
+                            class="ai-chat-textarea" 
+                            placeholder="Ask me about your metrics..."
+                            rows="1"
+                        ></textarea>
+                        <button id="aiChatModalSend" class="ai-chat-send-btn" disabled>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Auth Status -->
     <div id="authStatus" class="auth-status-toast"></div>
 
     <!-- Application Scripts -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
+    <script src="js/listManager.js"></script>
     <script src="js/storage.js"></script>
     <script src="js/api.js"></script>
     <script src="js/influxqlLinter.js"></script>
