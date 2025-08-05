@@ -448,9 +448,9 @@ Keep it concise and actionable.`;
             userPreferences: {}
         };
         
-        // Get available metrics
+        // Get available metrics - pass all of them to AI
         if (window.Schema && Schema.measurements) {
-            context.availableMetrics = Schema.measurements.slice(0, 20);
+            context.availableMetrics = Schema.measurements;
         }
         
         // Get recent query history

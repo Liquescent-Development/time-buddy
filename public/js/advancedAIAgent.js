@@ -62,6 +62,12 @@ class AdvancedAIAgent {
         }
     }
 
+    // Clear conversation history to start fresh
+    clearConversationHistory() {
+        console.log('🧹 Clearing conversation history');
+        this.contextManager.clearHistory();
+    }
+
     // Main entry point for user interactions - TRUE INTELLIGENT PROCESSING
     async processAdvancedQuery(userInput, context = {}) {
         if (!this.initialized) {
@@ -73,7 +79,7 @@ class AdvancedAIAgent {
         console.log('🧠 Processing intelligent query:', userInput);
         
         try {
-            // Step 1: Parse user intent using NLU
+            // Step 1: Parse user intent using NLU with conversation context
             const intent = await this.parseUserIntent(userInput, context);
             console.log('🎯 Parsed intent:', intent);
             
@@ -85,11 +91,19 @@ class AdvancedAIAgent {
             const response = await this.generateIntelligentResponse(intent, analysisResult, userInput);
             console.log('💬 Generated response:', response);
             
+            // Step 4: Store this exchange in conversation history
+            this.contextManager.addToHistory(userInput, response, context);
+            
             return response;
             
         } catch (error) {
             console.error('Error in intelligent query processing:', error);
-            return this.generateErrorResponse(error, userInput);
+            const errorResponse = this.generateErrorResponse(error, userInput);
+            
+            // Still store error responses in history for context
+            this.contextManager.addToHistory(userInput, errorResponse, context);
+            
+            return errorResponse;
         }
     }
 
@@ -103,18 +117,37 @@ class AdvancedAIAgent {
             
             try {
                 const aiResponse = await this.callAIModel(intentPrompt, { temperature: 0.1, maxTokens: 500 });
-                const parsedIntent = this.parseAIIntentResponse(aiResponse);
                 
-                if (parsedIntent) {
-                    return parsedIntent;
+                // Check if AI is requesting system information
+                if (this.isSystemCommand(aiResponse)) {
+                    const commandResult = await this.executeSystemCommand(aiResponse, context);
+                    
+                    // Call AI again with the command result
+                    const enhancedPrompt = intentPrompt + `\n\n**SYSTEM RESPONSE:**\n${commandResult}\n\nNow that you have the information you requested, please provide your intent parsing response:`;
+                    const finalResponse = await this.callAIModel(enhancedPrompt, { temperature: 0.1, maxTokens: 500 });
+                    const parsedIntent = this.parseAIIntentResponse(finalResponse);
+                    
+                    if (parsedIntent) {
+                        return parsedIntent;
+                    }
+                } else {
+                    const parsedIntent = this.parseAIIntentResponse(aiResponse);
+                    
+                    if (parsedIntent) {
+                        return parsedIntent;
+                    }
                 }
             } catch (error) {
                 console.warn('AI intent parsing failed, using fallback:', error);
             }
         }
         
-        // Fallback to pattern-based intent parsing
-        return this.parseIntentWithPatterns(userInput, availableMetrics);
+        // If AI parsing fails, return error - no fallback
+        return {
+            type: 'ai_parsing_failed',
+            error: 'AI service unavailable - cannot process your request',
+            success: false
+        };
     }
 
     // Build prompt for AI-powered intent parsing with rich context
@@ -122,9 +155,14 @@ class AdvancedAIAgent {
         // Get rich schema information
         const schemaInfo = this.buildRichSchemaContext(availableMetrics);
         
+        // Get conversation context
+        const conversationContext = this.contextManager.getConversationContext();
+        
         return `You are an expert time series analyst. Parse this user query and extract the intent with full understanding of the available data.
 
 ${schemaInfo}
+
+${conversationContext}
 
 User query: "${userInput}"
 
@@ -140,39 +178,860 @@ Analyze the query and return a JSON object with:
 }
 
 CRITICAL RULES:
-- Only use measurement names that exist exactly as listed above
-- For IOPS/performance queries, focus on Volume*Ops measurements  
-- For storage/capacity queries, use *Bytes measurements
-- For SolidFire storage, use SolidfireObjectStorage measurements
+- When user says "those measurements", "those metrics", "the measurements", "them", etc., ONLY use measurements from the conversation history
+- For dashboard requests referencing previous conversation, IGNORE the example measurements list entirely
+- Only use measurement names that exist exactly as mentioned in the conversation or listed above
 - Use "analyze_fields" when user asks about fields/columns within a specific measurement
-- Be specific about which measurements match the user's intent`;
+- Be specific about which measurements match the user's intent
+- IMPORTANT: Conversation context takes ABSOLUTE PRIORITY over sample measurements
+
+**DASHBOARD RULE**: If user requests a dashboard and refers to previously discussed measurements, extract ONLY those specific measurements from the conversation history, regardless of measurement naming pattern.`;
     }
 
-    // Build rich schema context with detailed information about each measurement
+    // Build lean schema context - AI can request more specific information
     buildRichSchemaContext(availableMetrics) {
-        let schemaInfo = `**TIME SERIES MEASUREMENTS AVAILABLE:**\n\n`;
+        const totalCount = availableMetrics.length;
         
-        availableMetrics.forEach(metric => {
-            // Get measurement details
-            const details = this.getMeasurementDetails(metric);
+        // Extract measurements mentioned in conversation history
+        const recentHistory = this.contextManager.currentContext.conversationHistory.slice(-3);
+        const mentionedMeasurements = new Set();
+        
+        recentHistory.forEach(exchange => {
+            // Look for any measurement names mentioned in user input and AI responses
+            const text = `${exchange.userInput} ${exchange.aiResponse?.text || ''}`;
             
-            schemaInfo += `📊 **${metric}**\n`;
-            schemaInfo += `   Type: ${details.type}\n`;
-            schemaInfo += `   Description: ${details.description}\n`;
-            schemaInfo += `   Use for: ${details.useCase}\n`;
-            
-            if (details.fields.length > 0) {
-                schemaInfo += `   Data fields: ${details.fields.join(', ')}\n`;
-            }
-            
-            if (details.tags.length > 0) {
-                schemaInfo += `   Tags: ${details.tags.join(', ')}\n`;
-            }
-            
-            schemaInfo += `\n`;
+            // Check each available metric to see if it's mentioned in the conversation
+            availableMetrics.forEach(metric => {
+                // Case-insensitive search for exact measurement names
+                const regex = new RegExp(`\\b${metric.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+                if (regex.test(text)) {
+                    mentionedMeasurements.add(metric);
+                    console.log(`🔍 Found mentioned measurement in conversation: ${metric}`);
+                }
+            });
         });
         
+        let schemaInfo = `**TIME SERIES DATA AVAILABLE:**\n`;
+        schemaInfo += `Total measurements: ${totalCount}\n\n`;
+        
+        // Show recently mentioned measurements first, then sample
+        if (mentionedMeasurements.size > 0) {
+            schemaInfo += `**Recently discussed measurements:**\n`;
+            Array.from(mentionedMeasurements).forEach(metric => {
+                schemaInfo += `• ${metric}\n`;
+            });
+            schemaInfo += `\n`;
+        }
+        
+        // Show a small sample for context, but make it clear these are just examples
+        const sampleMetrics = availableMetrics.slice(0, 5);
+        schemaInfo += `**Example measurements (${sampleMetrics.length} of ${totalCount}):**\n`;
+        
+        sampleMetrics.forEach(metric => {
+            if (!mentionedMeasurements.has(metric)) {
+                schemaInfo += `• ${metric}\n`;
+            }
+        });
+        
+        schemaInfo += `\n**AI SYSTEM COMMANDS:**\n`;
+        schemaInfo += `If you need more information to answer the user's question, you can use these commands:\n`;
+        schemaInfo += `- LOOKUP_MEASUREMENT: measurement_name - Get details about a specific measurement\n`;
+        schemaInfo += `- SEARCH_MEASUREMENTS: search_pattern - Find measurements matching a pattern\n`;
+        schemaInfo += `- GET_FIELDS: measurement_name - Get field names and tags for a measurement\n`;
+        schemaInfo += `- GET_TAGS: measurement_name - Get only tag names for a measurement (for filtering/grouping)\n`;
+        schemaInfo += `- GET_SAMPLE_DATA: measurement_name - Get sample data from a measurement\n`;
+        schemaInfo += `\nIf you use a command, I will execute it and provide the results, then you can answer the user.\n\n`;
+        
         return schemaInfo;
+    }
+
+    // Check if AI response contains a system command
+    isSystemCommand(response) {
+        const commands = ['LOOKUP_MEASUREMENT:', 'SEARCH_MEASUREMENTS:', 'GET_FIELDS:', 'GET_TAGS:', 'GET_SAMPLE_DATA:', 'SHOW TAG KEYS', 'SHOW FIELD KEYS', 'SHOW MEASUREMENTS'];
+        const flexibleCommands = ['I need to', 'let me', 'I should', 'I will need to', 'execute', 'query', 'sample data'];
+        
+        console.log('🔍 Checking for system commands in response:', response.substring(0, 300) + '...');
+        
+        // Strip markdown code blocks and formatting to find commands
+        const cleanResponse = response.replace(/```[\s\S]*?```/g, (match) => {
+            // Extract content from code blocks and check for commands
+            const content = match.replace(/```/g, '').trim();
+            console.log('🔍 Found code block content:', content);
+            return content;
+        });
+        
+        console.log('🔍 Cleaned response for command detection:', cleanResponse.substring(0, 300));
+        
+        // Check for exact command format first
+        const hasExactCommand = commands.some(cmd => cleanResponse.includes(cmd));
+        if (hasExactCommand) {
+            console.log('✅ Found exact system command format');
+            return true;
+        }
+        
+        // Check if AI is indicating it needs more data but didn't use exact format
+        const responseLines = response.toLowerCase().split('\n');
+        for (const line of responseLines) {
+            if ((line.includes('need') || line.includes('should') || line.includes('execute')) && 
+                (line.includes('query') || line.includes('data') || line.includes('sample'))) {
+                console.log('🤖 AI indicated need for data but used flexible language:', line);
+                return true;
+            }
+        }
+        
+        console.log('❌ No system commands detected');
+        return false;
+    }
+
+    // Execute system command requested by AI
+    async executeSystemCommand(response, context) {
+        console.log('🤖 AI requested system command:', response);
+        
+        // Strip markdown code blocks to find commands
+        const cleanResponse = response.replace(/```[\s\S]*?```/g, (match) => {
+            return match.replace(/```/g, '').trim();
+        });
+        
+        console.log('🤖 Cleaned response for command extraction:', cleanResponse.substring(0, 200));
+        
+        // Handle exact command format
+        if (cleanResponse.includes('LOOKUP_MEASUREMENT:')) {
+            const measurementName = cleanResponse.split('LOOKUP_MEASUREMENT:')[1].trim().split('\n')[0];
+            console.log('🔍 Extracted measurement name for lookup:', measurementName);
+            return await this.lookupMeasurement(measurementName, context);
+        }
+        
+        if (cleanResponse.includes('SEARCH_MEASUREMENTS:')) {
+            const searchPattern = cleanResponse.split('SEARCH_MEASUREMENTS:')[1].trim().split('\n')[0];
+            console.log('🔍 Extracted search pattern:', searchPattern);
+            return await this.searchMeasurements(searchPattern, context);
+        }
+        
+        if (cleanResponse.includes('GET_FIELDS:')) {
+            let measurementName = cleanResponse.split('GET_FIELDS:')[1].trim().split('\n')[0];
+            // Clean up backticks, quotes, and other formatting
+            measurementName = measurementName.replace(/[`"']/g, '').trim();
+            console.log('🔍 Extracted measurement name for fields:', measurementName);
+            return await this.getFieldsAndTagsForAI(measurementName, context);
+        }
+        
+        if (cleanResponse.includes('GET_TAGS:')) {
+            let measurementName = cleanResponse.split('GET_TAGS:')[1].trim().split('\n')[0];
+            // Clean up backticks, quotes, and other formatting
+            measurementName = measurementName.replace(/[`"']/g, '').trim();
+            console.log('🔍 Extracted measurement name for tags:', measurementName);
+            return await this.getTagKeysFromSchema(measurementName, context);
+        }
+        
+        if (cleanResponse.includes('GET_SAMPLE_DATA:')) {
+            let measurementName = cleanResponse.split('GET_SAMPLE_DATA:')[1].trim().split('\n')[0];
+            // Clean up backticks, quotes, and other formatting
+            measurementName = measurementName.replace(/[`"']/g, '').trim();
+            console.log('🔍 Extracted measurement name for sample data:', measurementName);
+            return await this.getSampleData(measurementName, context);
+        }
+        
+        // Handle InfluxQL schema queries as system commands using Schema cache
+        if (cleanResponse.includes('SHOW TAG KEYS')) {
+            const match = cleanResponse.match(/SHOW TAG KEYS FROM "([^"]+)"/);
+            if (match) {
+                const measurementName = match[1];
+                console.log('🔍 Extracted measurement name for tag keys:', measurementName);
+                return await this.getTagKeysFromSchema(measurementName, context);
+            }
+        }
+        
+        if (cleanResponse.includes('SHOW FIELD KEYS')) {
+            const match = cleanResponse.match(/SHOW FIELD KEYS FROM "([^"]+)"/);
+            if (match) {
+                const measurementName = match[1];
+                console.log('🔍 Extracted measurement name for field keys:', measurementName);
+                return await this.getMeasurementFields(measurementName, context);
+            }
+        }
+        
+        if (cleanResponse.includes('SHOW MEASUREMENTS')) {
+            console.log('🔍 AI requested to show measurements');
+            return await this.getAllMeasurementsFromSchema(context);
+        }
+        
+        if (response.includes('GET_RETENTION_POLICIES')) {
+            return await this.getRetentionPoliciesFromSchema(context);
+        }
+        
+        if (response.includes('SET_RETENTION_POLICY:')) {
+            const retentionPolicy = response.split('SET_RETENTION_POLICY:')[1].trim().split('\n')[0];
+            return await this.setRetentionPolicy(retentionPolicy, context);
+        }
+        
+        // Handle flexible language - try to infer what AI wants
+        return await this.inferSystemCommand(response, context);
+    }
+
+    // Infer what system command the AI wanted based on flexible language
+    async inferSystemCommand(response, context) {
+        console.log('🤖 Inferring system command from flexible language');
+        
+        // Extract measurement names mentioned in the response
+        const measurementRegex = /ec2-[a-zA-Z0-9-]+/g;
+        const measurements = response.match(measurementRegex) || [];
+        
+        if (measurements.length > 0) {
+            const measurement = measurements[0];
+            console.log(`🎯 Found measurement reference: ${measurement}`);
+            
+            // If AI mentions needing sample data or structure
+            if (response.toLowerCase().includes('sample') || 
+                response.toLowerCase().includes('structure') ||
+                response.toLowerCase().includes('execute') ||
+                response.toLowerCase().includes('dashboard')) {
+                
+                console.log(`🔍 AI needs sample data for dashboard creation`);
+                return await this.getSampleData(measurement, context);
+            }
+            
+            // If AI mentions fields
+            if (response.toLowerCase().includes('field')) {
+                console.log(`🔍 AI needs field information`);
+                return await this.getMeasurementFields(measurement, context);
+            }
+        }
+        
+        return `I detected that you need more information, but I couldn't determine exactly what. Please use the specific command format:
+- GET_SAMPLE_DATA: measurement_name
+- GET_FIELDS: measurement_name  
+- SEARCH_MEASUREMENTS: pattern`;
+    }
+
+    // Lookup a specific measurement
+    async lookupMeasurement(measurementName, context) {
+        const measurements = context.availableMetrics || [];
+        const found = measurements.find(m => m.toLowerCase() === measurementName.toLowerCase());
+        
+        if (found) {
+            const details = this.getMeasurementDetails(found);
+            return `**Measurement Found: ${found}**\n` +
+                   `Type: ${details.type}\n` +
+                   `Description: ${details.description}\n` +
+                   `Use Case: ${details.useCase}\n` +
+                   `Fields: ${details.fields.join(', ')}\n` +
+                   `Tags: ${details.tags.join(', ')}`;
+        } else {
+            return `Measurement "${measurementName}" not found in available measurements.`;
+        }
+    }
+
+    // Search for measurements matching a pattern
+    async searchMeasurements(searchPattern, context) {
+        const measurements = context.availableMetrics || [];
+        const pattern = searchPattern.toLowerCase();
+        const matches = measurements.filter(m => m.toLowerCase().includes(pattern));
+        
+        if (matches.length > 0) {
+            const limitedMatches = matches.slice(0, 20); // Limit results
+            let result = `**Found ${matches.length} measurements matching "${searchPattern}":**\n`;
+            limitedMatches.forEach(match => {
+                result += `• ${match}\n`;
+            });
+            if (matches.length > 20) {
+                result += `... and ${matches.length - 20} more matches\n`;
+            }
+            return result;
+        } else {
+            return `No measurements found matching pattern "${searchPattern}".`;
+        }
+    }
+
+    // Get field names for a measurement (this would query the actual database)
+    async getMeasurementFields(measurementName, context) {
+        try {
+            // This is where we'd query the actual database for field names
+            // For now, simulate the API call
+            const fields = await this.queryMeasurementFields(measurementName);
+            
+            if (fields && fields.length > 0) {
+                return `**Fields in measurement "${measurementName}":**\n${fields.map(f => `• ${f}`).join('\n')}`;
+            } else {
+                return `No fields found for measurement "${measurementName}" or measurement does not exist.`;
+            }
+        } catch (error) {
+            return `Error retrieving fields for "${measurementName}": ${error.message}`;
+        }
+    }
+
+    // Get measurement fields using the centralized Schema cache
+    async queryMeasurementFields(measurementName) {
+        console.log(`🔍 Getting fields for measurement: ${measurementName} from Schema cache`);
+        
+        try {
+            // Use Schema's centralized method which handles caching and multiple retention policies
+            if (typeof Schema === 'undefined') {
+                console.warn('Schema service not available for field lookup');
+                return [];
+            }
+            
+            // Try with the first available retention policy
+            const retentionPolicies = Schema.influxRetentionPolicies || ['autogen'];
+            const defaultRetentionPolicy = retentionPolicies[0] || 'autogen';
+            
+            console.log(`🔍 Using retention policy: ${defaultRetentionPolicy} for measurement: ${measurementName}`);
+            
+            const fields = await Schema.getFieldsForMeasurement(measurementName, defaultRetentionPolicy);
+            
+            console.log(`🔍 Retrieved ${fields.length} fields from Schema cache:`, fields);
+            return fields;
+            
+        } catch (error) {
+            console.error(`Error getting fields for ${measurementName} from Schema:`, error);
+            return [];
+        }
+    }
+
+    // Get sample data from a measurement
+    async getSampleData(measurementName, context) {
+        try {
+            // This would query actual sample data
+            const sampleData = await this.querySampleData(measurementName);
+            console.log(`🔍 Retrieved sample data for AI:`, sampleData?.length, 'rows');
+            
+            if (sampleData && sampleData.length > 0) {
+                const formattedResponse = `**Sample data from "${measurementName}":**\n${JSON.stringify(sampleData.slice(0, 3), null, 2)}`;
+                console.log(`🔍 Formatted response for AI:`, formattedResponse);
+                return formattedResponse;
+            } else {
+                console.log(`🔍 No sample data found for measurement: ${measurementName}`);
+                return `No sample data found for measurement "${measurementName}".`;
+            }
+        } catch (error) {
+            console.log(`🔍 Error in getSampleData:`, error.message);
+            return `Error retrieving sample data for "${measurementName}": ${error.message}`;
+        }
+    }
+
+    // Get both fields and tags for AI system commands (formatted response)
+    async getFieldsAndTagsForAI(measurementName, context) {
+        console.log(`🔍 Getting fields and tags for AI: ${measurementName} from Schema cache`);
+        
+        try {
+            if (typeof Schema === 'undefined') {
+                console.warn('Schema service not available for fields/tags lookup');
+                return 'Schema service not available for fields/tags lookup';
+            }
+            
+            // Get fields using the centralized method
+            const retentionPolicies = Schema.influxRetentionPolicies || ['autogen'];
+            const defaultRetentionPolicy = retentionPolicies[0] || 'autogen';
+            
+            const fields = await Schema.getFieldsForMeasurement(measurementName, defaultRetentionPolicy);
+            console.log(`🔍 Retrieved ${fields.length} fields from Schema cache:`, fields);
+            
+            // Get tags from Schema cache
+            const tags = Schema.influxTags[measurementName] || [];
+            console.log(`🔍 Retrieved ${tags.length} tags from Schema cache:`, tags);
+            
+            // Return formatted response for AI
+            let response = `**Fields in measurement "${measurementName}":**\n`;
+            if (fields.length > 0) {
+                response += fields.map(field => `• ${field}`).join('\n');
+            } else {
+                response += 'No fields found';
+            }
+            
+            if (tags.length > 0) {
+                response += `\n\n**Tags in measurement "${measurementName}" (for filtering/grouping):**\n`;
+                response += tags.map(tag => `• ${tag}`).join('\n');
+            }
+            
+            return response;
+            
+        } catch (error) {
+            console.error(`Error getting fields and tags for ${measurementName} from Schema:`, error);
+            return `Error retrieving fields and tags for "${measurementName}": ${error.message}`;
+        }
+    }
+
+    // Query actual sample data using the same method as field queries
+    async querySampleData(measurementName) {
+        console.log(`🔍 Querying sample data for measurement: ${measurementName}`);
+        
+        try {
+            // Use the same executeQuery method that works for fields
+            // Try without retention policy first
+            const query = `SELECT * FROM "${measurementName}" ORDER BY time DESC LIMIT 5`;
+            console.log(`🔍 Executing sample data query: ${query}`);
+            const response = await this.executeQuery(query, {});
+            
+            console.log(`🔍 Sample data response:`, JSON.stringify(response, null, 2));
+            
+            // Handle both old and new Grafana response formats
+            
+            // Try new Grafana format first (response.results.A.frames)
+            if (response && response.results && response.results.A && response.results.A.frames && response.results.A.frames.length > 0) {
+                const frame = response.results.A.frames[0];
+                if (frame.schema && frame.schema.fields && frame.data && frame.data.values) {
+                    const fields = frame.schema.fields;
+                    const columns = frame.data.values; // Each element is a column, not a row
+                    
+                    const numRows = columns.length > 0 ? columns[0].length : 0;
+                    console.log(`🔍 Sample data format (new): ${fields.length} fields, ${numRows} rows`);
+                    
+                    // Convert columnar data to row objects (same as query editor)
+                    const result = [];
+                    for (let rowIndex = 0; rowIndex < numRows; rowIndex++) {
+                        const obj = {};
+                        fields.forEach((field, fieldIndex) => {
+                            obj[field.name] = columns[fieldIndex] ? columns[fieldIndex][rowIndex] : null;
+                        });
+                        result.push(obj);
+                    }
+                    
+                    console.log(`🔍 Converted to ${result.length} row objects:`, result.slice(0, 2));
+                    return result;
+                }
+            }
+            
+            // Try old format (response.data.columns/values)
+            else if (response && response.data && response.data.columns && response.data.values) {
+                const columns = response.data.columns; // Column names array like ["Time", "Value"]
+                const values = response.data.values;   // Flat array of all values
+                
+                console.log(`🔍 Sample data format (old): ${columns.length} columns, ${values.length} total values`);
+                console.log(`🔍 Columns:`, columns);
+                console.log(`🔍 Values sample:`, values.slice(0, 10));
+                
+                // Calculate number of rows
+                const numRows = columns.length > 0 ? Math.floor(values.length / columns.length) : 0;
+                console.log(`🔍 Calculated ${numRows} rows from ${values.length} values / ${columns.length} columns`);
+                
+                if (numRows > 0) {
+                    // Convert flat values array to row objects
+                    const result = [];
+                    for (let rowIndex = 0; rowIndex < numRows; rowIndex++) {
+                        const obj = {};
+                        columns.forEach((columnName, colIndex) => {
+                            const valueIndex = rowIndex * columns.length + colIndex;
+                            obj[columnName] = valueIndex < values.length ? values[valueIndex] : null;
+                        });
+                        result.push(obj);
+                    }
+                    
+                    console.log(`🔍 Converted to ${result.length} row objects:`, result.slice(0, 2));
+                    return result;
+                }
+            }
+            
+            return [];
+        } catch (error) {
+            console.error(`Error querying sample data for ${measurementName}:`, error);
+            return [];
+        }
+    }
+
+    // Get tag keys for a measurement from Schema cache
+    async getTagKeysFromSchema(measurementName, context) {
+        console.log(`🔍 Getting tag keys for measurement: ${measurementName} from Schema cache`);
+        
+        try {
+            if (typeof Schema === 'undefined') {
+                console.warn('Schema service not available for tag keys lookup');
+                return 'Schema service not available for tag keys lookup';
+            }
+            
+            const tagKeys = Schema.influxTags[measurementName] || [];
+            console.log(`🔍 Retrieved ${tagKeys.length} tag keys from Schema cache:`, tagKeys);
+            
+            if (tagKeys.length > 0) {
+                const tagList = tagKeys.map(key => `• ${key}`).join('\n');
+                return `**Tag keys for "${measurementName}":**\n${tagList}`;
+            } else {
+                return `No tag keys found for measurement "${measurementName}" in Schema cache.`;
+            }
+            
+        } catch (error) {
+            console.error(`Error getting tag keys for ${measurementName} from Schema:`, error);
+            return `Error retrieving tag keys for "${measurementName}": ${error.message}`;
+        }
+    }
+
+    // Get all measurements from Schema cache
+    async getAllMeasurementsFromSchema(context) {
+        console.log(`🔍 Getting all measurements from Schema cache`);
+        
+        try {
+            if (typeof Schema === 'undefined') {
+                console.warn('Schema service not available for measurements lookup');
+                return 'Schema service not available for measurements lookup';
+            }
+            
+            const measurements = Schema.influxMeasurements || [];
+            console.log(`🔍 Retrieved ${measurements.length} measurements from Schema cache`);
+            
+            if (measurements.length > 0) {
+                const measurementList = measurements.slice(0, 20).map(m => `• ${m}`).join('\n');
+                const remaining = measurements.length > 20 ? `\n\n...and ${measurements.length - 20} more measurements` : '';
+                return `**Available Measurements (showing first 20):**\n${measurementList}${remaining}`;
+            } else {
+                return 'No measurements found in Schema cache. Make sure schema is loaded.';
+            }
+            
+        } catch (error) {
+            console.error(`Error getting measurements from Schema:`, error);
+            return `Error retrieving measurements: ${error.message}`;
+        }
+    }
+
+    // Get retention policies from Schema cache
+    async getRetentionPoliciesFromSchema(context) {
+        console.log(`🔍 Getting retention policies from Schema cache`);
+        
+        try {
+            if (typeof Schema === 'undefined') {
+                console.warn('Schema service not available for retention policy lookup');
+                return 'Schema service not available for retention policy lookup';
+            }
+            
+            const policies = Schema.influxRetentionPolicies || [];
+            console.log(`🔍 Retrieved ${policies.length} retention policies from Schema cache:`, policies);
+            
+            if (policies.length > 0) {
+                const policyList = policies.map(p => `• ${p}`).join('\n');
+                return `**Available Retention Policies:**\n${policyList}`;
+            } else {
+                return 'No retention policies found in Schema cache. Make sure schema is loaded.';
+            }
+            
+        } catch (error) {
+            console.error(`Error getting retention policies from Schema:`, error);
+            return `Error retrieving retention policies: ${error.message}`;
+        }
+    }
+
+    // Try to get sample data using Schema retention policies
+    async trySampleDataWithRetentionPolicies(measurementName) {
+        console.log(`🔄 Trying sample data with Schema retention policies for: ${measurementName}`);
+        
+        if (typeof Schema === 'undefined') {
+            console.log(`❌ Schema service not available`);
+            return [];
+        }
+        
+        const policies = Schema.influxRetentionPolicies || [];
+        
+        if (policies.length === 0) {
+            console.log(`❌ No retention policies found in Schema`);
+            return [];
+        }
+        
+        for (const policy of policies) {
+            try {
+                console.log(`🔄 Trying sample data query with retention policy: ${policy}`);
+                const fullMeasurementName = `"${policy}"."${measurementName}"`;
+                const query = `SELECT * FROM ${fullMeasurementName} ORDER BY time DESC LIMIT 5`;
+                
+                const response = await this.executeQuery(query, {});
+                
+                // Use the same data extraction logic
+                if (response && response.data && response.data.columns && response.data.values) {
+                    const columns = response.data.columns;
+                    const values = response.data.values;
+                    
+                    if (values.length > 0) {
+                        console.log(`✅ Found sample data using retention policy "${policy}"`);
+                        return values.map(row => {
+                            const obj = {};
+                            columns.forEach((col, index) => {
+                                obj[col] = row[index];
+                            });
+                            return obj;
+                        });
+                    }
+                }
+                
+            } catch (policyError) {
+                console.log(`❌ Retention policy "${policy}" failed: ${policyError.message}`);
+                continue;
+            }
+        }
+        
+        return [];
+    }
+
+    // Check if this is a complex request that needs AI with system command access
+    isComplexRequest(query) {
+        const complexKeywords = [
+            'dashboard', 'grafana', 'json', 'panel', 'visualization',
+            'create', 'build', 'generate', 'export', 'chart'
+        ];
+        const queryLower = query.toLowerCase();
+        const isComplex = complexKeywords.some(keyword => queryLower.includes(keyword));
+        
+        console.log(`🤔 Complex request check for "${query}":`, isComplex);
+        return isComplex;
+    }
+
+    // Generate complex response using AI with system command access
+    async generateComplexResponse(intent, analysisResult, originalQuery) {
+        console.log('🎯 Generating complex response with AI system access');
+        
+        // Get conversation context
+        const conversationContext = this.contextManager.getConversationContext();
+        
+        // Build context for the AI with analysis results
+        let context = `**Analysis Results:**\n`;
+        if (analysisResult.success && analysisResult.metrics && analysisResult.metrics.length > 0) {
+            analysisResult.metrics.forEach(metric => {
+                context += `• ${metric.name}: ${metric.success ? 'success' : 'failed'}\n`;
+                if (metric.success && metric.analysis) {
+                    context += `  Latest: ${metric.analysis.summary.latest}\n`;
+                    context += `  Count: ${metric.analysis.summary.count} data points\n`;
+                }
+            });
+        }
+
+        // Use the same enhanced prompt as buildSystemCommandPrompt for consistency
+        const prompt = this.buildSystemCommandPrompt('complex_ai_response', intent, analysisResult, originalQuery);
+
+        try {
+            const aiResponse = await this.callAIModel(prompt);
+            
+            // Check if AI is requesting system information
+            if (this.isSystemCommand(aiResponse)) {
+                // Pass full context including all available metrics
+                const fullContext = {
+                    availableMetrics: window.Schema?.measurements || intent.metrics || [],
+                    intent: intent,
+                    analysisResult: analysisResult
+                };
+                const commandResult = await this.executeSystemCommand(aiResponse, fullContext);
+                
+                // Call AI again with the command result
+                const enhancedPrompt = prompt + `\n\n**SYSTEM RESPONSE:**\n${commandResult}\n\nNow please provide your complete response to the user:`;
+                const finalResponse = await this.callAIModel(enhancedPrompt);
+                
+                return {
+                    text: finalResponse,
+                    data: { 
+                        type: 'complex_ai_response', 
+                        intent, 
+                        usedSystemCommands: true,
+                        originalQuery 
+                    }
+                };
+            } else {
+                return {
+                    text: aiResponse,
+                    data: { 
+                        type: 'complex_ai_response', 
+                        intent, 
+                        usedSystemCommands: false,
+                        originalQuery 
+                    }
+                };
+            }
+        } catch (error) {
+            console.error('❌ Complex AI response generation failed:', error);
+            return {
+                text: `❌ **AI Service Error**\n\nI couldn't generate a detailed response due to: ${error.message}`,
+                data: { type: 'ai_error', intent, error: error.message }
+            };
+        }
+    }
+
+    // Generate response with system command support
+    async generateResponseWithSystemCommands(responseType, intent, analysisResult, originalQuery) {
+        console.log(`🎯 Generating ${responseType} response with system command support`);
+        
+        // First, try to generate response using AI with system command access
+        try {
+            const prompt = this.buildSystemCommandPrompt(responseType, intent, analysisResult, originalQuery);
+            const aiResponse = await this.callAIModel(prompt);
+            
+            // Check if AI is requesting system information
+            if (this.isSystemCommand(aiResponse)) {
+                console.log('🤖 AI requested system command, executing...');
+                const fullContext = {
+                    availableMetrics: window.Schema?.measurements || intent.metrics || [],
+                    intent: intent,
+                    analysisResult: analysisResult
+                };
+                const commandResult = await this.executeSystemCommand(aiResponse, fullContext);
+                console.log(`🔍 System command result:`, commandResult);
+                
+                // Call AI again with the command result
+                const enhancedPrompt = prompt + `\n\n**SYSTEM RESPONSE:**\n${commandResult}\n\nNow please provide your complete response to the user:`;
+                console.log(`🔍 Enhanced prompt length: ${enhancedPrompt.length} characters`);
+                console.log(`🔍 Enhanced prompt preview:`, enhancedPrompt.slice(-500)); // Last 500 chars
+                const finalResponse = await this.callAIModel(enhancedPrompt);
+                
+                return {
+                    text: finalResponse,
+                    data: { 
+                        type: responseType + '_with_system_commands', 
+                        intent, 
+                        usedSystemCommands: true,
+                        originalQuery 
+                    }
+                };
+            } else {
+                return {
+                    text: aiResponse,
+                    data: { 
+                        type: responseType + '_with_ai', 
+                        intent, 
+                        usedSystemCommands: false,
+                        originalQuery 
+                    }
+                };
+            }
+        } catch (error) {
+            console.error('❌ AI system command response failed, falling back to standard:', error);
+            
+            // Fallback to standard response generation
+            switch (responseType) {
+                case 'query_data':
+                    return this.generateDataQueryResponse(intent, analysisResult, originalQuery);
+                case 'find_anomalies':
+                    return this.generateAnomalyResponse(intent, analysisResult, originalQuery);
+                case 'compare_metrics':
+                    return this.generateComparisonResponse(intent, analysisResult, originalQuery);
+                case 'explain_metric':
+                    return this.generateExplanationResponse(intent, analysisResult, originalQuery);
+                case 'get_stats':
+                    return this.generateStatisticsResponse(intent, analysisResult, originalQuery);
+                case 'analyze_fields':
+                    return this.generateFieldAnalysisResponse(intent, analysisResult, originalQuery);
+                default:
+                    return this.generateBasicResponse(originalQuery, { availableMetrics: intent.metrics });
+            }
+        }
+    }
+
+    // Build AI prompt for system command enabled responses
+    buildSystemCommandPrompt(responseType, intent, analysisResult, originalQuery) {
+        const conversationContext = this.contextManager.getConversationContext();
+        
+        // Get current data source type from global config
+        const dataSourceType = GrafanaConfig?.selectedDatasourceType || 'influxdb';
+        const dataSourceName = dataSourceType === 'influxdb' ? 'InfluxDB' : 
+                              dataSourceType === 'prometheus' ? 'Prometheus' : 
+                              'Database';
+        
+        // Check if this is a Grafana dashboard request
+        const isDashboardRequest = originalQuery.toLowerCase().includes('dashboard') || 
+                                  originalQuery.toLowerCase().includes('grafana');
+        
+        // Build context based on analysis results
+        let analysisContext = '';
+        if (analysisResult.success && analysisResult.metrics) {
+            analysisContext = `**Available Analysis Results:**\n`;
+            analysisResult.metrics.forEach(metric => {
+                // Check if metric has data (success) or error (failure)
+                const hasData = metric.data && !metric.error;
+                analysisContext += `• ${metric.name}: ${hasData ? 'Data available' : metric.error || 'No data'}\n`;
+                
+                // Add additional context if data is available
+                if (hasData && metric.analysis && metric.analysis.summary) {
+                    const summary = metric.analysis.summary;
+                    if (summary.count) {
+                        analysisContext += `  - ${summary.count} data points\n`;
+                    }
+                }
+            });
+        }
+
+        // Add special dashboard generation context
+        let dashboardContext = '';
+        if (isDashboardRequest) {
+            // Get current datasource info from GrafanaConfig
+            const datasourceId = GrafanaConfig?.currentDatasourceId || 'your-datasource-uid';
+            const datasourceName = GrafanaConfig?.selectedDatasourceName || 'InfluxDB';
+            
+            dashboardContext = `
+**🎯 GRAFANA DASHBOARD GENERATION REQUIREMENTS:**
+
+**CRITICAL DATASOURCE INFO (USE THESE EXACT VALUES):**
+- Datasource UID: "${datasourceId}"
+- Datasource Name: "${datasourceName}" 
+- Datasource Type: "${dataSourceType}"
+
+**MANDATORY DASHBOARD STRUCTURE:**
+1. Every panel MUST include: "datasource": {"uid": "${datasourceId}", "type": "${dataSourceType}"}
+2. Generate actual ${dataSourceType === 'influxdb' ? 'InfluxQL' : 'PromQL'} queries using the fields and tags from GET_SAMPLE_DATA
+3. Use measurement names, field names, and tag names from the conversation
+4. Set appropriate panel titles, units (bytes, count, etc.), and visualization types
+5. Include proper time range and refresh configuration
+
+**REQUIRED PANEL STRUCTURE FOR INFLUXDB:**
+Each panel MUST have this exact structure:
+\`\`\`json
+{
+  "title": "Panel Title",
+  "type": "timeseries",
+  "datasource": {
+    "uid": "${datasourceId}",
+    "type": "${dataSourceType}"
+  },
+  "targets": [
+    {
+      "datasource": {
+        "uid": "${datasourceId}",
+        "type": "${dataSourceType}"
+      },
+      "query": "SELECT mean(\\"value\\") FROM \\"measurement-name\\" WHERE $timeFilter GROUP BY time($__interval) fill(null)",
+      "rawQuery": true,
+      "refId": "A"
+    }
+  ],
+  "fieldConfig": {
+    "defaults": {
+      "unit": "short"
+    }
+  }
+}
+\`\`\`
+
+**NEVER USE PLACEHOLDERS LIKE:**
+- "\$datasource" 
+- "Your Datasource Name"
+- Empty queries
+- Generic field names
+
+**ALWAYS USE ACTUAL:**
+- Real datasource UID: "${datasourceId}"
+- Real measurement names from conversation  
+- Real field names from GET_SAMPLE_DATA
+- Real tag names for GROUP BY clauses
+
+`;
+        }
+        
+        return `You are a data analysis assistant responding to a user query.
+
+${conversationContext}
+
+**User Request:** "${originalQuery}"
+**Response Type:** ${responseType}
+**Data Source:** ${dataSourceName} (${dataSourceType})
+**Intent:** ${JSON.stringify(intent, null, 2)}
+
+${analysisContext}${dashboardContext}
+
+**SYSTEM COMMANDS AVAILABLE:**
+- GET_SAMPLE_DATA: measurement_name - Get actual sample data
+- GET_FIELDS: measurement_name - Get field names and tags for a measurement
+- GET_TAGS: measurement_name - Get only tag names for a measurement (for filtering/grouping)
+- SEARCH_MEASUREMENTS: pattern - Find measurements matching a pattern
+
+**INSTRUCTIONS:**
+Provide a complete response to the user's ${responseType} request. If you need to understand data structure, field names, or sample values to give an accurate response, use the system commands first.
+
+For dashboard/visualization requests, ALWAYS use GET_SAMPLE_DATA first to understand the data structure.
+
+**CRITICAL**: Use ${dataSourceType === 'influxdb' ? 'InfluxQL' : dataSourceType === 'prometheus' ? 'PromQL' : 'SQL'} query syntax only since this is a ${dataSourceName} data source. Do not mix query languages.
+
+Respond with either:
+1. A system command (exact format: GET_SAMPLE_DATA: measurement_name)
+2. Your complete response to the user`;
     }
     
     // Get detailed information about a specific measurement
@@ -185,64 +1044,12 @@ CRITICAL RULES:
             useCase: 'General monitoring'
         };
         
-        // Intelligent classification based on measurement name
-        const name = measurementName.toLowerCase();
-        
-        if (name.includes('volume') && name.includes('ops')) {
-            details.type = 'iops_performance';
-            details.description = 'I/O operations per second for storage volumes';
-            details.fields = ['ops_count', 'ops_rate', 'latency'];
-            details.tags = ['volume_id', 'volume_name', 'operation_type'];
-            details.useCase = 'Storage performance analysis, IOPS monitoring, volume throughput tracking';
-        } else if (name.includes('volume') && name.includes('bytes')) {
-            details.type = 'storage_transfer';
-            details.description = 'Data transfer measurements for storage volumes in bytes';
-            details.fields = ['bytes_transferred', 'transfer_rate', 'throughput'];
-            details.tags = ['volume_id', 'direction', 'host'];
-            details.useCase = 'Storage bandwidth monitoring, data transfer analysis, capacity planning';
-        } else if (name.includes('volume') && name.includes('queue')) {
-            details.type = 'storage_queue';
-            details.description = 'Storage queue depth and pending operations';
-            details.fields = ['queue_depth', 'pending_ops', 'wait_time'];
-            details.tags = ['volume_id', 'queue_type'];
-            details.useCase = 'Storage performance bottleneck detection, queue analysis';
-        } else if (name.includes('solidfire')) {
-            details.type = 'storage_system';
-            details.description = 'NetApp SolidFire storage system metrics';
-            details.fields = ['bytes', 'usage_percentage', 'performance_metrics'];
-            details.tags = ['cluster_id', 'node_id', 'storage_type', 'tier'];
-            details.useCase = 'Enterprise storage monitoring, SolidFire system performance, capacity management';
-        } else if (name.includes('telegraf')) {
-            details.type = 'monitoring_system';
-            details.description = 'Telegraf monitoring agent internal performance metrics';
-            details.fields = ['collection_time', 'memory_usage', 'processing_rate'];
-            details.tags = ['agent_id', 'plugin_name', 'host'];
-            details.useCase = 'Monitoring system health, collection performance, agent diagnostics';
-        } else if (name === 'prometheus') {
-            details.type = 'metrics_platform';
-            details.description = 'Prometheus time series database metrics and metadata';
-            details.fields = ['series_count', 'sample_rate', 'storage_size', 'scrape_duration'];
-            details.tags = ['job', 'instance', 'metric_family'];
-            details.useCase = 'Prometheus system monitoring, metrics collection analysis, TSDB performance';
-        } else if (name.includes('test') || name.includes('smoke')) {
-            details.type = 'health_check';
-            details.description = 'Automated testing and service health validation results';
-            details.fields = ['test_result', 'response_time', 'success_rate'];
-            details.tags = ['test_name', 'service_name', 'environment'];
-            details.useCase = 'Service health monitoring, automated testing validation, uptime tracking';
-        } else if (name.includes('flight')) {
-            details.type = 'application_trace';
-            details.description = 'Application execution time and performance traces';
-            details.fields = ['execution_time', 'trace_id', 'performance_score'];
-            details.tags = ['service', 'endpoint', 'trace_type'];
-            details.useCase = 'Application performance monitoring, execution time analysis';
-        } else if (name.includes('workflow')) {
-            details.type = 'process_workflow';
-            details.description = 'Workflow execution and completion tracking';
-            details.fields = ['completion_time', 'status', 'step_count'];
-            details.tags = ['workflow_id', 'process_name', 'environment'];
-            details.useCase = 'Process automation monitoring, workflow performance analysis';
-        }
+        // No pattern matching - let AI analyze measurement types dynamically
+        details.type = 'time_series';
+        details.description = `Time series measurement: ${measurementName}`;
+        details.fields = ['value', 'timestamp', 'metadata'];
+        details.tags = ['host', 'environment', 'service'];
+        details.useCase = 'Time series data analysis and monitoring';
         
         return details;
     }
@@ -271,56 +1078,7 @@ CRITICAL RULES:
         return null;
     }
 
-    // Fallback pattern-based intent parsing
-    parseIntentWithPatterns(userInput, availableMetrics) {
-        const lower = userInput.toLowerCase();
-        const intent = {
-            type: 'unknown',
-            metrics: [],
-            timeRange: '1h',
-            operation: 'query',
-            question: userInput
-        };
-
-        // Find mentioned metrics
-        intent.metrics = availableMetrics.filter(metric => 
-            lower.includes(metric.toLowerCase())
-        );
-
-        // Determine intent type
-        if (lower.includes('anomal') || lower.includes('unusual') || lower.includes('spike')) {
-            intent.type = 'find_anomalies';
-            intent.operation = 'anomaly_detection';
-        } else if (lower.includes('compare') || lower.includes('vs') || lower.includes('versus')) {
-            intent.type = 'compare_metrics';
-        } else if (lower.includes('what is') || lower.includes('explain') || lower.includes('tell me about')) {
-            intent.type = 'explain_metric';
-        } else if (lower.includes('list') || lower.includes('show') || lower.includes('available')) {
-            intent.type = 'list_metrics';
-        } else if (lower.includes('average') || lower.includes('mean')) {
-            intent.type = 'query_data';
-            intent.operation = 'mean';
-        } else if (lower.includes('maximum') || lower.includes('max') || lower.includes('peak')) {
-            intent.type = 'query_data';
-            intent.operation = 'max';
-        } else if (intent.metrics.length > 0) {
-            intent.type = 'query_data';
-        }
-
-        // Extract time range
-        if (lower.includes('hour') || lower.includes('1h')) {
-            intent.timeRange = '1h';
-        } else if (lower.includes('day') || lower.includes('24h') || lower.includes('today')) {
-            intent.timeRange = '24h';
-        } else if (lower.includes('week') || lower.includes('7d')) {
-            intent.timeRange = '7d';
-        } else if (lower.includes('yesterday')) {
-            intent.timeRange = '24h';
-            intent.comparison = { type: 'time_period', baseline: 'yesterday' };
-        }
-
-        return intent;
-    }
+    // This function was removed - no pattern matching allowed
 
     // Execute the parsed intent by querying real data
     async executeIntent(intent, context) {
@@ -367,6 +1125,8 @@ CRITICAL RULES:
             return results;
         }
 
+        console.log(`📊 Intent metrics to analyze:`, intent.metrics);
+        
         for (const metric of intent.metrics) {
             try {
                 console.log(`📊 Querying data for metric: ${metric}`);
@@ -377,6 +1137,8 @@ CRITICAL RULES:
                 
                 // Execute the query using the existing API
                 const queryResult = await this.executeQuery(query, context);
+                
+                console.log(`🔍 Analysis query result for ${metric}:`, JSON.stringify(queryResult, null, 2));
                 
                 if (queryResult && queryResult.data) {
                     // Analyze the data
@@ -430,8 +1192,16 @@ CRITICAL RULES:
         
         query += ` FROM "${metric}"`;
         
-        // Add time filter
-        query += ` WHERE time > now() - ${intent.timeRange}`;
+        // Add time filter using $timeFilter (Grafana format)
+        if (intent.timeRange === '1h') {
+            query += ` WHERE time > now() - 1h`;
+        } else if (intent.timeRange === '24h') {
+            query += ` WHERE time > now() - 24h`;
+        } else if (intent.timeRange === '7d') {
+            query += ` WHERE time > now() - 7d`;
+        } else {
+            query += ` WHERE time > now() - 24h`; // default
+        }
         
         // Add GROUP BY for aggregations
         if (['mean', 'max', 'min', 'sum', 'count'].includes(intent.operation)) {
@@ -530,14 +1300,36 @@ CRITICAL RULES:
             trends: []
         };
 
+        console.log('🔍 analyzeQueryData input:', JSON.stringify(data, null, 2));
+        
         if (!data || !data.values || data.values.length === 0) {
+            console.log('❌ analyzeQueryData: No data.values found');
             analysis.insights.push('No data points found for the specified time range');
             return analysis;
         }
 
-        const values = data.values.map(row => row[1]).filter(val => val !== null && !isNaN(val));
+        // Handle both response formats: flat array and array of arrays
+        let values = [];
+        if (data.columns && data.columns.length > 0) {
+            // Old format: {columns: ["Time", "Value"], values: [time1, value1, time2, value2, ...]}
+            const numColumns = data.columns.length;
+            const valueColumnIndex = data.columns.findIndex(col => col.toLowerCase().includes('value')) || 1;
+            
+            for (let i = valueColumnIndex; i < data.values.length; i += numColumns) {
+                const value = data.values[i];
+                if (value !== null && !isNaN(value)) {
+                    values.push(value);
+                }
+            }
+        } else {
+            // New format: values is array of arrays [[time, value], [time, value], ...]
+            values = data.values.map(row => row[1]).filter(val => val !== null && !isNaN(val));
+        }
+        
+        console.log('🔍 analyzeQueryData extracted values:', values);
         
         if (values.length === 0) {
+            console.log('❌ analyzeQueryData: No valid numeric values found');
             analysis.insights.push('No valid numeric values found');
             return analysis;
         }
@@ -592,27 +1384,36 @@ CRITICAL RULES:
             };
         }
 
+        // For complex requests like dashboard creation, use AI with system command access
+        if (this.isComplexRequest(originalQuery)) {
+            console.log('🎯 Routing to complex response generation for:', originalQuery);
+            return await this.generateComplexResponse(intent, analysisResult, originalQuery);
+        } else {
+            console.log('📝 Using standard response generation for:', originalQuery);
+        }
+
+        // Apply system command detection to all response types
         switch (intent.type) {
             case 'query_data':
-                return this.generateDataQueryResponse(intent, analysisResult, originalQuery);
+                return await this.generateResponseWithSystemCommands('query_data', intent, analysisResult, originalQuery);
                 
             case 'find_anomalies':
-                return this.generateAnomalyResponse(intent, analysisResult, originalQuery);
+                return await this.generateResponseWithSystemCommands('find_anomalies', intent, analysisResult, originalQuery);
                 
             case 'list_metrics':
                 return this.generateMetricsListResponse(intent, analysisResult, originalQuery);
                 
             case 'compare_metrics':
-                return this.generateComparisonResponse(intent, analysisResult, originalQuery);
+                return await this.generateResponseWithSystemCommands('compare_metrics', intent, analysisResult, originalQuery);
                 
             case 'explain_metric':
-                return this.generateExplanationResponse(intent, analysisResult, originalQuery);
+                return await this.generateResponseWithSystemCommands('explain_metric', intent, analysisResult, originalQuery);
                 
             case 'get_stats':
-                return this.generateStatisticsResponse(intent, analysisResult, originalQuery);
+                return await this.generateResponseWithSystemCommands('get_stats', intent, analysisResult, originalQuery);
                 
             case 'analyze_fields':
-                return this.generateFieldAnalysisResponse(intent, analysisResult, originalQuery);
+                return await this.generateResponseWithSystemCommands('analyze_fields', intent, analysisResult, originalQuery);
                 
             default:
                 return this.generateGenericDataResponse(intent, analysisResult, originalQuery);
@@ -1555,132 +2356,68 @@ CRITICAL RULES:
         return results;
     }
 
-    // Analyze fields in the context of the user's specific question
+    // Analyze fields in the context of the user's specific question using AI
     async analyzeFieldsForContext(measurement, fieldNames, sampleData, userQuestion) {
         console.log('🧠 Analyzing fields in context:', { measurement, fieldNames: fieldNames.length, userQuestion });
         
-        // Pre-filter fields based on the user's question to avoid overwhelming the AI
-        const relevantFields = this.filterFieldsByQuestion(fieldNames, userQuestion);
+        // Always send all fields to AI for genuine analysis - no pre-filtering or pattern matching
+        console.log(`🔍 Sending all ${fieldNames.length} fields to AI for genuine analysis`);
         
-        console.log(`🔍 Filtered ${fieldNames.length} fields down to ${relevantFields.length} relevant fields`);
-        
-        if (relevantFields.length === 0) {
-            return `## ❌ No SolidFire IOPS Fields Found
-
-I searched through **${fieldNames.length} fields** in the \`${measurement}\` measurement but couldn't find any fields specifically related to **SolidFire IOPS**.
-
-**What I looked for:**
-• Fields containing "solidfire" 
-• Fields containing "iops", "ops", "operations"
-• Fields containing "io", "read", "write"
-• Fields containing "storage", "volume", "disk"
-
-**Suggestions:**
-1. **Check other measurements** - SolidFire IOPS might be in a different measurement
-2. **Look for similar fields** - Try searching for general I/O or storage metrics
-3. **Verify data source** - Ensure SolidFire metrics are being collected
-
-Would you like me to search other measurements for SolidFire-related fields?`;
-        }
+        // Get conversation context
+        const conversationContext = this.contextManager.getConversationContext();
         
         // Get current data source type from global config
         const dataSourceType = GrafanaConfig?.selectedDatasourceType || 'influxdb';
         const dataSourceName = dataSourceType === 'influxdb' ? 'InfluxDB' : 
                               dataSourceType === 'prometheus' ? 'Prometheus' : 
-                              dataSourceType.toUpperCase();
-      
-        // Create a focused analysis prompt with only relevant fields and clear data source context
-        const prompt = `**IMPORTANT CONTEXT:** You are analyzing data from an **${dataSourceName} data source**. The measurement name "${measurement}" is just a label - it does not indicate the data source type. This is a **${dataSourceName} database** with **${dataSourceType === 'influxdb' ? 'InfluxQL' : dataSourceType === 'prometheus' ? 'PromQL' : 'SQL'} query syntax**.
+                              'Database';
+        
+        // Build prompt for AI to analyze ALL fields genuinely
+        const prompt = `You are analyzing time series data fields for a user's specific question.
 
-Analyze these **${relevantFields.length} relevant fields** from the "${measurement}" measurement in ${dataSourceName}:
+${conversationContext}
 
-**User Question:** "${userQuestion}"
+**User's Question:** "${userQuestion}"
+**Measurement:** ${measurement}
+**Data Source:** ${dataSourceName} (${dataSourceType})
+**Available Fields:** ${fieldNames.join(', ')}
 
-**Data Source Details:**
-- **Type**: ${dataSourceName} 
-- **Query Language**: ${dataSourceType === 'influxdb' ? 'InfluxQL' : dataSourceType === 'prometheus' ? 'PromQL' : 'SQL'}
-- **Measurement**: "${measurement}"
+Please analyze ALL the available fields and provide:
 
-**Relevant Fields Found:**
-${relevantFields.map(field => `• \`${field}\``).join('\n')}
-
-**Total fields in measurement:** ${fieldNames.length} (showing only relevant ones above)
-
-Provide a **concise, well-formatted analysis** that:
-
-1. **Identifies relevant fields** for the user's question
+1. **Identifies relevant fields** for the user's question (considering conversation history)
 2. **Explains what each relevant field contains** 
 3. **Answers the user's specific question** about these fields
 4. **Suggests specific fields to query** for analysis
 5. **Provides ${dataSourceType === 'influxdb' ? 'InfluxQL' : dataSourceType === 'prometheus' ? 'PromQL' : 'SQL'} query examples** (NOT other query languages)
 
 Use **markdown formatting** with:
-- **Bold headings** (## or ###)
-- **Bullet points** for lists  
-- **Code blocks** (\`field_name\`) for field names
-- **Clear sections** with proper spacing
+- Headers (##)
+- **Bold text** for emphasis
+- Code blocks for queries
+- Bullet points for lists
 
 **CRITICAL**: Only provide ${dataSourceType === 'influxdb' ? 'InfluxQL' : dataSourceType === 'prometheus' ? 'PromQL' : 'SQL'} query examples since this is a ${dataSourceName} data source. Do not mix query syntaxes.
 
-Be specific and actionable - don't just list all fields.`;
+Be specific and actionable - analyze the actual field names provided above and reference previous conversation when relevant.`;
 
         try {
             const analysis = await this.callAIModel(prompt);
             return analysis;
         } catch (error) {
-            console.error('Error generating field analysis:', error);
-            return `## 🔍 Fields Analysis
+            console.error('❌ AI field analysis failed:', error);
+            return `## ❌ AI Analysis Failed
 
-Found **${relevantFields.length} relevant fields** in the \`${measurement}\` measurement:
+I couldn't analyze the fields using AI due to a service error: ${error.message}
 
-${relevantFields.map(field => `• \`${field}\``).join('\n')}
+**Available fields in ${measurement}:**
+${fieldNames.slice(0, 20).map(field => `• \`${field}\``).join('\n')}
+${fieldNames.length > 20 ? `\n...and ${fieldNames.length - 20} more fields` : ''}
 
-However, I couldn't analyze them in detail due to an error. You can query these fields directly to explore their data.`;
+Without AI analysis, I cannot provide intelligent insights about which fields are relevant to your question: "${userQuestion}"`;
         }
     }
 
-    // Filter fields based on user question keywords
-    filterFieldsByQuestion(fieldNames, userQuestion) {
-        const question = userQuestion.toLowerCase();
-        const relevantFields = [];
-        
-        // Define search patterns based on the question
-        const searchPatterns = [];
-        
-        if (question.includes('solidfire')) {
-            searchPatterns.push(/solidfire/i);
-        }
-        
-        if (question.includes('iops') || question.includes('ops')) {
-            searchPatterns.push(/iops/i, /ops/i, /operations/i);
-        }
-        
-        if (question.includes('io') || question.includes('i/o')) {
-            searchPatterns.push(/\bio\b/i, /read/i, /write/i);
-        }
-        
-        if (question.includes('storage') || question.includes('volume') || question.includes('disk')) {
-            searchPatterns.push(/storage/i, /volume/i, /disk/i);
-        }
-        
-        // If no specific patterns found, use general I/O patterns
-        if (searchPatterns.length === 0) {
-            searchPatterns.push(/iops/i, /ops/i, /io/i, /read/i, /write/i, /storage/i, /volume/i);
-        }
-        
-        // Filter fields that match any pattern
-        for (const field of fieldNames) {
-            for (const pattern of searchPatterns) {
-                if (pattern.test(field)) {
-                    relevantFields.push(field);
-                    break; // Don't add the same field multiple times
-                }
-            }
-        }
-        
-        // Limit to reasonable number to avoid overwhelming the AI
-        return relevantFields.slice(0, 50);
-    }
+    // This pattern matching function was removed - AI does all analysis now
 
     async listMetrics(intent, context) {
         return {
@@ -1695,13 +2432,8 @@ However, I couldn't analyze them in detail due to an error. You can query these 
     }
 
     categorizeMetric(metric) {
-        const lower = metric.toLowerCase();
-        if (lower.includes('cpu') || lower.includes('processor')) return 'system';
-        if (lower.includes('memory') || lower.includes('ram')) return 'system';
-        if (lower.includes('disk') || lower.includes('storage')) return 'storage';
-        if (lower.includes('network') || lower.includes('bandwidth')) return 'network';
-        if (lower.includes('request') || lower.includes('response')) return 'application';
-        return 'custom';
+        // Let AI categorize metrics instead of pattern matching
+        return 'custom';  // All metrics are custom until AI analyzes them
     }
 
     async handleUnknownIntent(intent, context) {
@@ -1754,55 +2486,56 @@ However, I couldn't analyze them in detail due to an error. You can query these 
         };
     }
 
-    // Generate intelligent response that actually processes user requests
+    // Generate intelligent response using AI - no pattern matching
     async generateBasicResponse(userInput, context) {
-        const lowerInput = userInput.toLowerCase();
-        const availableMetrics = context.availableMetrics || [];
+        console.log('🧠 Processing user input with AI:', userInput);
+        console.log('📊 Available metrics:', context.availableMetrics?.length || 0);
         
-        console.log('🧠 Processing user input:', userInput);
-        console.log('📊 Available metrics:', availableMetrics.length);
+        // Get conversation context
+        const conversationContext = this.contextManager.getConversationContext();
         
-        // Check if user mentioned a specific metric by name
-        const mentionedMetric = availableMetrics.find(metric => 
-            lowerInput.includes(metric.toLowerCase())
-        );
-        
-        if (mentionedMetric) {
-            return await this.handleSpecificMetricQuery(mentionedMetric, userInput, context);
+        // Build AI prompt to understand user intent
+        const prompt = `You are a time series data analysis assistant. Analyze this user input and provide a helpful response.
+
+${conversationContext}
+
+User Input: "${userInput}"
+Available Metrics: ${context.availableMetrics?.join(', ') || 'None available'}
+
+Provide a helpful response that:
+1. Understands what the user is asking for (considering any previous conversation)
+2. Offers specific next steps 
+3. Suggests relevant actions they can take
+4. References previous context when relevant (e.g., "Based on the analysis we just did...")
+
+Format your response as a JSON object with:
+{
+    "text": "markdown formatted response text",
+    "data": {"type": "response_type"},
+    "actions": [{"label": "Action Name", "action": "actionId"}]
+}`;
+
+        try {
+            const aiResponse = await this.callAIModel(prompt);
+            const response = JSON.parse(aiResponse);
+            
+            // Store this exchange in conversation history
+            this.contextManager.addToHistory(userInput, response, context);
+            
+            return response;
+        } catch (error) {
+            console.error('❌ AI response generation failed:', error);
+            const errorResponse = {
+                text: `❌ **AI Service Unavailable**\n\nI cannot process your request because the AI service is not available: ${error.message}\n\nPlease check your AI configuration or try again later.`,
+                data: { type: 'ai_error' },
+                actions: []
+            };
+            
+            // Store error response in history too
+            this.contextManager.addToHistory(userInput, errorResponse, context);
+            
+            return errorResponse;
         }
-        
-        // Handle queries about specific concepts
-        if (lowerInput.includes('iops') || lowerInput.includes('io') || lowerInput.includes('read') || lowerInput.includes('write')) {
-            return await this.handleIOPSQuery(userInput, context);
-        }
-        
-        if (lowerInput.includes('prometheus') && (lowerInput.includes('measurement') || lowerInput.includes('metric'))) {
-            return await this.handlePrometheusQuery(userInput, context);
-        }
-        
-        if (lowerInput.includes('retention') || lowerInput.includes('policy')) {
-            return await this.handleRetentionPolicyQuery(userInput, context);
-        }
-        
-        // Handle metric queries
-        if (lowerInput.includes('metric') || lowerInput.includes('measurement')) {
-            return await this.handleGeneralMetricQuery(userInput, context);
-        }
-        
-        // Handle anomaly queries
-        if (lowerInput.includes('anomal') || lowerInput.includes('unusual') || lowerInput.includes('spike')) {
-            return await this.handleAnomalyQuery(userInput, context);
-        }
-        
-        // Default helpful response
-        return {
-            text: "I can help you analyze your time series data. What specific metric or analysis would you like to explore?",
-            data: { type: 'open_ended' },
-            actions: [
-                { label: 'Show Available Metrics', action: 'showMeasurements' },
-                { label: 'Find Anomalies', action: 'findAnomalies' }
-            ]
-        };
     }
 
     // Handle queries about specific metrics
@@ -2014,7 +2747,7 @@ However, I couldn't analyze them in detail due to an error. You can query these 
         );
 
         // User preferences and patterns
-        knowledge.userPreferences = await this.contextManager.getUserPreferences();
+        knowledge.userPreferences = this.contextManager.currentContext.userPreferences;
 
         console.log('📚 Retrieved knowledge:', knowledge);
         return knowledge;
@@ -2041,7 +2774,7 @@ However, I couldn't analyze them in detail due to an error. You can query these 
             Object.assign(plan, parsedPlan);
         } catch (e) {
             // Fallback planning logic
-            plan.steps = this.generateFallbackPlan(reasoning);
+            plan.steps = [`Analyze the request: ${reasoning.originalText}`, 'Execute data query', 'Generate response'];
         }
 
         // Add query optimizations
@@ -2250,8 +2983,8 @@ However, I couldn't analyze them in detail due to an error. You can query these 
             });
         }
 
-        // Update user preferences
-        await this.contextManager.updateUserPreferences(userInput, response);
+        // Update user preferences (stored automatically when adding to history)
+        // this.contextManager.addToHistory already handles preference updates
         
         // Improve query patterns
         await this.queryGenerator.learnFromResults(results);
@@ -2437,11 +3170,13 @@ class ConversationContextManager {
             activeTopics: [],
             temporalContext: null
         };
+        this.maxHistorySize = 10; // Keep last 10 exchanges
     }
 
     async initialize() {
         console.log('💭 Initializing Conversation Context Manager...');
         await this.loadUserPreferences();
+        await this.loadConversationHistory();
     }
 
     async loadUserPreferences() {
@@ -2449,6 +3184,82 @@ class ConversationContextManager {
         if (stored) {
             this.currentContext.userPreferences = JSON.parse(stored);
         }
+    }
+
+    async loadConversationHistory() {
+        const stored = localStorage.getItem('aiConversationHistory');
+        if (stored) {
+            this.currentContext.conversationHistory = JSON.parse(stored);
+        }
+    }
+
+    // Add a user message and AI response to conversation history
+    addToHistory(userInput, aiResponse, context = {}) {
+        const exchange = {
+            timestamp: new Date().toISOString(),
+            userInput: userInput,
+            aiResponse: aiResponse,
+            context: {
+                availableMetrics: context.availableMetrics || [],
+                selectedDatabase: context.selectedDatabase || null,
+                dataSourceType: context.dataSourceType || null
+            }
+        };
+
+        this.currentContext.conversationHistory.push(exchange);
+
+        // Keep only the most recent exchanges
+        if (this.currentContext.conversationHistory.length > this.maxHistorySize) {
+            this.currentContext.conversationHistory = this.currentContext.conversationHistory.slice(-this.maxHistorySize);
+        }
+
+        // Save to localStorage
+        this.saveConversationHistory();
+    }
+
+    saveConversationHistory() {
+        try {
+            localStorage.setItem('aiConversationHistory', JSON.stringify(this.currentContext.conversationHistory));
+        } catch (error) {
+            console.warn('Failed to save conversation history:', error);
+        }
+    }
+
+    // Get conversation context for AI prompts
+    getConversationContext() {
+        if (this.currentContext.conversationHistory.length === 0) {
+            return '';
+        }
+
+        let contextString = '\n**Previous Conversation:**\n';
+        
+        // Include the most recent exchanges (limit to last 5 for prompt length)
+        const recentHistory = this.currentContext.conversationHistory.slice(-5);
+        
+        recentHistory.forEach((exchange, index) => {
+            contextString += `\n${index + 1}. User: "${exchange.userInput}"\n`;
+            contextString += `   AI: "${this.truncateResponse(exchange.aiResponse)}"\n`;
+        });
+
+        contextString += '\n**Current Context:** Please continue this conversation with awareness of the previous exchanges.\n';
+        
+        return contextString;
+    }
+
+    // Truncate AI responses for context (to avoid overly long prompts)
+    truncateResponse(response) {
+        if (typeof response === 'string') {
+            return response.length > 200 ? response.substring(0, 200) + '...' : response;
+        } else if (response && response.text) {
+            return response.text.length > 200 ? response.text.substring(0, 200) + '...' : response.text;
+        }
+        return '[AI Response]';
+    }
+
+    // Clear conversation history
+    clearHistory() {
+        this.currentContext.conversationHistory = [];
+        this.saveConversationHistory();
     }
 
     getCurrentContext() {
