@@ -1,5 +1,7 @@
 // AI Analytics Controller
 // Main controller for AI/ML analytics functionality
+// WARNING: This module is being refactored to use DataAccess
+// Use DataAccess for new code - see dataAccess.js
 
 const Analytics = {
     // State management
@@ -623,6 +625,13 @@ const Analytics = {
             const isOpenAIConnected = window.OpenAIService && window.OpenAIService.isConnected;
             const isAnyAIConnected = isAnalyticsConnected || isOllamaConnected || isOpenAIConnected;
             
+            console.log('🔄 Updating AI title bar status:', {
+                isAnalyticsConnected,
+                isOllamaConnected,
+                isOpenAIConnected,
+                isAnyAIConnected
+            });
+            
             if (isAnyAIConnected) {
                 titleBarStatus.className = 'connection-status ai-connected';
                 titleBarStatus.textContent = 'AI: Connected';
@@ -630,6 +639,8 @@ const Analytics = {
                 titleBarStatus.className = 'connection-status ai-disconnected';
                 titleBarStatus.textContent = 'AI: Not Connected';
             }
+        } else {
+            console.warn('⚠️ AI title bar status element not found');
         }
     },
 
@@ -2115,16 +2126,19 @@ const Analytics = {
                 measurement: this.config.measurement
             });
             
-            // Use the proper query system
-            if (typeof Queries !== 'undefined' && Queries.executeQueryDirect) {
-                console.log('🏷️ Executing query via Queries.executeQueryDirect...');
-                const result = await Queries.executeQueryDirect(query, {
-                    datasourceId: GrafanaConfig.currentDatasourceId,
-                    datasourceType: GrafanaConfig.selectedDatasourceType,
-                    timeout: 5000
-                });
-                
-                console.log('🏷️ Tag values query result:', result);
+            // Use DataAccess for tag values query
+            console.log('🏷️ Executing query via DataAccess...');
+            const result = await DataAccess.executeQuery(
+                GrafanaConfig.currentDatasourceId,
+                query,
+                {
+                    datasourceType: GrafanaConfig.selectedDatasourceType || 'influxdb',
+                    maxDataPoints: 1000,
+                    raw: true
+                }
+            );
+            
+            console.log('🏷️ Tag values query result:', result);
                 console.log('🏷️ Result structure check:', {
                     hasResult: !!result,
                     hasResults: !!(result && result.results),
@@ -2184,14 +2198,6 @@ const Analytics = {
                     console.log('🏷️ Full result structure:', JSON.stringify(result, null, 2));
                     targetSelect.innerHTML = '<option value="">No values found</option>';
                 }
-            } else {
-                console.error('❌ Queries module not available:', { 
-                    typeofQueries: typeof Queries, 
-                    hasExecuteQueryDirect: !!(window.Queries && window.Queries.executeQueryDirect),
-                    windowQueries: !!window.Queries
-                });
-                targetSelect.innerHTML = '<option value="">Query system unavailable</option>';
-            }
         } catch (error) {
             console.error('❌ Failed to load tag values for', tagKey, ':', error);
             console.error('❌ Error details:', {

@@ -588,7 +588,7 @@ Format as JSON:
             },
             actions: this.formatAlertActions(notification)
         };
-    },
+    }
 
     // Get priority emoji for visual indication
     getPriorityEmoji(priority) {
@@ -599,7 +599,7 @@ Format as JSON:
             case 'low': return 'ℹ️ ';
             default: return '📊 ';
         }
-    },
+    }
 
     // Get type-specific emoji
     getTypeEmoji(type) {
@@ -612,7 +612,7 @@ Format as JSON:
             case 'performance': return '⚡ ';
             default: return '💡 ';
         }
-    },
+    }
 
     // Calculate confidence score for alerts
     calculateAlertConfidence(notification) {
@@ -636,7 +636,7 @@ Format as JSON:
         }
         
         return Math.min(0.95, confidence);
-    },
+    }
 
     // Extract data sources for the alert
     extractAlertDataSources(notification) {
@@ -658,7 +658,7 @@ Format as JSON:
         }
         
         return [...new Set(sources)]; // Remove duplicates
-    },
+    }
 
     // Initialize safety controls to prevent UI crashes
     initializeSafetyControls() {
@@ -673,7 +673,7 @@ Format as JSON:
         };
         
         console.log('🛡️ Safety controls initialized for proactive monitoring');
-    },
+    }
 
     // Safe monitoring cycle that respects rate limits
     async runSafeMonitoringCycle() {
@@ -709,7 +709,7 @@ Format as JSON:
         } catch (error) {
             console.error('Error in safe monitoring cycle:', error);
         }
-    },
+    }
 
     // Analyze a single metric safely
     async analyzeMetricSafely(metric) {
@@ -736,7 +736,7 @@ Format as JSON:
         } catch (error) {
             console.error(`Error analyzing metric ${metric}:`, error);
         }
-    },
+    }
 
     // Check if we should send a notification based on rate limits
     shouldSendNotification() {
@@ -745,7 +745,7 @@ Format as JSON:
         
         return timeSinceLastNotification >= this.safetyControls.minNotificationInterval &&
                this.safetyControls.messagesSentToday < this.safetyControls.dailyMessageLimit;
-    },
+    }
 
     // Send notification with safety controls
     sendSafeNotification(notification) {
@@ -767,7 +767,7 @@ Format as JSON:
         this.sendNotification(notification);
         
         console.log(`📊 Proactive notification sent (${this.safetyControls.messagesSentToday}/${this.safetyControls.dailyMessageLimit} today)`);
-    },
+    }
 
     // Generate periodic system health report
     async generateSystemHealthReport() {
@@ -818,7 +818,7 @@ Format as JSON:
         } catch (error) {
             console.error('Error generating health report:', error);
         }
-    },
+    }
 
     // Generate contextual query for the alert
     generateContextualQuery(notification) {
@@ -834,7 +834,7 @@ Format as JSON:
         }
         
         return null;
-    },
+    }
 
     // Format alert actions for the UI
     formatAlertActions(notification) {
@@ -852,7 +852,7 @@ Format as JSON:
                 priority: notification.priority
             }
         }));
-    },
+    }
 
     // Utility methods
     async getAvailableMetrics() {

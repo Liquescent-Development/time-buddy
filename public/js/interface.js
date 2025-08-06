@@ -2419,6 +2419,10 @@ async function connectToAiService(connectionId) {
             } else {
                 OllamaService.disconnect();
             }
+            // Update Analytics connection state when disconnecting
+            if (window.Analytics) {
+                Analytics.isConnected = false;
+            }
             return { ...conn, status: 'disconnected' };
         }
         return conn;
@@ -2453,6 +2457,10 @@ async function connectToAiService(connectionId) {
             // Also update Analytics connection status
             if (window.Analytics) {
                 Analytics.isConnected = true;
+                // Update title bar status after connection is established
+                if (typeof window.Analytics.updateTitleBarStatus === 'function') {
+                    window.Analytics.updateTitleBarStatus();
+                }
             }
             
             // Trigger advanced AI initialization if available
@@ -2472,11 +2480,11 @@ async function connectToAiService(connectionId) {
         aiConnections[connectionIndex] = connection;
         Storage.setAiConnections(aiConnections);
         loadAiConnections();
-    }
-    
-    // Update title bar status
-    if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
-        window.Analytics.updateTitleBarStatus();
+        
+        // Update title bar status after failure
+        if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+            window.Analytics.updateTitleBarStatus();
+        }
     }
 }
 

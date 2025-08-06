@@ -74,6 +74,43 @@ const App = {
         
         // Check for saved connections and load them
         this.loadSavedConnections();
+        
+        // Update AI status after a delay to ensure services are loaded
+        setTimeout(async () => {
+            // Try to restore active AI connection
+            const activeConnectionId = Storage && Storage.get ? Storage.get('ACTIVE_AI_CONNECTION') : null;
+            if (activeConnectionId && Storage && Storage.getAiConnections) {
+                const aiConnections = Storage.getAiConnections();
+                const activeConnection = aiConnections.find(conn => conn.id === activeConnectionId);
+                if (activeConnection) {
+                    console.log('🔄 Restoring AI connection:', activeConnection.name);
+                    try {
+                        // Initialize the appropriate service
+                        if (activeConnection.provider === 'openai') {
+                            if (window.OpenAIService && window.OpenAIService.initialize) {
+                                await OpenAIService.initialize(activeConnection.apiKey, activeConnection.model);
+                                console.log('✅ OpenAI connection restored');
+                            }
+                        } else {
+                            if (window.OllamaService && window.OllamaService.initialize) {
+                                await OllamaService.initialize(activeConnection.endpoint, activeConnection.model);
+                                console.log('✅ Ollama connection restored');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('❌ Failed to restore AI connection:', error);
+                        if (Storage && Storage.remove) {
+                            Storage.remove('ACTIVE_AI_CONNECTION');
+                        }
+                    }
+                }
+            }
+            
+            // Update title bar status
+            if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+                window.Analytics.updateTitleBarStatus();
+            }
+        }, 1000);
     },
     
     updateTitleBarStatus() {

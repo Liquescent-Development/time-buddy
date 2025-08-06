@@ -1,3 +1,5 @@
+// WARNING: This module is being refactored to use DataAccess
+// Use DataAccess.getSchema() for new code - see dataAccess.js
 const Schema = {
     // Schema state
     currentDatasourceType: null,
@@ -807,77 +809,32 @@ const Schema = {
         return result;
     },
     
-    // Execute InfluxDB schema query using direct proxy endpoint
+    // Legacy method - redirects to executeSchemaQuery
     async executeInfluxSchemaQuery(query, datasourceNumericId) {
-        try {
-            console.log('Executing InfluxDB schema query:', query);
-            
-            const endpoint = `/api/datasources/proxy/${datasourceNumericId}/query?q=${encodeURIComponent(query)}`;
-            
-            const response = await API.makeApiRequest(endpoint, {
-                method: 'GET'
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Schema query failed: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            console.log('InfluxDB schema query response:', data);
-            
-            // Convert InfluxDB response to the expected format
-            if (data.results && data.results[0] && data.results[0].series) {
-                const series = data.results[0].series[0];
-                const values = series.values || [];
-                
-                // Convert to frames format expected by the rest of the code
-                const frames = [{
-                    schema: {
-                        fields: series.columns.map(col => ({ name: col, type: 'string' }))
-                    },
-                    data: {
-                        values: series.columns.map((col, colIndex) => 
-                            values.map(row => row[colIndex])
-                        )
-                    }
-                }];
-                
-                return {
-                    results: {
-                        A: { frames }
-                    }
-                };
-            }
-            
-            return { results: { A: { frames: [] } } };
-            
-        } catch (error) {
-            console.error('InfluxDB schema query error:', error);
-            throw error;
-        }
+        return this.executeSchemaQuery(query, 'influxdb');
     },
     
-    // Execute schema discovery query
+    // Execute schema discovery query using DataAccess layer
     async executeSchemaQuery(query, datasourceType) {
-        // Try to get datasource info from old interface first, fallback to global config
-        let datasourceNumericId;
-        const selectedOption = document.getElementById('datasource');
-        if (selectedOption && selectedOption.selectedOptions && selectedOption.selectedOptions[0]) {
-            datasourceNumericId = selectedOption.selectedOptions[0].dataset.id;
-        } else {
-            // Use global config for new interface
-            datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId || GrafanaConfig.selectedDatasourceId;
-        }
-        
-        
-        // Use centralized query execution
-        if (typeof Queries !== 'undefined' && Queries.executeQueryDirect) {
-            return await Queries.executeQueryDirect(query, {
-                datasourceType: 'influxdb',
-                maxDataPoints: 10000
+        try {
+            // Use currentDatasourceId if set (for specific schema loading), 
+            // otherwise fall back to global datasourceId
+            const datasourceId = this.currentDatasourceId || GrafanaConfig.datasourceId;
+            if (!datasourceId) {
+                throw new Error('No datasource selected');
+            }
+            
+            // Use DataAccess layer for schema queries
+            const result = await DataAccess.executeQuery(datasourceId, query, {
+                datasourceType: datasourceType || 'influxdb',
+                maxDataPoints: 10000,
+                raw: true
             });
-        } else {
-            throw new Error('Centralized query system not available');
+            
+            return result;
+        } catch (error) {
+            console.error('Schema query error:', error);
+            throw error;
         }
     },
     

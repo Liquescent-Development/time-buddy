@@ -886,9 +886,16 @@
 
     <!-- Application Scripts -->
     <script src="js/config.js"></script>
+    <script>
+        // Detect if running in Electron environment
+        window.isElectron = !!(window.electronAPI && window.electronAPI.grafanaRequest);
+        console.log('Environment detection - isElectron:', window.isElectron);
+    </script>
     <script src="js/utils.js"></script>
     <script src="js/listManager.js"></script>
     <script src="js/storage.js"></script>
+    <script src="js/queryRequestBuilder.js"></script>
+    <script src="js/dataAccess.js"></script>
     <script src="js/api.js"></script>
     <script src="js/influxqlLinter.js"></script>
     <script src="js/editor.js"></script>

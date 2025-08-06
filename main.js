@@ -1532,6 +1532,10 @@ ipcMain.handle('grafana-api-request', async (event, options) => {
         // Construct full URL
         const fullUrl = `${grafanaUrl}${path}`;
         console.log(`Proxying ${method} request to: ${fullUrl}`);
+        console.log('Request headers:', JSON.stringify(headers, null, 2));
+        if (body) {
+            console.log('Request body:', typeof body === 'string' ? body.substring(0, 500) : JSON.stringify(body).substring(0, 500));
+        }
         
         // Check if we need to use SOCKS proxy
         if (proxyConfig && proxyConfig.host) {
@@ -1575,6 +1579,11 @@ ipcMain.handle('grafana-api-request', async (event, options) => {
                     });
                     
                     res.on('end', () => {
+                        // Log error responses
+                        if (res.statusCode >= 400) {
+                            console.log(`Error response ${res.statusCode}:`, responseData.substring(0, 500));
+                        }
+                        
                         // Try to parse JSON response
                         let parsedData = responseData;
                         try {
@@ -1686,6 +1695,11 @@ ipcMain.handle('grafana-api-request', async (event, options) => {
                 
                 response.on('end', () => {
                     clearTimeout(timeoutId);
+                    
+                    // Log error responses
+                    if (statusCode >= 400) {
+                        console.log(`Error response ${statusCode}:`, responseData.substring(0, 500));
+                    }
                     
                     // Try to parse JSON response
                     let parsedData = responseData;
