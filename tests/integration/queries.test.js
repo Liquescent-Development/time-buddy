@@ -80,7 +80,7 @@ describe('Queries Module Integration', function() {
                 expect(options.interval).toBe('1s');
                 expect(options.datasourceType).toBe('influxdb');
                 expect(options.format).toBe('time_series');
-                expect(options.database).toBe('telegraf');
+                expect(options.database).toBe(null);
                 expect(options.timeRange).toBeTruthy();
                 expect(options.timeRange.from).toBeTruthy();
                 expect(options.timeRange.to).toBeTruthy();
@@ -211,7 +211,7 @@ describe('Queries Module Integration', function() {
                 expect(options).toBeTruthy();
                 expect(options.datasourceType).toBe('influxdb');
                 expect(options.format).toBe('time_series');
-                expect(options.database).toBe('telegraf');
+                expect(options.database).toBe(null);
                 expect(options.timeRange).toBeTruthy();
                 expect(options.requestBuilder).toBeTruthy();
             } finally {

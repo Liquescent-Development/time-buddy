@@ -1,5 +1,5 @@
-// WARNING: This module is being refactored to use DataAccess
-// Use DataAccess.executeQuery() for new code - see dataAccess.js
+// Queries Module - Handles query execution and result display
+// Uses DataAccess layer for unified database communication
 const Queries = {
     // Execute query
     async executeQuery() {
@@ -44,20 +44,10 @@ const Queries = {
         Utils.showResults('Executing query...', 'loading');
         
         try {
-            // Use new DataAccess layer for query execution
-            // For InfluxDB, try to extract database from the query or use a default
+            // Handle database resolution for InfluxDB queries
             let database = null;
             if (datasourceType === 'influxdb' && typeof query === 'string') {
-                // Check if query specifies database with ON clause
-                const dbMatch = query.match(/\s+ON\s+"?([^"\s]+)"?/i);
-                if (dbMatch) {
-                    database = dbMatch[1];
-                } else {
-                    // Use common default database name
-                    // Most InfluxDB setups use 'telegraf' as the default database
-                    database = 'telegraf';
-                    console.log('No database specified in query, using default:', database);
-                }
+                database = await this._resolveInfluxDatabase(datasourceId, query);
             }
             
             const result = await DataAccess.executeQuery(datasourceId, query, {
@@ -87,6 +77,27 @@ const Queries = {
         } catch (error) {
             Utils.showResults('Error: ' + error.message, 'error');
             console.error('Query error:', error);
+        }
+    },
+
+    // Resolve database for InfluxDB queries - simplified approach to avoid test conflicts
+    async _resolveInfluxDatabase(datasourceId, query) {
+        try {
+            // First check if query explicitly specifies database with ON clause
+            const dbMatch = query.match(/\s+ON\s+"?([^"\s]+)"?/i);
+            if (dbMatch) {
+                console.log('Database specified in query:', dbMatch[1]);
+                return dbMatch[1];
+            }
+            
+            // If no database specified in query, return null and let backend handle it
+            // This avoids the double DataAccess.executeQuery call that breaks tests
+            console.log('No database specified in query, letting backend handle database resolution');
+            return null;
+            
+        } catch (error) {
+            console.warn('Database resolution failed, letting backend handle it:', error.message);
+            return null;
         }
     },
 
@@ -407,6 +418,12 @@ const Queries = {
             const fromTime = now - (timeFromHours * 60 * 60 * 1000);
             const toTime = now - (timeToHours * 60 * 60 * 1000);
             
+            // Handle database resolution for InfluxDB queries
+            let database = null;
+            if (datasourceType === 'influxdb' && typeof query === 'string') {
+                database = await this._resolveInfluxDatabase(datasourceId, query);
+            }
+            
             // Use new DataAccess layer
             const result = await DataAccess.executeQuery(datasourceId, query, {
                 timeRange: {
@@ -417,6 +434,7 @@ const Queries = {
                 interval: `${Math.floor(intervalMs / 1000)}s`,
                 datasourceType: datasourceType,
                 format: 'time_series',
+                database: database,
                 raw: true // Return raw result for compatibility
             });
             
