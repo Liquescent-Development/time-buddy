@@ -1,3 +1,5 @@
+// WARNING: This module is being refactored to use DataAccess
+// Use DataAccess.getSchema() for new code - see dataAccess.js
 const Schema = {
     // Schema state
     currentDatasourceType: null,
@@ -807,147 +809,33 @@ const Schema = {
         return result;
     },
     
-    // Execute InfluxDB schema query using direct proxy endpoint
+    // Legacy method - redirects to executeSchemaQuery
     async executeInfluxSchemaQuery(query, datasourceNumericId) {
-        try {
-            console.log('Executing InfluxDB schema query:', query);
-            
-            const endpoint = `/api/datasources/proxy/${datasourceNumericId}/query?q=${encodeURIComponent(query)}`;
-            
-            const response = await API.makeApiRequest(endpoint, {
-                method: 'GET'
-            });
-            
-            if (!response.ok) {
-                throw new Error(`Schema query failed: ${response.statusText}`);
-            }
-            
-            const data = await response.json();
-            console.log('InfluxDB schema query response:', data);
-            
-            // Convert InfluxDB response to the expected format
-            if (data.results && data.results[0] && data.results[0].series) {
-                const series = data.results[0].series[0];
-                const values = series.values || [];
-                
-                // Convert to frames format expected by the rest of the code
-                const frames = [{
-                    schema: {
-                        fields: series.columns.map(col => ({ name: col, type: 'string' }))
-                    },
-                    data: {
-                        values: series.columns.map((col, colIndex) => 
-                            values.map(row => row[colIndex])
-                        )
-                    }
-                }];
-                
-                return {
-                    results: {
-                        A: { frames }
-                    }
-                };
-            }
-            
-            return { results: { A: { frames: [] } } };
-            
-        } catch (error) {
-            console.error('InfluxDB schema query error:', error);
-            throw error;
-        }
+        return this.executeSchemaQuery(query, 'influxdb');
     },
     
-    // Execute schema discovery query
+    // Execute schema discovery query using DataAccess layer
     async executeSchemaQuery(query, datasourceType) {
-        // Try to get datasource info from old interface first, fallback to global config
-        let datasourceNumericId;
-        const selectedOption = document.getElementById('datasource');
-        if (selectedOption && selectedOption.selectedOptions && selectedOption.selectedOptions[0]) {
-            datasourceNumericId = selectedOption.selectedOptions[0].dataset.id;
-        } else {
-            // Use global config for new interface
-            datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId || GrafanaConfig.selectedDatasourceId;
-        }
-        
-        if (!datasourceNumericId) {
-            console.warn('No datasource ID available for schema query');
-            return null;
-        }
-        
-        let requestBody;
-        let urlParams = '';
-        
-        const now = Date.now();
-        const fromTime = now - (60 * 60 * 1000); // 1 hour ago
-        const toTime = now;
-        
-        if (datasourceType === 'prometheus') {
-            const requestId = Math.random().toString(36).substr(2, 9);
-            urlParams = '?ds_type=prometheus&requestId=' + requestId;
+        try {
+            // Use currentDatasourceId if set (for specific schema loading), 
+            // otherwise fall back to global datasourceId
+            const datasourceId = this.currentDatasourceId || GrafanaConfig.datasourceId;
+            if (!datasourceId) {
+                throw new Error('No datasource selected');
+            }
             
-            requestBody = {
-                queries: [{
-                    refId: 'A',
-                    datasource: { 
-                        uid: this.currentDatasourceId,
-                        type: 'prometheus'
-                    },
-                    expr: query,
-                    instant: true,
-                    interval: '',
-                    legendFormat: '',
-                    editorMode: 'code',
-                    exemplar: false,
-                    requestId: requestId.substr(0, 3).toUpperCase(),
-                    utcOffsetSec: new Date().getTimezoneOffset() * -60,
-                    scopes: [],
-                    adhocFilters: [],
-                    datasourceId: parseInt(datasourceNumericId),
-                    intervalMs: 15000,
-                    maxDataPoints: 10000
-                }],
-                from: fromTime.toString(),
-                to: toTime.toString()
-            };
-        } else if (datasourceType === 'influxdb') {
-            const requestId = Math.random().toString(36).substr(2, 9);
-            urlParams = '?ds_type=influxdb&requestId=' + requestId;
+            // Use DataAccess layer for schema queries
+            const result = await DataAccess.executeQuery(datasourceId, query, {
+                datasourceType: datasourceType || 'influxdb',
+                maxDataPoints: 10000,
+                raw: true
+            });
             
-            requestBody = {
-                queries: [{
-                    refId: 'A',
-                    datasource: { 
-                        uid: this.currentDatasourceId,
-                        type: 'influxdb'
-                    },
-                    query: query,
-                    rawQuery: true,
-                    resultFormat: 'time_series',
-                    requestId: requestId.substr(0, 3).toUpperCase(),
-                    utcOffsetSec: new Date().getTimezoneOffset() * -60,
-                    datasourceId: parseInt(datasourceNumericId),
-                    intervalMs: 15000,
-                    maxDataPoints: 10000
-                }],
-                from: fromTime.toString(),
-                to: toTime.toString()
-            };
+            return result;
+        } catch (error) {
+            console.error('Schema query error:', error);
+            throw error;
         }
-        
-        const response = await API.makeApiRequest('/api/ds/query' + urlParams, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
-        });
-        
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error('Schema query failed: ' + response.statusText + ' - ' + errorText);
-        }
-        
-        return await response.json();
     },
     
     // Load tags associated with a specific field
@@ -2273,3 +2161,6 @@ function filterTagValuesList(searchTerm, tag, field, measurement) {
     
     valuesContainer.innerHTML = valuesHtml;
 }
+
+// Export Schema to global window for access by other modules
+window.Schema = Schema;

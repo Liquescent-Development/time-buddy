@@ -16,7 +16,12 @@
         "build-all": "node build.js all",
         "dist": "npm run build",
         "pack": "electron-builder --dir",
-        "postinstall": "electron-builder install-app-deps"
+        "postinstall": "electron-builder install-app-deps",
+        "test": "node tests/test-runner-cli.js",
+        "test:unit": "node tests/test-runner-cli.js --unit",
+        "test:integration": "node tests/test-runner-cli.js --integration",
+        "test:verbose": "node tests/test-runner-cli.js --verbose",
+        "test:watch": "nodemon --exec \"npm test\" --watch tests/ --watch public/js/"
     },
     "keywords": [
         "grafana",

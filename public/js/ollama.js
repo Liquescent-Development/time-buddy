@@ -39,12 +39,24 @@ const OllamaService = {
             this.isConnected = true;
             this.lastError = null;
             console.log('✅ Ollama service initialized successfully');
+            
+            // Update title bar status when connected
+            if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+                window.Analytics.updateTitleBarStatus();
+            }
+            
             return true;
             
         } catch (error) {
             this.isConnected = false;
             this.lastError = error.message;
             console.error('❌ Ollama initialization failed:', error);
+            
+            // Update title bar status when disconnected
+            if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+                window.Analytics.updateTitleBarStatus();
+            }
+            
             throw error;
         }
     },
@@ -280,6 +292,11 @@ const OllamaService = {
         this.isConnected = false;
         this.lastError = null;
         console.log('🔌 Ollama service disconnected');
+        
+        // Update title bar status when disconnected
+        if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+            window.Analytics.updateTitleBarStatus();
+        }
     },
 
     // Create AbortController with compatibility check
@@ -293,6 +310,14 @@ const OllamaService = {
             };
         }
         return new AbortController();
+    },
+
+    // Compatibility method for advanced AI system
+    async generateCompletion(prompt, options = {}) {
+        // Map the advanced AI system's call to our existing generateResponse method
+        const response = await this.generateResponse(prompt, null, options);
+        // Return just the response text for compatibility
+        return response.response;
     }
 };
 

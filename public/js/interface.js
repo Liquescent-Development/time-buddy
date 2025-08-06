@@ -56,7 +56,13 @@ const Interface = {
         document.querySelectorAll('.sidebar-panel').forEach(panel => {
             panel.classList.remove('active');
         });
-        document.getElementById(`${view}Panel`).classList.add('active');
+        const panel = document.getElementById(`${view}Panel`);
+        if (panel) {
+            panel.classList.add('active');
+        } else {
+            console.warn(`Panel not found for view: ${view}`);
+            return;
+        }
         
         // Deactivate all panel sections first (except results panel)
         document.querySelectorAll('.panel-section:not(#resultsPanel)').forEach(section => {
@@ -106,6 +112,28 @@ const Interface = {
             case 'analytics':
                 this.loadAnalytics();
                 break;
+            case 'agent':
+                // Show AI Agent panel (don't auto-open chat)
+                this.updateAgentPanel();
+                break;
+        }
+    },
+
+    // Update AI Agent panel status
+    updateAgentPanel() {
+        const statusIndicator = document.getElementById('aiAssistantStatus');
+        if (statusIndicator) {
+            // Check if AI service is connected
+            const isAiConnected = window.Analytics && Analytics.isConnected;
+            const isGrafanaConnected = GrafanaConfig.connected;
+            
+            if (isAiConnected && isGrafanaConnected) {
+                statusIndicator.className = 'status-indicator connected';
+            } else if (isGrafanaConnected) {
+                statusIndicator.className = 'status-indicator offline';
+            } else {
+                statusIndicator.className = 'status-indicator disconnected';
+            }
         }
     },
 
@@ -155,6 +183,60 @@ const Interface = {
         this.switchTab('untitled-1');
     },
 
+    // Open AI-generated query in a new tab
+    openAIGeneratedQuery(queryData) {
+        console.log('📝 Opening AI-generated query in new tab:', queryData);
+        
+        // Create a new tab
+        const tabId = this.createNewTab();
+        
+        // Wait for tab to be ready, then set content
+        setTimeout(() => {
+            const tabData = this.tabs.get(tabId);
+            if (tabData && tabData.editor) {
+                // Set the query text
+                tabData.editor.setValue(queryData.query);
+                
+                // Set query type if available
+                if (queryData.queryType) {
+                    // Update the query type selector if it exists
+                    const queryTypeSelector = document.querySelector(`#tab-${tabId} .query-type-selector`);
+                    if (queryTypeSelector) {
+                        queryTypeSelector.value = queryData.queryType;
+                    }
+                    
+                    // Update CodeMirror mode
+                    if (queryData.queryType === 'promql') {
+                        tabData.editor.setOption('mode', 'promql');
+                    } else {
+                        tabData.editor.setOption('mode', 'text/x-sql');
+                    }
+                }
+                
+                // Try to set datasource if available
+                if (queryData.datasourceName) {
+                    // Look for matching datasource in connections
+                    const connections = Storage.getSavedConnections();
+                    for (const [id, connection] of Object.entries(connections)) {
+                        if (connection.name === queryData.datasourceName) {
+                            // Found matching datasource - connect to it
+                            Connections.connectToSavedConnection(id);
+                            break;
+                        }
+                    }
+                }
+                
+                // Focus the new tab
+                this.focusTab(tabId);
+                
+                // Show a notification
+                Utils.showNotification('Query opened in new tab', 'success');
+            }
+        }, 100);
+        
+        return tabId;
+    },
+    
     createNewTab() {
         this.tabCounter++;
         const tabId = `untitled-${this.tabCounter}`;
@@ -933,6 +1015,11 @@ const Interface = {
             console.log('After timeout - connectionList contains:', connectionList.innerHTML.length, 'characters');
             console.log('Connection items found:', connectionList.querySelectorAll('.connection-item').length);
         }, 50);
+        
+        // Also load AI connections
+        if (typeof loadAiConnections === 'function') {
+            loadAiConnections();
+        }
     },
 
     loadDataSources() {
@@ -1805,7 +1892,17 @@ function showNewAiConnectionDialog() {
     document.getElementById('aiEndpointGroup').style.display = 'block';
     document.getElementById('aiApiKeyGroup').style.display = 'none';
     document.getElementById('advancedSettingsToggle').style.display = 'block';
-    document.getElementById('aiModel').value = 'llama3.1:8b-instruct-q4_K_M';
+    // Set default model options without connecting
+    const modelSelect = document.getElementById('aiModel');
+    modelSelect.innerHTML = `
+        <option value="llama3.1:8b-instruct-q4_K_M">llama3.1:8b-instruct-q4_K_M (Default)</option>
+        <option value="llama3:8b">llama3:8b</option>
+        <option value="llama3:70b">llama3:70b</option>
+        <option value="mistral">mistral</option>
+        <option value="codellama">codellama</option>
+        <option value="custom">Custom Model</option>
+    `;
+    modelSelect.value = 'llama3.1:8b-instruct-q4_K_M';
     document.getElementById('customModelName').value = '';
     document.getElementById('aiResponseTokens').value = '-1';
     document.getElementById('aiContextSize').value = '16384';
@@ -1816,8 +1913,9 @@ function showNewAiConnectionDialog() {
     // Clear any editing state
     window.editingAiConnectionId = null;
     
-    // Load available models for default provider
-    loadAvailableModels();
+    // Load available models for default provider (only if not erroring)
+    // Don't auto-load models to avoid connection errors
+    // User can click refresh or change provider to load models
     
     document.getElementById('aiConnectionDialog').style.display = 'flex';
 }
@@ -2118,11 +2216,46 @@ function loadAiConnections() {
         return;
     }
     
-    // Clean up connection states - only active connection should be marked as connected
+    // Clean up connection states - check actual AI service status
     let hasChanges = false;
+    // Check if any AI service is actually connected
+    const isAnalyticsConnected = window.Analytics && Analytics.isConnected;
+    const isOllamaConnected = window.OllamaService && window.OllamaService.isConnected;
+    const isOpenAIConnected = window.OpenAIService && window.OpenAIService.isConnected;
+    const isAiActuallyConnected = isAnalyticsConnected || isOllamaConnected || isOpenAIConnected;
+    
+    console.log('🔍 AI Service Status Check:', {
+        analytics: isAnalyticsConnected,
+        ollama: isOllamaConnected,
+        openai: isOpenAIConnected,
+        anyConnected: isAiActuallyConnected
+    });
+    
     aiConnections = aiConnections.map(conn => {
-        if (conn.status === 'connected' && conn.id !== activeConnectionId) {
-            console.log(`🔧 UI: Cleaning up stale connected status for ${conn.name}`);
+        // If this is the active connection, check if AI is actually connected
+        if (conn.id === activeConnectionId) {
+            // Only update status if there's a significant state change
+            // Don't immediately disconnect after connection
+            if (conn.status === 'connected' && !isAiActuallyConnected) {
+                // Only mark as disconnected if we're sure the service is down
+                // Add a delay to prevent immediate disconnection after connection
+                const shouldDisconnect = !isAiActuallyConnected;
+                if (shouldDisconnect) {
+                    console.log(`🔧 UI: AI service disconnected, updating status for ${conn.name}`);
+                    hasChanges = true;
+                    return { ...conn, status: 'disconnected' };
+                }
+            } else if (conn.status === 'disconnected' && isAiActuallyConnected) {
+                console.log(`🔧 UI: AI service connected, updating status for ${conn.name}`);
+                hasChanges = true;
+                return { ...conn, status: 'connected' };
+            }
+            return conn;
+        }
+        
+        // For non-active connections, ensure they're marked as disconnected
+        if (conn.status === 'connected') {
+            console.log(`🔧 UI: Cleaning up stale connected status for ${conn.name} (not active)`);
             hasChanges = true;
             return { ...conn, status: 'disconnected' };
         }
@@ -2286,6 +2419,10 @@ async function connectToAiService(connectionId) {
             } else {
                 OllamaService.disconnect();
             }
+            // Update Analytics connection state when disconnecting
+            if (window.Analytics) {
+                Analytics.isConnected = false;
+            }
             return { ...conn, status: 'disconnected' };
         }
         return conn;
@@ -2309,20 +2446,45 @@ async function connectToAiService(connectionId) {
         // Set this as the active AI connection
         Storage.set('ACTIVE_AI_CONNECTION', connectionId);
         console.log(`✅ Successfully connected to ${connection.name}`);
+        
+        // Update storage first
+        aiConnections[connectionIndex] = connection;
+        Storage.setAiConnections(aiConnections);
+        
+        // Force UI refresh with a small delay to ensure state is fully updated
+        setTimeout(() => {
+            loadAiConnections();
+            // Also update Analytics connection status
+            if (window.Analytics) {
+                Analytics.isConnected = true;
+                // Update title bar status after connection is established
+                if (typeof window.Analytics.updateTitleBarStatus === 'function') {
+                    window.Analytics.updateTitleBarStatus();
+                }
+            }
+            
+            // Trigger advanced AI initialization if available
+            if (window.initializeAdvancedAIWhenReady) {
+                setTimeout(() => {
+                    window.initializeAdvancedAIWhenReady();
+                }, 1000);
+            }
+        }, 100);
+        
     } catch (error) {
         connection.status = 'disconnected';
         console.error('AI connection failed:', error);
         alert(`Failed to connect to ${connection.name}: ${error.message}`);
-    }
-    
-    // Update storage and UI
-    aiConnections[connectionIndex] = connection;
-    Storage.setAiConnections(aiConnections);
-    loadAiConnections();
-    
-    // Update title bar status
-    if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
-        window.Analytics.updateTitleBarStatus();
+        
+        // Update storage and UI for failure case
+        aiConnections[connectionIndex] = connection;
+        Storage.setAiConnections(aiConnections);
+        loadAiConnections();
+        
+        // Update title bar status after failure
+        if (window.Analytics && typeof window.Analytics.updateTitleBarStatus === 'function') {
+            window.Analytics.updateTitleBarStatus();
+        }
     }
 }
 

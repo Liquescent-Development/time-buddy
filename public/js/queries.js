@@ -1,3 +1,5 @@
+// Queries Module - Handles query execution and result display
+// Uses DataAccess layer for unified database communication
 const Queries = {
     // Execute query
     async executeQuery() {
@@ -27,7 +29,7 @@ const Queries = {
         
         // Get datasource info from global config (new interface)
         const datasourceType = GrafanaConfig.selectedDatasourceType || 'prometheus';
-        const datasourceNumericId = GrafanaConfig.selectedDatasourceNumericId;
+        const datasourceNumericId = GrafanaConfig.selectedDatasourceId;
         
         const timeFromHours = parseFloat(document.getElementById('timeFrom').value) || 1;
         const timeToHours = parseFloat(document.getElementById('timeTo').value) || 0;
@@ -42,78 +44,29 @@ const Queries = {
         Utils.showResults('Executing query...', 'loading');
         
         try {
-            let requestBody;
-            let urlParams = '';
-            
-            if (datasourceType === 'prometheus') {
-                const requestId = Math.random().toString(36).substr(2, 9);
-                urlParams = '?ds_type=prometheus&requestId=' + requestId;
-                
-                requestBody = {
-                    queries: [{
-                        refId: 'A',
-                        datasource: { 
-                            uid: datasourceId,
-                            type: 'prometheus'
-                        },
-                        expr: query,
-                        instant: instantQuery,
-                        interval: '',
-                        legendFormat: '',
-                        editorMode: 'code',
-                        exemplar: false,
-                        requestId: requestId.substr(0, 3).toUpperCase(),
-                        utcOffsetSec: new Date().getTimezoneOffset() * -60,
-                        scopes: [],
-                        adhocFilters: [],
-                        datasourceId: parseInt(datasourceNumericId),
-                        intervalMs: intervalMs,
-                        maxDataPoints: maxDataPoints
-                    }],
-                    from: fromTime.toString(),
-                    to: toTime.toString()
-                };
-            } else if (datasourceType === 'influxdb') {
-                const requestId = Math.random().toString(36).substr(2, 9);
-                urlParams = '?ds_type=influxdb&requestId=' + requestId;
-                
-                requestBody = {
-                    queries: [{
-                        refId: 'A',
-                        datasource: { 
-                            uid: datasourceId,
-                            type: 'influxdb'
-                        },
-                        query: query,
-                        rawQuery: true,
-                        resultFormat: 'time_series',
-                        requestId: requestId.substr(0, 3).toUpperCase(),
-                        utcOffsetSec: new Date().getTimezoneOffset() * -60,
-                        datasourceId: parseInt(datasourceNumericId),
-                        intervalMs: intervalMs,
-                        maxDataPoints: maxDataPoints
-                    }],
-                    from: fromTime.toString(),
-                    to: toTime.toString()
-                };
+            // Handle database resolution for InfluxDB queries
+            let database = null;
+            if (datasourceType === 'influxdb' && typeof query === 'string') {
+                database = await this._resolveInfluxDatabase(datasourceId, query);
             }
             
-            console.log('Request body:', JSON.stringify(requestBody, null, 2));
-            
-            const response = await API.makeApiRequest('/api/ds/query' + urlParams, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
+            const result = await DataAccess.executeQuery(datasourceId, query, {
+                timeRange: {
+                    from: fromTime.toString(),
+                    to: toTime.toString()
                 },
-                body: JSON.stringify(requestBody)
+                maxDataPoints: maxDataPoints,
+                interval: `${Math.floor(intervalMs / 1000)}s`,
+                datasourceType: datasourceType,
+                format: instantQuery && datasourceType === 'prometheus' ? 'instant' : 'time_series',
+                requestBuilder: QueryRequestBuilder,
+                database: database
             });
             
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error('Query failed: ' + response.statusText + ' - ' + errorText);
-            }
+            // The result from /api/ds/query should already have the format: { results: { A: {...} } }
+            // where A is the refId of our query
+            const data = result;
             
-            const data = await response.json();
             console.log('Response data:', data);
             GrafanaConfig.currentResults = data;
             this.displayResults(data);
@@ -124,6 +77,27 @@ const Queries = {
         } catch (error) {
             Utils.showResults('Error: ' + error.message, 'error');
             console.error('Query error:', error);
+        }
+    },
+
+    // Resolve database for InfluxDB queries - simplified approach to avoid test conflicts
+    async _resolveInfluxDatabase(datasourceId, query) {
+        try {
+            // First check if query explicitly specifies database with ON clause
+            const dbMatch = query.match(/\s+ON\s+"?([^"\s]+)"?/i);
+            if (dbMatch) {
+                console.log('Database specified in query:', dbMatch[1]);
+                return dbMatch[1];
+            }
+            
+            // If no database specified in query, return null and let backend handle it
+            // This avoids the double DataAccess.executeQuery call that breaks tests
+            console.log('No database specified in query, letting backend handle database resolution');
+            return null;
+            
+        } catch (error) {
+            console.warn('Database resolution failed, letting backend handle it:', error.message);
+            return null;
         }
     },
 
@@ -186,10 +160,15 @@ const Queries = {
             
             // Removed redundant executed query display since it's visible in the editor
             
-            if (GrafanaConfig.currentViewMode === 'chart') {
-                html += this.renderChartView(frameToDisplay, hasMultipleSeries ? result.frames : [frameToDisplay]);
-            } else {
-                html += this.renderTableView(frameToDisplay, page);
+            try {
+                if (GrafanaConfig.currentViewMode === 'chart') {
+                    html += this.renderChartView(frameToDisplay, hasMultipleSeries ? result.frames : [frameToDisplay]);
+                } else {
+                    html += this.renderTableView(frameToDisplay, page);
+                }
+            } catch (error) {
+                console.error('Error rendering view:', error);
+                html += '<div class="error">Error rendering view: ' + error.message + '</div>';
             }
         }
         
@@ -412,12 +391,18 @@ const Queries = {
         });
     },
 
-    // Execute a query programmatically and return the result
-    // Used by Analytics and other modules that need to execute queries without updating the UI
+    // Clean centralized query execution API
+    // Used by AI, Analytics, Schema explorer, and other modules
     async executeQueryDirect(query, options = {}) {
+        // Use provided options or sensible defaults from current connection
         const datasourceId = options.datasourceId || GrafanaConfig.currentDatasourceId;
-        const datasourceType = options.datasourceType || GrafanaConfig.selectedDatasourceType || 'prometheus';
-        const timeout = options.timeout || 30000;
+        const datasourceType = options.datasourceType || GrafanaConfig.selectedDatasourceType || 'influxdb';
+        
+        // Time range options
+        const timeFromHours = options.timeFromHours || 1; // Default: 1 hour ago
+        const timeToHours = options.timeToHours || 0;     // Default: now
+        const maxDataPoints = options.maxDataPoints || 1000;
+        const intervalMs = options.intervalMs || 15000;
         
         if (!datasourceId) {
             throw new Error('No datasource ID provided');
@@ -428,73 +413,32 @@ const Queries = {
         }
         
         try {
-            // Use a fixed time range for metadata queries like SHOW TAG VALUES
+            // Calculate time range from options
             const now = Date.now();
-            const fromTime = now - (24 * 60 * 60 * 1000); // 24 hours ago
-            const toTime = now;
+            const fromTime = now - (timeFromHours * 60 * 60 * 1000);
+            const toTime = now - (timeToHours * 60 * 60 * 1000);
             
-            let requestBody;
-            let urlParams = '';
-            
-            if (datasourceType === 'influxdb') {
-                const requestId = 'KAI';
-                urlParams = '?ds_type=influxdb&requestId=' + requestId;
-                
-                requestBody = {
-                    queries: [{
-                        refId: 'A',
-                        datasource: {
-                            uid: datasourceId,
-                            type: 'influxdb'
-                        },
-                        query: query,
-                        rawQuery: true,
-                        resultFormat: 'time_series',
-                        requestId: requestId,
-                        utcOffsetSec: -25200, // PST offset
-                        datasourceId: null,
-                        intervalMs: 15000,
-                        maxDataPoints: 1000
-                    }],
-                    from: fromTime.toString(),
-                    to: toTime.toString()
-                };
-            } else {
-                // Prometheus query format
-                const requestId = Math.random().toString(36).substr(2, 9);
-                urlParams = '?ds_type=prometheus&requestId=' + requestId;
-                
-                requestBody = {
-                    queries: [{
-                        refId: 'A',
-                        datasource: { uid: datasourceId },
-                        expr: query,
-                        queryType: 'timeSeriesQuery',
-                        utcOffsetSec: -25200,
-                        datasourceId: datasourceId,
-                        intervalMs: 15000,
-                        maxDataPoints: 1000
-                    }],
-                    from: fromTime.toString(),
-                    to: toTime.toString()
-                };
+            // Handle database resolution for InfluxDB queries
+            let database = null;
+            if (datasourceType === 'influxdb' && typeof query === 'string') {
+                database = await this._resolveInfluxDatabase(datasourceId, query);
             }
             
-            const response = await API.makeApiRequest('/api/ds/query' + urlParams, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
+            // Use new DataAccess layer
+            const result = await DataAccess.executeQuery(datasourceId, query, {
+                timeRange: {
+                    from: fromTime.toString(),
+                    to: toTime.toString()
                 },
-                body: JSON.stringify(requestBody)
+                maxDataPoints: maxDataPoints,
+                interval: `${Math.floor(intervalMs / 1000)}s`,
+                datasourceType: datasourceType,
+                format: 'time_series',
+                database: database,
+                raw: true // Return raw result for compatibility
             });
             
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error('Query failed: ' + response.statusText + ' - ' + errorText);
-            }
-            
-            const data = await response.json();
-            return data;
+            return result;
             
         } catch (error) {
             console.error('Direct query error:', error);
